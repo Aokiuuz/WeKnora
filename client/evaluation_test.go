@@ -165,6 +165,47 @@ func TestListEvaluationsRejectsUnsuccessfulEnvelope(t *testing.T) {
 	}
 }
 
+func TestDeleteEvaluationUsesDeletePathAndAccepts204(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Errorf("method = %s, want DELETE", r.Method)
+		}
+		if r.URL.Path != "/api/v1/evaluation/evaluation-1" {
+			t.Errorf("path = %s, want /api/v1/evaluation/evaluation-1", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	if err := NewClient(srv.URL).DeleteEvaluation(context.Background(), "evaluation-1"); err != nil {
+		t.Fatalf("DeleteEvaluation() error = %v", err)
+	}
+}
+
+func TestDeleteEvaluationSurfacesActiveTaskConflict(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "active"})
+	}))
+	defer srv.Close()
+
+	err := NewClient(srv.URL).DeleteEvaluation(context.Background(), "evaluation-active")
+	if err == nil {
+		t.Fatal("DeleteEvaluation() must fail for an active task")
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusConflict {
+		t.Fatalf("error = %v, want APIError with status 409", err)
+	}
+}
+
+func TestDeleteEvaluationRequiresTaskID(t *testing.T) {
+	if err := NewClient("http://example.test").DeleteEvaluation(context.Background(), ""); err == nil {
+		t.Fatal("DeleteEvaluation() with empty task ID must fail")
+	}
+}
+
 func TestStartEvaluationUsesServerRequestAndNestedTaskContract(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

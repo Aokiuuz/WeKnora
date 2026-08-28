@@ -9,6 +9,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
+	"gorm.io/gorm"
 )
 
 const (
@@ -208,7 +209,7 @@ func (r *fakeEvaluationTaskRepository) GetTask(
 		return nil, r.getErr
 	}
 	task, ok := r.tasks[evaluationTaskRepositoryKey{tenantID: tenantID, taskID: taskID}]
-	if !ok {
+	if !ok || task.DeletedAt.Valid {
 		return nil, interfaces.ErrEvaluationTaskNotFound
 	}
 	return cloneEvaluationTaskEntity(task), nil
@@ -558,6 +559,36 @@ func (r *fakeEvaluationTaskRepository) ListTasks(
 		tasks = tasks[:query.Limit]
 	}
 	return tasks, nil
+}
+
+func (r *fakeEvaluationTaskRepository) DeleteTask(
+	_ context.Context,
+	tenantID uint64,
+	taskID string,
+	now time.Time,
+) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.recordLocked("DeleteTask", tenantID, taskID)
+	task, ok := r.tasks[evaluationTaskRepositoryKey{tenantID: tenantID, taskID: taskID}]
+	if !ok {
+		return nil
+	}
+	if task.DeletedAt.Valid {
+		return nil
+	}
+	switch task.Status {
+	case types.EvaluationStatueSuccess,
+		types.EvaluationStatueFailed,
+		types.EvaluationStatueTimedOut,
+		types.EvaluationStatueInterrupted,
+		types.EvaluationStatueCanceled:
+		task.DeletedAt = gorm.DeletedAt{Time: now.UTC(), Valid: true}
+		return nil
+	default:
+		return interfaces.ErrEvaluationTaskStateConflict
+	}
 }
 
 func (r *fakeEvaluationTaskRepository) register(task *types.EvaluationTaskEntity) {

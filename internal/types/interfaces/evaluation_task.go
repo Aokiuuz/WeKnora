@@ -3,6 +3,7 @@ package interfaces
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/Tencent/WeKnora/internal/types"
 )
@@ -56,4 +57,10 @@ type EvaluationTaskRepository interface {
 		tenantID uint64,
 		query types.EvaluationTaskListQuery,
 	) ([]*types.EvaluationTaskEntity, error)
+	DeleteTask(
+		ctx context.Context,
+		tenantID uint64,
+		taskID string,
+		now time.Time,
+	) error
 }

@@ -23,6 +23,9 @@ type EvaluationService interface {
 		ctx context.Context,
 		input types.EvaluationTaskListInput,
 	) (*types.EvaluationTaskListPage, error)
+	// DeleteEvaluation soft-deletes one terminal task. Missing and already
+	// deleted tasks are idempotent successes; active tasks are rejected.
+	DeleteEvaluation(ctx context.Context, taskID string) error
 }
 
 // Metrics defines interface for computing evaluation metrics

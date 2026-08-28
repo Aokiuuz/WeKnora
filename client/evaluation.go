@@ -226,6 +226,26 @@ func (c *Client) GetEvaluationResult(ctx context.Context, taskID string) (*Evalu
 	return response.Data, nil
 }
 
+// DeleteEvaluation soft-deletes one terminal evaluation task. Missing and
+// already deleted tasks succeed; the server rejects active tasks with 409.
+func (c *Client) DeleteEvaluation(ctx context.Context, taskID string) error {
+	if taskID == "" {
+		return errors.New("evaluation task ID is required")
+	}
+
+	resp, err := c.doRequest(
+		ctx,
+		http.MethodDelete,
+		"/api/v1/evaluation/"+url.PathEscape(taskID),
+		nil,
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+	return parseResponse(resp, nil)
+}
+
 // EvaluationListOptions carries the optional list filters: a numeric status,
 // a bounded page size, and the opaque keyset cursor from the previous page.
 type EvaluationListOptions struct {

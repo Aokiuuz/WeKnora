@@ -87,6 +87,9 @@ func RegisterEvaluationRoutes(r *gin.RouterGroup, handler *handler.EvaluationHan
 		evaluationRoutes.GET("/tasks", g.Viewer(), handler.ListEvaluationTasks)
 		evaluationRoutes.POST("/:task_id/cancel", g.Admin(), handler.CancelEvaluation)
 	}
+	// Deleting evaluation tasks stays JWT-Admin only: register on the raw
+	// group so scoped API keys fall back to default-deny.
+	r.DELETE("/evaluation/:task_id", g.Admin(), handler.DeleteEvaluation)
 }
 
 func RegisterInitializationRoutes(r *gin.RouterGroup, handler *handler.InitializationHandler, g *rbacGuards) {

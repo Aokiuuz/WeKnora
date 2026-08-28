@@ -561,6 +561,67 @@ func isKnownEvaluationTaskStatus(status types.EvaluationStatue) bool {
 	return status >= types.EvaluationStatuePending && status <= types.EvaluationStatueCanceled
 }
 
+// DeleteTask soft-deletes one terminal task. Missing, cross-tenant, and
+// already deleted tasks are idempotent successes; active tasks are rejected
+// with a state conflict.
+func (r *evaluationTaskRepository) DeleteTask(
+	ctx context.Context,
+	tenantID uint64,
+	taskID string,
+	now time.Time,
+) error {
+	if tenantID == 0 || taskID == "" {
+		return errors.New("delete evaluation task: tenant_id and task_id are required")
+	}
+	if now.IsZero() {
+		return errors.New("delete evaluation task: now is required")
+	}
+	now = now.UTC()
+
+	terminalStatuses := []types.EvaluationStatue{
+		types.EvaluationStatueSuccess,
+		types.EvaluationStatueFailed,
+		types.EvaluationStatueTimedOut,
+		types.EvaluationStatueInterrupted,
+		types.EvaluationStatueCanceled,
+	}
+	result := r.db.WithContext(ctx).
+		Model(&types.EvaluationTaskEntity{}).
+		Where("tenant_id = ? AND id = ? AND status IN ?", tenantID, taskID, terminalStatuses).
+		Update("deleted_at", now)
+	if result.Error != nil {
+		return fmt.Errorf("delete evaluation task %s: %w", taskID, result.Error)
+	}
+	if result.RowsAffected == 1 {
+		return nil
+	}
+	if result.RowsAffected > 1 {
+		return fmt.Errorf(
+			"delete evaluation task %s: invariant violation: updated %d rows",
+			taskID,
+			result.RowsAffected,
+		)
+	}
+
+	// Distinguish an active task from a missing or already deleted one; the
+	// latter two stay hidden and idempotent.
+	var task types.EvaluationTaskEntity
+	err := r.db.WithContext(ctx).
+		Unscoped().
+		Where("tenant_id = ? AND id = ?", tenantID, taskID).
+		First(&task).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("delete evaluation task %s: %w", taskID, err)
+	}
+	if task.DeletedAt.Valid {
+		return nil
+	}
+	return fmt.Errorf("delete evaluation task %s: %w", taskID, ErrEvaluationTaskStateConflict)
+}
+
 // RequestCancel records the first persistent cancel request for one active
 // task. The first request time wins, the execution version is unchanged, and
 // terminal tasks are returned unchanged.

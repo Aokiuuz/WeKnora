@@ -95,6 +95,40 @@ type GetEvaluationRequest struct {
 	TaskID string `form:"task_id" binding:"required"` // ID of evaluation task
 }
 
+// DeleteEvaluation godoc
+// @Summary      删除已结束的评估任务
+// @Description  软删除终态评估任务；缺失、跨租户与已删除任务返回 204，活动任务返回 409
+// @Tags         评估
+// @Accept       json
+// @Produce      json
+// @Param        task_id  path      string  true  "评估任务ID"
+// @Success      204      "删除成功或任务本就不存在"
+// @Failure      409      {object}  errors.AppError  "任务仍在活动状态"
+// @Security     Bearer
+// @Router       /evaluation/{task_id} [delete]
+func (e *EvaluationHandler) DeleteEvaluation(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	taskID := c.Param("task_id")
+	if taskID == "" {
+		_ = c.Error(errors.NewBadRequestError("task_id is required"))
+		return
+	}
+	logger.Infof(ctx, "Processing evaluation delete request, task ID: %s", secutils.SanitizeForLog(taskID))
+
+	if err := e.evaluationService.DeleteEvaluation(ctx, taskID); err != nil {
+		if stderrors.Is(err, interfaces.ErrEvaluationTaskStateConflict) {
+			_ = c.Error(errors.NewConflictError("Evaluation task is still active"))
+			return
+		}
+		logger.ErrorWithFields(ctx, err, nil)
+		_ = c.Error(errors.NewInternalServerError(err.Error()))
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 // ListEvaluationTasks godoc
 // @Summary      列出评估任务
 // @Description  按 (start_time DESC, id DESC) keyset 分页列出当前租户的评估任务

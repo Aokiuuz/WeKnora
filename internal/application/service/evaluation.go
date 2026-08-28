@@ -365,6 +365,21 @@ func (e *EvaluationService) CancelEvaluation(ctx context.Context, taskID string)
 	return detail, nil
 }
 
+// DeleteEvaluation soft-deletes one terminal task owned by the current
+// tenant. Missing, cross-tenant, and already deleted tasks are idempotent
+// successes; active tasks are rejected with a state conflict.
+func (e *EvaluationService) DeleteEvaluation(ctx context.Context, taskID string) error {
+	logger.Infof(ctx, "Deleting evaluation task, task ID: %s", taskID)
+
+	tenantID := types.MustTenantIDFromContext(ctx)
+	if err := e.evaluationTaskRepository.DeleteTask(ctx, tenantID, taskID, time.Now().UTC()); err != nil {
+		logger.Errorf(ctx, "Failed to delete evaluation task: %v", err)
+		return err
+	}
+	logger.Infof(ctx, "Evaluation task deleted, task ID: %s", taskID)
+	return nil
+}
+
 func (e *EvaluationService) EvaluationResult(ctx context.Context, taskID string) (*types.EvaluationDetail, error) {
 	logger.Info(ctx, "Start getting evaluation result")
 	logger.Infof(ctx, "Task ID: %s", taskID)
