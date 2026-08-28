@@ -38,6 +38,7 @@ const (
 	EvaluationStatueFailed                              // Task failed
 	EvaluationStatueTimedOut                            // Task exceeded its configured deadline
 	EvaluationStatueInterrupted                         // Task lease expired and recovery cleanup completed
+	EvaluationStatueCanceled                            // Task was canceled by a persistent user request
 )
 
 // EvaluationTask contains information about an evaluation task
@@ -50,6 +51,8 @@ type EvaluationTask struct {
 	EndTime   *time.Time       `json:"end_time,omitempty"` // Task completion time
 	Status    EvaluationStatue `json:"status"`             // Current task status
 	ErrMsg    string           `json:"err_msg,omitempty"`  // Execution failure or timeout message
+
+	CancelRequestedAt *time.Time `json:"cancel_requested_at,omitempty"` // First persistent cancel request time
 
 	CleanupErrors []string `json:"cleanup_errors,omitempty"` // Temporary resource cleanup warnings
 

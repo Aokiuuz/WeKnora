@@ -127,6 +127,7 @@ type fakeEvaluationTaskRepository struct {
 	heartbeatErrs       []error
 	heartbeatBlockCount int
 	claimErr            error
+	cancelErr           error
 
 	startEntered chan<- struct{}
 	startRelease <-chan struct{}
@@ -359,7 +360,15 @@ func (r *fakeEvaluationTaskRepository) PublishTerminal(
 	if command.Status != types.EvaluationStatueSuccess &&
 		command.Status != types.EvaluationStatueFailed &&
 		command.Status != types.EvaluationStatueTimedOut &&
-		command.Status != types.EvaluationStatueInterrupted {
+		command.Status != types.EvaluationStatueInterrupted &&
+		command.Status != types.EvaluationStatueCanceled {
+		return nil, interfaces.ErrEvaluationTaskStateConflict
+	}
+	if command.Status == types.EvaluationStatueCanceled {
+		if task.CancelRequestedAt == nil {
+			return nil, interfaces.ErrEvaluationTaskStateConflict
+		}
+	} else if task.CancelRequestedAt != nil {
 		return nil, interfaces.ErrEvaluationTaskStateConflict
 	}
 	endTime := command.EndTime.UTC()
@@ -373,6 +382,34 @@ func (r *fakeEvaluationTaskRepository) PublishTerminal(
 		task.UpdatedAt = endTime
 	}
 	task.Version++
+	return cloneEvaluationTaskEntity(task), nil
+}
+
+func (r *fakeEvaluationTaskRepository) RequestCancel(
+	_ context.Context,
+	command types.EvaluationTaskCancelCommand,
+) (*types.EvaluationTaskEntity, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.recordLocked("RequestCancel", command.TenantID, command.TaskID)
+	if r.cancelErr != nil {
+		return nil, r.cancelErr
+	}
+	task, ok := r.tasks[evaluationTaskRepositoryKey{tenantID: command.TenantID, taskID: command.TaskID}]
+	if !ok {
+		return nil, interfaces.ErrEvaluationTaskNotFound
+	}
+	if task.Status != types.EvaluationStatuePending && task.Status != types.EvaluationStatueRunning {
+		return cloneEvaluationTaskEntity(task), nil
+	}
+	if task.CancelRequestedAt == nil {
+		cancelRequestedAt := command.Now.UTC()
+		task.CancelRequestedAt = &cancelRequestedAt
+		if task.UpdatedAt.Before(cancelRequestedAt) {
+			task.UpdatedAt = cancelRequestedAt
+		}
+	}
 	return cloneEvaluationTaskEntity(task), nil
 }
 
@@ -580,6 +617,10 @@ func cloneEvaluationTaskEntity(task *types.EvaluationTaskEntity) *types.Evaluati
 	if task.LeaseExpiresAt != nil {
 		leaseExpiresAt := *task.LeaseExpiresAt
 		cloned.LeaseExpiresAt = &leaseExpiresAt
+	}
+	if task.CancelRequestedAt != nil {
+		cancelRequestedAt := *task.CancelRequestedAt
+		cloned.CancelRequestedAt = &cancelRequestedAt
 	}
 	return &cloned
 }

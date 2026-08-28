@@ -33,14 +33,15 @@ var versionedSQLiteColumns = map[string][]string{
 	"tenant_invitations": {"token", "accepted_count"},        // 000054
 	"embed_channels":     {"allow_memory"},                   // 000060
 	"mcp_oauth_tokens":   {"principal_type", "principal_id"}, // 000064
-	"evaluation_tasks": { // 000090
+	"evaluation_tasks": { // 000090, 000091
 		"tenant_id", "dataset_id", "status", "start_time", "end_time", "total", "finished", "err_msg",
 		"cleanup_errors", "params", "metric", "temporary_kb_id", "temporary_knowledge_id", "owner_id",
 		"lease_expires_at", "heartbeat_at", "version", "created_at", "updated_at", "deleted_at",
+		"cancel_requested_at",
 	},
 }
 
-const expectedSQLiteMigrationVersion = 13
+const expectedSQLiteMigrationVersion = 14
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)

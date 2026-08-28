@@ -1,6 +1,7 @@
 package handler
 
 import (
+	stderrors "errors"
 	"net/http"
 
 	"github.com/Tencent/WeKnora/internal/errors"
@@ -90,6 +91,45 @@ func (e *EvaluationHandler) Evaluation(c *gin.Context) {
 // GetEvaluationRequest contains parameters for getting evaluation result
 type GetEvaluationRequest struct {
 	TaskID string `form:"task_id" binding:"required"` // ID of evaluation task
+}
+
+// CancelEvaluation godoc
+// @Summary      取消评估任务
+// @Description  持久化取消请求；运行实例处理取消并完成资源清理后任务进入 Canceled
+// @Tags         评估
+// @Accept       json
+// @Produce      json
+// @Param        task_id  path      string  true  "评估任务ID"
+// @Success      200      {object}  map[string]interface{}  "当前任务状态"
+// @Failure      404      {object}  errors.AppError         "任务不存在或属于其他租户"
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /evaluation/{task_id}/cancel [post]
+func (e *EvaluationHandler) CancelEvaluation(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	taskID := c.Param("task_id")
+	if taskID == "" {
+		_ = c.Error(errors.NewBadRequestError("task_id is required"))
+		return
+	}
+	logger.Infof(ctx, "Processing evaluation cancel request, task ID: %s", secutils.SanitizeForLog(taskID))
+
+	result, err := e.evaluationService.CancelEvaluation(ctx, taskID)
+	if err != nil {
+		if stderrors.Is(err, interfaces.ErrEvaluationTaskNotFound) {
+			_ = c.Error(errors.NewNotFoundError("Evaluation task not found"))
+			return
+		}
+		logger.ErrorWithFields(ctx, err, nil)
+		_ = c.Error(errors.NewInternalServerError(err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    result,
+	})
 }
 
 // GetEvaluationResult godoc

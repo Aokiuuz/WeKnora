@@ -29,6 +29,8 @@ const (
 	EvaluationStatusTimedOut
 	// EvaluationStatusInterrupted indicates that task execution was interrupted.
 	EvaluationStatusInterrupted
+	// EvaluationStatusCanceled indicates that the task was canceled by request.
+	EvaluationStatusCanceled
 )
 
 // EvaluationTask contains the task state returned by the evaluation API.
@@ -40,6 +42,8 @@ type EvaluationTask struct {
 	EndTime   *time.Time       `json:"end_time,omitempty"`
 	Status    EvaluationStatus `json:"status"`
 	ErrMsg    string           `json:"err_msg,omitempty"`
+
+	CancelRequestedAt *time.Time `json:"cancel_requested_at,omitempty"`
 
 	CleanupErrors []string `json:"cleanup_errors,omitempty"`
 
@@ -57,6 +61,8 @@ func (t *EvaluationTask) UnmarshalJSON(data []byte) error {
 		EndTime   *time.Time        `json:"end_time,omitempty"`
 		Status    *EvaluationStatus `json:"status"`
 		ErrMsg    string            `json:"err_msg,omitempty"`
+
+		CancelRequestedAt *time.Time `json:"cancel_requested_at,omitempty"`
 
 		CleanupErrors []string `json:"cleanup_errors,omitempty"`
 
@@ -76,22 +82,23 @@ func (t *EvaluationTask) UnmarshalJSON(data []byte) error {
 	}
 
 	*t = EvaluationTask{
-		ID:            wire.ID,
-		TenantID:      wire.TenantID,
-		DatasetID:     wire.DatasetID,
-		StartTime:     wire.StartTime,
-		EndTime:       wire.EndTime,
-		Status:        *wire.Status,
-		ErrMsg:        wire.ErrMsg,
-		CleanupErrors: wire.CleanupErrors,
-		Total:         wire.Total,
-		Finished:      wire.Finished,
+		ID:                wire.ID,
+		TenantID:          wire.TenantID,
+		DatasetID:         wire.DatasetID,
+		StartTime:         wire.StartTime,
+		EndTime:           wire.EndTime,
+		Status:            *wire.Status,
+		ErrMsg:            wire.ErrMsg,
+		CancelRequestedAt: wire.CancelRequestedAt,
+		CleanupErrors:     wire.CleanupErrors,
+		Total:             wire.Total,
+		Finished:          wire.Finished,
 	}
 	return nil
 }
 
 func (s EvaluationStatus) valid() bool {
-	return s >= EvaluationStatusPending && s <= EvaluationStatusInterrupted
+	return s >= EvaluationStatusPending && s <= EvaluationStatusCanceled
 }
 
 // EvaluationResult contains the task, request parameters, and optional metrics.
@@ -204,6 +211,36 @@ func (c *Client) GetEvaluationResult(ctx context.Context, taskID string) (*Evalu
 	queryParams.Add("task_id", taskID)
 
 	resp, err := c.doRequest(ctx, http.MethodGet, "/api/v1/evaluation", nil, queryParams)
+	if err != nil {
+		return nil, err
+	}
+
+	var response EvaluationResultResponse
+	if err := parseResponse(resp, &response); err != nil {
+		return nil, err
+	}
+	if err := validateEvaluationResult(response.Data); err != nil {
+		return nil, err
+	}
+
+	return response.Data, nil
+}
+
+// CancelEvaluation requests cancellation of an evaluation task and returns
+// its nested state. Requesting cancel twice or on a terminal task returns the
+// current task unchanged.
+func (c *Client) CancelEvaluation(ctx context.Context, taskID string) (*EvaluationResult, error) {
+	if taskID == "" {
+		return nil, errors.New("evaluation task ID is required")
+	}
+
+	resp, err := c.doRequest(
+		ctx,
+		http.MethodPost,
+		"/api/v1/evaluation/"+url.PathEscape(taskID)+"/cancel",
+		nil,
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}

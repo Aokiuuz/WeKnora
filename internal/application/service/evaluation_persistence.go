@@ -89,6 +89,11 @@ func evaluationDetailToEntity(
 		normalizedEndTime := detail.Task.EndTime.UTC()
 		endTime = &normalizedEndTime
 	}
+	var cancelRequestedAt *time.Time
+	if detail.Task.CancelRequestedAt != nil {
+		normalizedCancelRequestedAt := detail.Task.CancelRequestedAt.UTC()
+		cancelRequestedAt = &normalizedCancelRequestedAt
+	}
 	return &types.EvaluationTaskEntity{
 		ID:                       detail.Task.ID,
 		TenantID:                 detail.Task.TenantID,
@@ -105,6 +110,7 @@ func evaluationDetailToEntity(
 		TemporaryKnowledgeBaseID: temporaryKnowledgeBaseID,
 		OwnerID:                  ownerID,
 		LeaseExpiresAt:           &leaseExpiresAt,
+		CancelRequestedAt:        cancelRequestedAt,
 	}, nil
 }
 
@@ -138,18 +144,24 @@ func evaluationEntityToDetail(entity *types.EvaluationTaskEntity) (*types.Evalua
 		normalizedEndTime := entity.EndTime.UTC()
 		endTime = &normalizedEndTime
 	}
+	var cancelRequestedAt *time.Time
+	if entity.CancelRequestedAt != nil {
+		normalizedCancelRequestedAt := entity.CancelRequestedAt.UTC()
+		cancelRequestedAt = &normalizedCancelRequestedAt
+	}
 	return &types.EvaluationDetail{
 		Task: &types.EvaluationTask{
-			ID:            entity.ID,
-			TenantID:      entity.TenantID,
-			DatasetID:     entity.DatasetID,
-			StartTime:     startTime,
-			EndTime:       endTime,
-			Status:        entity.Status,
-			ErrMsg:        entity.ErrMsg,
-			CleanupErrors: cleanupErrors,
-			Total:         entity.Total,
-			Finished:      entity.Finished,
+			ID:                entity.ID,
+			TenantID:          entity.TenantID,
+			DatasetID:         entity.DatasetID,
+			StartTime:         startTime,
+			EndTime:           endTime,
+			Status:            entity.Status,
+			ErrMsg:            entity.ErrMsg,
+			CancelRequestedAt: cancelRequestedAt,
+			CleanupErrors:     cleanupErrors,
+			Total:             entity.Total,
+			Finished:          entity.Finished,
 		},
 		Params: params,
 		Metric: metric,
@@ -221,5 +233,5 @@ func encodeEvaluationCleanupErrors(cleanupErrors []string) (types.JSON, error) {
 }
 
 func isKnownEvaluationStatus(status types.EvaluationStatue) bool {
-	return status >= types.EvaluationStatuePending && status <= types.EvaluationStatueInterrupted
+	return status >= types.EvaluationStatuePending && status <= types.EvaluationStatueCanceled
 }

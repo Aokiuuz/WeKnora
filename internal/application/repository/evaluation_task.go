@@ -442,10 +442,11 @@ func (r *evaluationTaskRepository) PublishTerminal(
 		if command.ErrMsg != "" {
 			return nil, errors.New("publish evaluation terminal state: successful task must not have err_msg")
 		}
-	case types.EvaluationStatueFailed, types.EvaluationStatueTimedOut, types.EvaluationStatueInterrupted:
+	case types.EvaluationStatueFailed, types.EvaluationStatueTimedOut,
+		types.EvaluationStatueInterrupted, types.EvaluationStatueCanceled:
 		if command.ErrMsg == "" {
 			return nil, errors.New(
-				"publish evaluation terminal state: failed, timed out, or interrupted task requires err_msg",
+				"publish evaluation terminal state: failed, timed out, interrupted, or canceled task requires err_msg",
 			)
 		}
 	default:
@@ -461,6 +462,13 @@ func (r *evaluationTaskRepository) PublishTerminal(
 		return nil, fmt.Errorf("publish evaluation terminal state: metric: %w", err)
 	}
 
+	// Terminal compare-and-swap truth: Canceled requires a persistent cancel
+	// request; every other terminal state requires its absence.
+	cancelCondition := "cancel_requested_at IS NULL"
+	if command.Status == types.EvaluationStatueCanceled {
+		cancelCondition = "cancel_requested_at IS NOT NULL"
+	}
+
 	return r.updateEvaluationTask(
 		ctx,
 		command.TenantID,
@@ -468,7 +476,7 @@ func (r *evaluationTaskRepository) PublishTerminal(
 		command.OwnerID,
 		command.ExpectedVersion,
 		[]types.EvaluationStatue{types.EvaluationStatuePending, types.EvaluationStatueRunning},
-		"start_time <= ? AND heartbeat_at <= ? AND lease_expires_at > ?",
+		"start_time <= ? AND heartbeat_at <= ? AND lease_expires_at > ? AND "+cancelCondition,
 		[]any{command.EndTime, command.EndTime, command.EndTime},
 		map[string]any{
 			"status":           command.Status,
@@ -484,12 +492,67 @@ func (r *evaluationTaskRepository) PublishTerminal(
 			"version": gorm.Expr("version + 1"),
 		},
 		func(task *types.EvaluationTaskEntity) bool {
-			return (task.Status == types.EvaluationStatuePending || task.Status == types.EvaluationStatueRunning) &&
-				task.LeaseExpiresAt != nil && task.LeaseExpiresAt.After(command.EndTime) &&
-				!task.StartTime.After(command.EndTime) && !task.HeartbeatAt.After(command.EndTime)
+			if task.Status != types.EvaluationStatuePending && task.Status != types.EvaluationStatueRunning {
+				return false
+			}
+			if task.LeaseExpiresAt == nil || !task.LeaseExpiresAt.After(command.EndTime) ||
+				task.StartTime.After(command.EndTime) || task.HeartbeatAt.After(command.EndTime) {
+				return false
+			}
+			if command.Status == types.EvaluationStatueCanceled {
+				return task.CancelRequestedAt != nil
+			}
+			return task.CancelRequestedAt == nil
 		},
 		"publish terminal state for",
 	)
+}
+
+// RequestCancel records the first persistent cancel request for one active
+// task. The first request time wins, the execution version is unchanged, and
+// terminal tasks are returned unchanged.
+func (r *evaluationTaskRepository) RequestCancel(
+	ctx context.Context,
+	command types.EvaluationTaskCancelCommand,
+) (*types.EvaluationTaskEntity, error) {
+	if command.TenantID == 0 || command.TaskID == "" {
+		return nil, errors.New("request evaluation task cancel: tenant_id and task_id are required")
+	}
+	if command.Now.IsZero() {
+		return nil, errors.New("request evaluation task cancel: now is required")
+	}
+	command.Now = command.Now.UTC()
+
+	activeStatuses := []types.EvaluationStatue{
+		types.EvaluationStatuePending,
+		types.EvaluationStatueRunning,
+	}
+	result := r.db.WithContext(ctx).
+		Model(&types.EvaluationTaskEntity{}).
+		Where("tenant_id = ? AND id = ? AND status IN ? AND cancel_requested_at IS NULL",
+			command.TenantID, command.TaskID, activeStatuses).
+		Updates(map[string]any{
+			"cancel_requested_at": command.Now,
+			"updated_at": gorm.Expr(
+				"CASE WHEN updated_at > ? THEN updated_at ELSE ? END",
+				command.Now, command.Now,
+			),
+		})
+	if result.Error != nil {
+		return nil, fmt.Errorf("request cancel for evaluation task %s: %w", command.TaskID, result.Error)
+	}
+	if result.RowsAffected > 1 {
+		return nil, fmt.Errorf(
+			"request cancel for evaluation task %s: invariant violation: updated %d rows",
+			command.TaskID,
+			result.RowsAffected,
+		)
+	}
+	task, err := r.GetTask(ctx, command.TenantID, command.TaskID)
+	if err != nil {
+		return nil, fmt.Errorf("request cancel for evaluation task %s: %w", command.TaskID, err)
+	}
+	return task, nil
 }
 
 func (r *evaluationTaskRepository) classifyEvaluationTaskHeartbeatConflict(
@@ -633,6 +696,10 @@ func normalizeEvaluationTaskTimes(task *types.EvaluationTaskEntity) {
 		leaseExpiresAt := task.LeaseExpiresAt.UTC()
 		task.LeaseExpiresAt = &leaseExpiresAt
 	}
+	if task.CancelRequestedAt != nil {
+		cancelRequestedAt := task.CancelRequestedAt.UTC()
+		task.CancelRequestedAt = &cancelRequestedAt
+	}
 	task.HeartbeatAt = task.HeartbeatAt.UTC()
 	task.CreatedAt = task.CreatedAt.UTC()
 	task.UpdatedAt = task.UpdatedAt.UTC()
@@ -650,6 +717,9 @@ func validateInitialEvaluationTask(task *types.EvaluationTaskEntity) error {
 	}
 	if task.Version > 1 || task.DeletedAt.Valid {
 		return errors.New("create evaluation task: version and deletion fields must describe a new task")
+	}
+	if task.CancelRequestedAt != nil {
+		return errors.New("create evaluation task: cancel_requested_at must be empty")
 	}
 	if len(task.CleanupErrors) != 0 {
 		var cleanupErrors []string

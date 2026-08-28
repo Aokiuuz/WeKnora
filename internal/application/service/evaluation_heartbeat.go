@@ -121,7 +121,7 @@ func (e *EvaluationService) startEvaluationHeartbeat(
 	beat := func() error {
 		now := time.Now().UTC()
 		callCtx, callCancel := context.WithTimeout(heartbeatCtx, e.heartbeatCallTimeout())
-		_, err := e.evaluationTaskRepository.HeartbeatTask(
+		updated, err := e.evaluationTaskRepository.HeartbeatTask(
 			callCtx,
 			types.EvaluationTaskHeartbeatCommand{
 				TenantID:       runState.tenantID,
@@ -134,6 +134,14 @@ func (e *EvaluationService) startEvaluationHeartbeat(
 		callCancel()
 		if err == nil {
 			leaseDeadline = e.evaluationLeaseExpiresAt(now)
+			if updated != nil && updated.CancelRequestedAt != nil {
+				// A cancel request persisted by any replica stops the local
+				// worker; the owner still cleans up and publishes Canceled.
+				if cancelRun != nil {
+					cancelRun(errEvaluationTaskCancelRequested)
+				}
+				return errEvaluationTaskCancelRequested
+			}
 			return nil
 		}
 		if errors.Is(err, interfaces.ErrEvaluationTaskNotFound) ||
@@ -165,9 +173,20 @@ func (e *EvaluationService) startEvaluationHeartbeat(
 		return nil
 	}
 
-	if err := beat(); err != nil {
+	completeBeat := func(err error) {
 		heartbeatCancel()
+		// Observing a persistent cancel request is a normal stop, not a
+		// heartbeat failure: StopAndWait reports nil so the run publishes
+		// Canceled instead of a heartbeat error.
+		if errors.Is(err, errEvaluationTaskCancelRequested) {
+			handle.complete(nil)
+			return
+		}
 		handle.complete(err)
+	}
+
+	if err := beat(); err != nil {
+		completeBeat(err)
 		return handle
 	}
 
@@ -178,8 +197,7 @@ func (e *EvaluationService) startEvaluationHeartbeat(
 			select {
 			case <-ticker.C:
 				if err := beat(); err != nil {
-					heartbeatCancel()
-					handle.complete(err)
+					completeBeat(err)
 					return
 				}
 			case <-heartbeatCtx.Done():

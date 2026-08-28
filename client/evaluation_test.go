@@ -23,6 +23,7 @@ func TestEvaluationStatusValuesMatchHTTPContract(t *testing.T) {
 		{name: "failed", got: EvaluationStatusFailed, want: 3},
 		{name: "timed out", got: EvaluationStatusTimedOut, want: 4},
 		{name: "interrupted", got: EvaluationStatusInterrupted, want: 5},
+		{name: "canceled", got: EvaluationStatusCanceled, want: 6},
 	}
 
 	for _, tt := range tests {
@@ -38,8 +39,69 @@ func TestEvaluationMethodSignaturesRemainCompatible(t *testing.T) {
 	client := NewClient("http://example.test")
 	var start func(context.Context, *EvaluationRequest) (*EvaluationTask, error) = client.StartEvaluation
 	var get func(context.Context, string) (*EvaluationResult, error) = client.GetEvaluationResult
-	if start == nil || get == nil {
+	var cancel func(context.Context, string) (*EvaluationResult, error) = client.CancelEvaluation
+	if start == nil || get == nil || cancel == nil {
 		t.Fatal("evaluation methods must remain available")
+	}
+}
+
+func TestCancelEvaluationUsesPostPathAndNestedContract(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/api/v1/evaluation/evaluation-1/cancel" {
+			t.Errorf("path = %s, want /api/v1/evaluation/evaluation-1/cancel", r.URL.Path)
+		}
+		task := evaluationTaskFixture(1)
+		task["cancel_requested_at"] = "2026-08-28T09:30:00Z"
+		writeEvaluationResponse(t, w, map[string]any{
+			"task":   task,
+			"params": map[string]any{"chat_model_id": "chat-1"},
+		})
+	}))
+	defer srv.Close()
+
+	result, err := NewClient(srv.URL).CancelEvaluation(context.Background(), "evaluation-1")
+	if err != nil {
+		t.Fatalf("CancelEvaluation() error = %v", err)
+	}
+	if result.Task == nil || result.Task.Status != EvaluationStatusRunning {
+		t.Fatalf("task status = %+v, want running", result.Task)
+	}
+	if result.Task.CancelRequestedAt == nil {
+		t.Fatal("cancel_requested_at was not decoded")
+	}
+	if got := result.Task.CancelRequestedAt.UTC().Format(time.RFC3339); got != "2026-08-28T09:30:00Z" {
+		t.Fatalf("cancel_requested_at = %s, want 2026-08-28T09:30:00Z", got)
+	}
+}
+
+func TestCancelEvaluationDecodesCanceledTerminalStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		task := evaluationTaskFixture(6)
+		task["cancel_requested_at"] = "2026-08-28T09:30:00Z"
+		task["end_time"] = "2026-08-28T09:31:00Z"
+		task["err_msg"] = "evaluation task canceled"
+		writeEvaluationResponse(t, w, map[string]any{
+			"task":   task,
+			"params": map[string]any{"chat_model_id": "chat-1"},
+		})
+	}))
+	defer srv.Close()
+
+	result, err := NewClient(srv.URL).CancelEvaluation(context.Background(), "evaluation-1")
+	if err != nil {
+		t.Fatalf("CancelEvaluation() error = %v", err)
+	}
+	if result.Task.Status != EvaluationStatusCanceled {
+		t.Fatalf("task status = %d, want %d (Canceled)", result.Task.Status, EvaluationStatusCanceled)
+	}
+}
+
+func TestCancelEvaluationRequiresTaskID(t *testing.T) {
+	if _, err := NewClient("http://example.test").CancelEvaluation(context.Background(), ""); err == nil {
+		t.Fatal("CancelEvaluation() with empty task ID must fail")
 	}
 }
 

@@ -19,7 +19,17 @@ import (
 
 const evaluationCleanupTimeout = 30 * time.Second
 
-var errEvaluationTaskTimeout = errors.New("evaluation task timeout")
+// evaluationTaskCanceledMessage is the stable terminal message for tasks
+// canceled through a persistent user request.
+const evaluationTaskCanceledMessage = "evaluation task canceled"
+
+var (
+	errEvaluationTaskTimeout = errors.New("evaluation task timeout")
+	// errEvaluationTaskCancelRequested cancels a running worker after the
+	// database recorded a persistent cancel request. It is not an ownership
+	// loss: the owner still cleans resources and publishes Canceled.
+	errEvaluationTaskCancelRequested = errors.New("evaluation task cancel requested")
+)
 
 /*
 corpus: pid -> content
@@ -42,6 +52,15 @@ type EvaluationService struct {
 	heartbeatInterval        time.Duration
 	heartbeatTimeout         time.Duration
 	runningLeaseDuration     time.Duration
+
+	// runHandles maps "tenantID/taskID" to the cancel function of the task
+	// running on this instance, so a cancel request persisted by any replica
+	// can stop the local worker immediately.
+	runHandles sync.Map
+}
+
+func evaluationRunHandleKey(tenantID uint64, taskID string) string {
+	return fmt.Sprintf("%d/%s", tenantID, taskID)
 }
 
 func NewEvaluationService(
@@ -179,6 +198,9 @@ func (e *EvaluationService) runEvaluation(
 		return err
 	}
 	logger.Info(runCtx, "Evaluation task status set to running")
+	runHandleKey := evaluationRunHandleKey(runState.tenantID, runState.taskID)
+	e.runHandles.Store(runHandleKey, cancelRun)
+	defer e.runHandles.Delete(runHandleKey)
 	heartbeat := e.startEvaluationHeartbeat(runCtx, runState, cancelRun)
 	if ownershipErr := context.Cause(runCtx); evaluationHeartbeatOwnershipLost(ownershipErr) {
 		heartbeatErr := heartbeat.StopAndWait()
@@ -234,7 +256,13 @@ func (e *EvaluationService) runEvaluation(
 	terminalErr := runErr
 	status := types.EvaluationStatueSuccess
 	errMsg := ""
-	if taskDeadlineStoppedRun {
+	// Terminal selection priority: a persistent cancel request wins over the
+	// task deadline, business errors, and success.
+	if errors.Is(context.Cause(runCtx), errEvaluationTaskCancelRequested) {
+		terminalErr = errEvaluationTaskCancelRequested
+		status = types.EvaluationStatueCanceled
+		errMsg = evaluationTaskCanceledMessage
+	} else if taskDeadlineStoppedRun {
 		terminalErr = context.DeadlineExceeded
 		status = types.EvaluationStatueTimedOut
 		errMsg = context.DeadlineExceeded.Error()
@@ -255,25 +283,44 @@ func (e *EvaluationService) runEvaluation(
 		evaluationCleanupTimeout,
 	)
 	defer publicationCancel()
-	if _, err := e.evaluationTaskRepository.PublishTerminal(
-		publicationCtx,
-		types.EvaluationTaskTerminalCommand{
-			TenantID:        runState.tenantID,
-			TaskID:          runState.taskID,
-			OwnerID:         runState.ownerID,
-			ExpectedVersion: runState.version,
-			Status:          status,
-			EndTime:         endTime,
-			ErrMsg:          errMsg,
-			CleanupErrors:   cleanupJSON,
-			Metric:          append(types.JSON(nil), runState.metric...),
-		},
-	); err != nil {
-		publicationErr := fmt.Errorf("publish evaluation terminal state: %w", err)
-		if terminalErr != nil {
-			return errors.Join(terminalErr, publicationErr)
+	terminalCommand := types.EvaluationTaskTerminalCommand{
+		TenantID:        runState.tenantID,
+		TaskID:          runState.taskID,
+		OwnerID:         runState.ownerID,
+		ExpectedVersion: runState.version,
+		Status:          status,
+		EndTime:         endTime,
+		ErrMsg:          errMsg,
+		CleanupErrors:   cleanupJSON,
+		Metric:          append(types.JSON(nil), runState.metric...),
+	}
+	if _, err := e.evaluationTaskRepository.PublishTerminal(publicationCtx, terminalCommand); err != nil {
+		// A cancel request persisted concurrently invalidates the terminal
+		// compare-and-swap truth. Re-read the task and republish Canceled
+		// instead of silently reporting the original terminal state.
+		if status != types.EvaluationStatueCanceled {
+			current, getErr := e.evaluationTaskRepository.GetTask(
+				publicationCtx,
+				runState.tenantID,
+				runState.taskID,
+			)
+			if getErr == nil && current.CancelRequestedAt != nil &&
+				current.OwnerID == runState.ownerID && current.Version == runState.version {
+				terminalCommand.Status = types.EvaluationStatueCanceled
+				terminalCommand.ErrMsg = evaluationTaskCanceledMessage
+				if terminalErr == nil {
+					terminalErr = errEvaluationTaskCancelRequested
+				}
+				_, err = e.evaluationTaskRepository.PublishTerminal(publicationCtx, terminalCommand)
+			}
 		}
-		return publicationErr
+		if err != nil {
+			publicationErr := fmt.Errorf("publish evaluation terminal state: %w", err)
+			if terminalErr != nil {
+				return errors.Join(terminalErr, publicationErr)
+			}
+			return publicationErr
+		}
 	}
 
 	if terminalErr != nil {
@@ -285,6 +332,37 @@ func (e *EvaluationService) runEvaluation(
 	}
 	logger.Infof(runCtx, "Evaluation task completed successfully, task ID: %s", taskID)
 	return nil
+}
+
+// CancelEvaluation persists a user cancel request and immediately cancels the
+// local run handle when the task runs on this instance. Other instances
+// observe the request through their next heartbeat. The first request time
+// wins; terminal tasks are returned unchanged.
+func (e *EvaluationService) CancelEvaluation(ctx context.Context, taskID string) (*types.EvaluationDetail, error) {
+	logger.Infof(ctx, "Requesting evaluation task cancel, task ID: %s", taskID)
+
+	tenantID := types.MustTenantIDFromContext(ctx)
+	entity, err := e.evaluationTaskRepository.RequestCancel(ctx, types.EvaluationTaskCancelCommand{
+		TenantID: tenantID,
+		TaskID:   taskID,
+		Now:      time.Now().UTC(),
+	})
+	if err != nil {
+		logger.Errorf(ctx, "Failed to request evaluation task cancel: %v", err)
+		return nil, err
+	}
+	if handle, ok := e.runHandles.Load(evaluationRunHandleKey(tenantID, taskID)); ok {
+		if cancelRun, ok := handle.(context.CancelCauseFunc); ok {
+			cancelRun(errEvaluationTaskCancelRequested)
+		}
+	}
+
+	detail, err := evaluationEntityToDetail(entity)
+	if err != nil {
+		return nil, err
+	}
+	logger.Infof(ctx, "Evaluation task cancel requested, task ID: %s", taskID)
+	return detail, nil
 }
 
 func (e *EvaluationService) EvaluationResult(ctx context.Context, taskID string) (*types.EvaluationDetail, error) {

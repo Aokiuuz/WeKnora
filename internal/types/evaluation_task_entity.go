@@ -33,6 +33,8 @@ type EvaluationTaskEntity struct {
 	LeaseExpiresAt *time.Time `json:"-" gorm:"index"`
 	HeartbeatAt    time.Time  `json:"-" gorm:"not null"`
 	Version        uint64     `json:"version" gorm:"not null;default:1"`
+
+	CancelRequestedAt *time.Time `json:"cancel_requested_at,omitempty"`
 }
 
 // TableName binds EvaluationTaskEntity to the evaluation task table.
@@ -107,4 +109,13 @@ type EvaluationTaskTerminalCommand struct {
 	ErrMsg          string
 	CleanupErrors   JSON
 	Metric          JSON
+}
+
+// EvaluationTaskCancelCommand records the first persistent user-cancel
+// request for one active task. It needs no owner and never increments the
+// execution version.
+type EvaluationTaskCancelCommand struct {
+	TenantID uint64
+	TaskID   string
+	Now      time.Time
 }

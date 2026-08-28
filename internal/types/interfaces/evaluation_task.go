@@ -47,4 +47,8 @@ type EvaluationTaskRepository interface {
 		ctx context.Context,
 		command types.EvaluationTaskTerminalCommand,
 	) (*types.EvaluationTaskEntity, error)
+	RequestCancel(
+		ctx context.Context,
+		command types.EvaluationTaskCancelCommand,
+	) (*types.EvaluationTaskEntity, error)
 }

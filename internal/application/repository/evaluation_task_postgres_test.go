@@ -35,6 +35,12 @@ func TestEvaluationTaskRepositoryPostgresContract(t *testing.T) {
 	migrationSQL, err := os.ReadFile(migrationPath)
 	require.NoError(t, err)
 	require.NoError(t, tx.Exec(string(migrationSQL)).Error)
+	cancelMigrationPath := filepath.Join(
+		"..", "..", "..", "migrations", "versioned", "000091_evaluation_task_cancellation.up.sql",
+	)
+	cancelMigrationSQL, err := os.ReadFile(cancelMigrationPath)
+	require.NoError(t, err)
+	require.NoError(t, tx.Exec(string(cancelMigrationSQL)).Error)
 
 	now := time.Date(2026, 8, 28, 8, 0, 0, 0, time.UTC)
 	leaseExpiresAt := now.Add(time.Minute)

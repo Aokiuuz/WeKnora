@@ -284,6 +284,14 @@ func (r *EvaluationTaskRecoveryRunner) recoverTask(
 	if err != nil {
 		return fmt.Errorf("recover evaluation task %s: %w", task.ID, err)
 	}
+	// Expired tasks with a persistent cancel request finish as Canceled;
+	// all others finish as Interrupted.
+	terminalStatus := types.EvaluationStatueInterrupted
+	terminalMessage := evaluationTaskInterruptedMessage
+	if task.CancelRequestedAt != nil {
+		terminalStatus = types.EvaluationStatueCanceled
+		terminalMessage = evaluationTaskCanceledMessage
+	}
 	endTime := r.nowUTC()
 	publicationCtx, publicationCancel := context.WithTimeout(
 		cleanupBase,
@@ -297,9 +305,9 @@ func (r *EvaluationTaskRecoveryRunner) recoverTask(
 			TaskID:          task.ID,
 			OwnerID:         r.ownerID,
 			ExpectedVersion: task.Version,
-			Status:          types.EvaluationStatueInterrupted,
+			Status:          terminalStatus,
 			EndTime:         endTime,
-			ErrMsg:          evaluationTaskInterruptedMessage,
+			ErrMsg:          terminalMessage,
 			CleanupErrors:   cleanupJSON,
 			Metric:          append(types.JSON(nil), task.Metric...),
 		},
