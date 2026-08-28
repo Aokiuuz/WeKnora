@@ -79,11 +79,24 @@ func RegisterSandboxConfigRoutes(
 // evaluation drives LLM calls (cost) and reads from KBs across the
 // tenant; gate to Admin+ until product asks for a finer-grained
 // matrix.
-func RegisterEvaluationRoutes(r *gin.RouterGroup, handler *handler.EvaluationHandler, g *rbacGuards) {
+func RegisterEvaluationRoutes(
+	r *gin.RouterGroup,
+	handler *handler.EvaluationHandler,
+	datasetHandler *handler.EvaluationDatasetHandler,
+	g *rbacGuards,
+) {
 	evaluationRoutes := g.apiKeyGroup(r.Group("/evaluation"), apiKeyRunEvaluations(apiKeyFullAccess()))
 	{
 		evaluationRoutes.POST("", g.Admin(), handler.Evaluation)
 		evaluationRoutes.GET("", g.Viewer(), handler.GetEvaluationResult)
+
+		datasets := evaluationRoutes.Group("/datasets")
+		{
+			datasets.POST("", g.Admin(), datasetHandler.CreateDataset)
+			datasets.GET("", g.Viewer(), datasetHandler.ListDatasets)
+			datasets.POST("/:id/versions", g.Admin(), datasetHandler.CreateVersion)
+			datasets.GET("/:id/versions", g.Viewer(), datasetHandler.ListVersions)
+		}
 	}
 }
 

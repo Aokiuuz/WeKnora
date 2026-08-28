@@ -124,6 +124,16 @@ func NewTooManyRequestsError(message string) *AppError {
 	}
 }
 
+// NewRequestEntityTooLargeError creates a 413 error for bounded inputs that
+// exceed configured size limits.
+func NewRequestEntityTooLargeError(message string) *AppError {
+	return &AppError{
+		Code:     ErrValidation,
+		Message:  message,
+		HTTPCode: http.StatusRequestEntityTooLarge,
+	}
+}
+
 // NewInternalServerError creates an internal server error
 func NewInternalServerError(message string) *AppError {
 	if message == "" {
