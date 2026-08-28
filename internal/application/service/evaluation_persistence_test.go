@@ -18,7 +18,7 @@ type recordingEvaluationTaskRepository struct {
 func TestNewEvaluationServiceRequiresPersistentTaskRepository(t *testing.T) {
 	repository := &recordingEvaluationTaskRepository{}
 
-	created := NewEvaluationService(nil, nil, nil, nil, nil, nil, repository, nil)
+	created := NewEvaluationService(nil, nil, nil, nil, nil, nil, repository, nil, nil)
 	service, ok := created.(*EvaluationService)
 	require.True(t, ok)
 	require.Same(t, repository, service.evaluationTaskRepository)

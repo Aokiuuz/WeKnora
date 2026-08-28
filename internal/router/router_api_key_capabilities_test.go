@@ -336,7 +336,8 @@ func TestTenantInfrastructureRoutesDeclareSpecificCapabilities(t *testing.T) {
 
 	RegisterTenantRoutes(v1, &handler.TenantHandler{}, nil, nil, nil, g)
 	RegisterModelRoutes(v1, &handler.ModelHandler{}, &handler.ModelCredentialsHandler{}, g)
-	RegisterEvaluationRoutes(v1, &handler.EvaluationHandler{}, &handler.EvaluationDatasetHandler{}, g)
+	RegisterEvaluationRoutes(v1, &handler.EvaluationHandler{}, &handler.EvaluationDatasetHandler{},
+		&handler.EvaluationQuestionHandler{}, g)
 	RegisterSystemRoutes(v1, &handler.SystemHandler{}, g)
 	RegisterMCPServiceRoutes(v1, &handler.MCPServiceHandler{}, &handler.MCPCredentialsHandler{}, &handler.MCPOAuthHandler{}, g)
 	RegisterWebSearchProviderRoutes(v1, &handler.WebSearchProviderHandler{}, &handler.WebSearchProviderCredentialsHandler{}, g)

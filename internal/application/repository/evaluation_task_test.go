@@ -30,7 +30,7 @@ func setupEvaluationTaskRepositoryTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, os.Chdir(previousDir))
 	require.NoError(t, migrationErr)
 
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(dbPath+"?_foreign_keys=on"), &gorm.Config{})
 	require.NoError(t, err)
 	return db
 }

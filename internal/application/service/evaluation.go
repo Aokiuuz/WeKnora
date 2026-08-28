@@ -39,6 +39,7 @@ type EvaluationService struct {
 	modelService             interfaces.ModelService         // Service for model operations
 	evaluationTaskRepository interfaces.EvaluationTaskRepository
 	datasetRegistry          interfaces.EvaluationDatasetRegistryService
+	questionResultRepository interfaces.EvaluationQuestionResultRepository
 	ownerID                  string
 }
 
@@ -51,6 +52,7 @@ func NewEvaluationService(
 	modelService interfaces.ModelService,
 	evaluationTaskRepository interfaces.EvaluationTaskRepository,
 	datasetRegistry interfaces.EvaluationDatasetRegistryService,
+	questionResultRepository interfaces.EvaluationQuestionResultRepository,
 ) interfaces.EvaluationService {
 	return &EvaluationService{
 		config:                   config,
@@ -61,6 +63,7 @@ func NewEvaluationService(
 		modelService:             modelService,
 		evaluationTaskRepository: evaluationTaskRepository,
 		datasetRegistry:          datasetRegistry,
+		questionResultRepository: questionResultRepository,
 		ownerID:                  uuid.NewString(),
 	}
 }
@@ -681,13 +684,27 @@ func (e *EvaluationService) evalDataset(
 			finished += 1
 			finishedSnapshot := finished
 			metricResult := metricHook.MetricResult()
-			updateErr := e.publishEvaluationProgress(
-				workerCtx,
-				runState,
-				len(dataset),
-				finishedSnapshot,
-				metricResult,
-			)
+			var updateErr error
+			if e.questionResultRepository != nil && detail.Experiment != nil {
+				// M3: publish the per-question fact, finished counter, and
+				// aggregate metric in one transaction.
+				input := metricHook.questionResultInput(i, detail.Experiment.MetricPlan, detail.Params.RerankTopK)
+				if input != nil {
+					updateErr = e.publishQuestionResult(workerCtx, runState, len(dataset), finishedSnapshot,
+						metricResult, input)
+				} else {
+					updateErr = e.publishEvaluationProgress(workerCtx, runState, len(dataset), finishedSnapshot,
+						metricResult)
+				}
+			} else {
+				updateErr = e.publishEvaluationProgress(
+					workerCtx,
+					runState,
+					len(dataset),
+					finishedSnapshot,
+					metricResult,
+				)
+			}
 			publishMu.Unlock()
 			if updateErr != nil {
 				return fmt.Errorf("publish progress for QA pair %d: %w", i, updateErr)
@@ -748,6 +765,51 @@ func (e *EvaluationService) publishEvaluationProgress(
 	}
 	runState.version = updated.Version
 	runState.metric = append(types.JSON(nil), updated.Metric...)
+	return nil
+}
+
+// publishQuestionResult publishes one per-question fact, the finished
+// counter, and the aggregate metric in one repository transaction. Idempotent
+// retries (same result hash) leave the task version untouched.
+func (e *EvaluationService) publishQuestionResult(
+	ctx context.Context,
+	runState *evaluationRunState,
+	total int,
+	finished int,
+	metric *types.MetricResult,
+	input *types.EvaluationQuestionResultInput,
+) error {
+	if runState == nil {
+		return errors.New("publish evaluation question result: run state is required")
+	}
+	metricJSON, err := encodeEvaluationMetric(metric)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	updated, inserted, err := e.questionResultRepository.PublishQuestionResult(
+		ctx,
+		interfaces.EvaluationQuestionResultCommand{
+			TenantID:        runState.tenantID,
+			TaskID:          runState.taskID,
+			OwnerID:         runState.ownerID,
+			ExpectedVersion: runState.version,
+			Total:           total,
+			Finished:        finished,
+			Metric:          metricJSON,
+			Now:             now,
+			LeaseExpiresAt:  evaluationLeaseExpiresAt(e.config, now),
+			Result:          input,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	runState.version = updated.Version
+	runState.metric = append(types.JSON(nil), updated.Metric...)
+	if !inserted {
+		logger.Infof(ctx, "Question result for sample %d already published with identical hash", input.SampleIndex)
+	}
 	return nil
 }
 

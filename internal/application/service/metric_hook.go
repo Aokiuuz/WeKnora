@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strconv"
 	"sync"
 
 	"github.com/Tencent/WeKnora/internal/application/service/metric"
@@ -148,20 +149,7 @@ func (h *HookMetric) recordFinish(index int) {
 	// Keep one entry per rank: unknown sources and duplicate PIDs remain explicit
 	// misses instead of being removed and compressing the ranking.
 	qaPair := h.qaPairMetricList[index].qaPair
-	retrievalIDs := make([]int, len(retrievalSource))
-	seen := make(map[int]struct{}, len(retrievalSource))
-	for i, r := range retrievalSource {
-		retrievalIDs[i] = unknownRetrievalID
-		if r == nil || r.KnowledgeID != h.knowledgeID || r.ChunkIndex < 0 {
-			continue
-		}
-		pid := r.ChunkIndex
-		if _, ok := seen[pid]; ok {
-			continue
-		}
-		seen[pid] = struct{}{}
-		retrievalIDs[i] = pid
-	}
+	retrievalIDs := evaluationRetrievalIDsWithProvenance(retrievalSource, h.knowledgeID)
 
 	// Get generated text if available
 	generatedTexts := ""
@@ -188,4 +176,136 @@ func (h *HookMetric) MetricResult() *types.MetricResult {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.metricResults.Avg()
+}
+
+// evaluationRetrievalIDsWithProvenance maps one ranked result list to the
+// per-rank PID list with the M0 provenance contract: a result counts only
+// when it belongs to this evaluation's temporary knowledge and its
+// ChunkIndex (the passage slice index, i.e. PID) is valid and unseen;
+// unknown sources and duplicates keep their rank as -1.
+func evaluationRetrievalIDsWithProvenance(results []*types.SearchResult, knowledgeID string) []int {
+	retrievalIDs := make([]int, len(results))
+	seen := make(map[int]struct{}, len(results))
+	for i, r := range results {
+		retrievalIDs[i] = unknownRetrievalID
+		if r == nil || r.KnowledgeID != knowledgeID || r.ChunkIndex < 0 {
+			continue
+		}
+		pid := r.ChunkIndex
+		if _, ok := seen[pid]; ok {
+			continue
+		}
+		seen[pid] = struct{}{}
+		retrievalIDs[i] = pid
+	}
+	return retrievalIDs
+}
+
+// evaluationRankedResultsWithProvenance renders one ranked list for
+// per-question persistence: every position keeps rank, score, PID (or -1),
+// and its provenance state.
+func evaluationRankedResultsWithProvenance(
+	results []*types.SearchResult,
+	knowledgeID string,
+) []types.EvaluationRankedResult {
+	ranked := make([]types.EvaluationRankedResult, len(results))
+	seen := make(map[int]struct{}, len(results))
+	for i, r := range results {
+		ranked[i] = types.EvaluationRankedResult{
+			Rank:       i + 1,
+			PID:        unknownRetrievalID,
+			Provenance: types.EvaluationRankProvenanceUnknown,
+		}
+		if r == nil {
+			continue
+		}
+		ranked[i].Score = r.Score
+		if r.KnowledgeID != knowledgeID || r.ChunkIndex < 0 {
+			continue
+		}
+		pid := r.ChunkIndex
+		if _, duplicate := seen[pid]; duplicate {
+			ranked[i].Provenance = types.EvaluationRankProvenanceDuplicate
+			continue
+		}
+		seen[pid] = struct{}{}
+		ranked[i].PID = pid
+		ranked[i].Provenance = types.EvaluationRankProvenanceKnown
+	}
+	return ranked
+}
+
+// evaluationGenerationPIDOrder lists the PIDs that actually entered the
+// generation stage: known-provenance entries of the effective retrieval
+// order (rerank preferred), truncated to the rerank top-k window.
+func evaluationGenerationPIDOrder(ranked []types.EvaluationRankedResult, rerankTopK int) []int {
+	pids := make([]int, 0, len(ranked))
+	for _, entry := range ranked {
+		if entry.Provenance != types.EvaluationRankProvenanceKnown {
+			continue
+		}
+		pids = append(pids, entry.PID)
+		if rerankTopK > 0 && len(pids) >= rerankTopK {
+			break
+		}
+	}
+	return pids
+}
+
+// questionResultInput assembles the per-question publication input for one
+// completed sample. Callers hold publishMu, so the per-sample metric is the
+// entry appended by the immediately preceding recordFinish.
+func (h *HookMetric) questionResultInput(
+	index int,
+	plan *types.EvaluationMetricPlanSnapshot,
+	rerankTopK int,
+) *types.EvaluationQuestionResultInput {
+	tracked := h.qaPairMetricList[index]
+	if tracked == nil || tracked.qaPair == nil {
+		return nil
+	}
+	qaPair := tracked.qaPair
+
+	retrievalSource := tracked.rerankResult
+	if len(retrievalSource) == 0 {
+		retrievalSource = tracked.searchResult
+	}
+	effectiveRanked := evaluationRankedResultsWithProvenance(retrievalSource, h.knowledgeID)
+
+	var generatedText string
+	var promptTokens, completionTokens, totalTokens *int
+	if tracked.chatResponse != nil {
+		generatedText = tracked.chatResponse.Content
+		prompt := tracked.chatResponse.Usage.PromptTokens
+		completion := tracked.chatResponse.Usage.CompletionTokens
+		total := tracked.chatResponse.Usage.TotalTokens
+		promptTokens = &prompt
+		completionTokens = &completion
+		totalTokens = &total
+	}
+
+	var perSample *types.MetricResult
+	h.mu.RLock()
+	if count := len(h.metricResults.results); count > 0 {
+		perSample = h.metricResults.results[count-1]
+	}
+	h.mu.RUnlock()
+
+	return &types.EvaluationQuestionResultInput{
+		SampleIndex:      index,
+		QID:              strconv.Itoa(qaPair.QID),
+		Question:         qaPair.Question,
+		ReferenceAnswer:  qaPair.Answer,
+		GroundTruthPIDs:  append([]int(nil), qaPair.PIDs...),
+		SearchResults:    evaluationRankedResultsWithProvenance(tracked.searchResult, h.knowledgeID),
+		RerankResults:    evaluationRankedResultsWithProvenance(tracked.rerankResult, h.knowledgeID),
+		GenerationPIDs:   evaluationGenerationPIDOrder(effectiveRanked, rerankTopK),
+		GeneratedText:    generatedText,
+		PerSampleMetrics: perSample,
+		Observations:     types.EvaluationMetricObservationsFromResult(plan, perSample),
+		PromptTokens:     promptTokens,
+		CompletionTokens: completionTokens,
+		TotalTokens:      totalTokens,
+		Status:           types.EvaluationQuestionStatusSuccess,
+	}
 }

@@ -83,12 +83,14 @@ func RegisterEvaluationRoutes(
 	r *gin.RouterGroup,
 	handler *handler.EvaluationHandler,
 	datasetHandler *handler.EvaluationDatasetHandler,
+	questionHandler *handler.EvaluationQuestionHandler,
 	g *rbacGuards,
 ) {
 	evaluationRoutes := g.apiKeyGroup(r.Group("/evaluation"), apiKeyRunEvaluations(apiKeyFullAccess()))
 	{
 		evaluationRoutes.POST("", g.Admin(), handler.Evaluation)
 		evaluationRoutes.GET("", g.Viewer(), handler.GetEvaluationResult)
+		evaluationRoutes.GET("/tasks/:task_id/questions", g.Viewer(), questionHandler.ListQuestionResults)
 
 		datasets := evaluationRoutes.Group("/datasets")
 		{
