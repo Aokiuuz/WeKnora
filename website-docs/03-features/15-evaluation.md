@@ -71,6 +71,7 @@ const (
     EvaluationStatueRunning                          // 1 运行中
     EvaluationStatueSuccess                          // 2 成功
     EvaluationStatueFailed                           // 3 失败
+    EvaluationStatueTimedOut                         // 4 超时
 )
 ```
 
@@ -86,6 +87,9 @@ const (
 
 指标完成但清理仍在进行时，任务保持 `Running`。因此 `finished == total` 或 `metric` 已出现只表示评估计算完成，
 不能单独作为任务终止条件。
+
+后台任务默认具有 2 小时 deadline，可通过 `evaluation.task_timeout` 或 `WEKNORA_EVALUATION_TASK_TIMEOUT` 调整。
+deadline 覆盖数据集加载、同步建索引和 QA 执行；超时通过 context 协作传播，并以 `TimedOut`（状态值 4）结束。
 
 并发度取 `max(GOMAXPROCS - 1, 1)`（errgroup 限流）：
 
@@ -269,7 +273,8 @@ type QAPair struct {
 ```
 
 任务运行期间可轮询该接口获取 `finished / total` 进度。`end_time` 只在终态出现，使用 RFC 3339 时间字符串；
-`status = 3` 时 `err_msg` 携带首个评估执行错误。`cleanup_errors` 只在存在清理警告时出现，内容为人工诊断文本，
+`status = 3` 时 `err_msg` 携带首个评估执行错误，`status = 4` 表示任务达到配置 deadline，
+`err_msg` 为 `context deadline exceeded`。`cleanup_errors` 只在存在清理警告时出现，内容为人工诊断文本，
 不覆盖 `err_msg`，也不使已完成的评估从 `status = 2` 变为失败。客户端不应把该文本作为机器协议解析。
 
 > **注意**：评估结果存储在**内存**（`evaluationMemoryStorage`：`map[string]*EvaluationDetail` + `sync.RWMutex`，见 `internal/application/service/evaluation.go`），服务重启后任务与结果会丢失，需重新发起评估。

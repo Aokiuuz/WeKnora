@@ -33,12 +33,29 @@ type Config struct {
 	PromptTemplates *PromptTemplatesConfig `yaml:"prompt_templates" json:"prompt_templates"`
 	IM              *IMConfig              `yaml:"im"               json:"im"`
 	Agent           *AgentConfig           `yaml:"agent"            json:"agent"`
+	Evaluation      *EvaluationConfig      `yaml:"evaluation"       json:"evaluation"`
 	// FrontendBaseURL is the externally-visible origin of the SPA, used
 	// to compose absolute share-link URLs. Empty falls back to a host-
 	// relative URL ("/register?token=…") which the SPA then resolves
 	// against window.location.origin — fine for typical single-origin
 	// deployments. Sourced from FRONTEND_BASE_URL env at startup.
 	FrontendBaseURL string `yaml:"frontend_base_url" json:"frontend_base_url"`
+}
+
+// EvaluationConfig configures evaluation task execution.
+type EvaluationConfig struct {
+	TaskTimeout time.Duration `yaml:"task_timeout" json:"task_timeout"`
+}
+
+// DefaultEvaluationTaskTimeout bounds one background evaluation task.
+const DefaultEvaluationTaskTimeout = 2 * time.Hour
+
+// EvaluationTaskTimeout returns the configured timeout or its safe default.
+func EvaluationTaskTimeout(cfg *Config) time.Duration {
+	if cfg != nil && cfg.Evaluation != nil && cfg.Evaluation.TaskTimeout > 0 {
+		return cfg.Evaluation.TaskTimeout
+	}
+	return DefaultEvaluationTaskTimeout
 }
 
 // AgentConfig represents the global agent settings.
@@ -580,6 +597,7 @@ func LoadConfig() (*Config, error) {
 	applyOIDCEnvOverrides(&cfg)
 	applyAgentEnvOverrides(&cfg)
 	applyKnowledgeBaseEnvOverrides(&cfg)
+	applyEvaluationEnvOverrides(&cfg)
 	applyAuthAndTenantDefaults(&cfg)
 	applyAuditDefaults(&cfg)
 
@@ -763,6 +781,20 @@ func applyKnowledgeBaseEnvOverrides(cfg *Config) {
 	if value := strings.TrimSpace(os.Getenv("WEKNORA_DOCREADER_CALL_TIMEOUT")); value != "" {
 		if d, err := time.ParseDuration(value); err == nil && d > 0 {
 			cfg.KnowledgeBase.DocReaderCallTimeout = d
+		}
+	}
+}
+
+func applyEvaluationEnvOverrides(cfg *Config) {
+	if cfg.Evaluation == nil {
+		cfg.Evaluation = &EvaluationConfig{}
+	}
+	if cfg.Evaluation.TaskTimeout <= 0 {
+		cfg.Evaluation.TaskTimeout = DefaultEvaluationTaskTimeout
+	}
+	if value := strings.TrimSpace(os.Getenv("WEKNORA_EVALUATION_TASK_TIMEOUT")); value != "" {
+		if timeout, err := time.ParseDuration(value); err == nil && timeout > 0 {
+			cfg.Evaluation.TaskTimeout = timeout
 		}
 	}
 }

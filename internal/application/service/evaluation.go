@@ -18,6 +18,8 @@ import (
 
 const evaluationCleanupTimeout = 30 * time.Second
 
+var errEvaluationTaskTimeout = errors.New("evaluation task timeout")
+
 /*
 corpus: pid -> content
 queries: qid -> content
@@ -176,8 +178,26 @@ func appendEvaluationCleanupError(cleanupErrors *[]string, resourceType, resourc
 	*cleanupErrors = append(*cleanupErrors, fmt.Sprintf("delete %s %s: %v", resourceType, resourceID, err))
 }
 
+func evaluationTaskDeadlineStopped(ctx context.Context, runErr error) bool {
+	return errors.Is(context.Cause(ctx), errEvaluationTaskTimeout) &&
+		(errors.Is(runErr, context.DeadlineExceeded) || errors.Is(runErr, context.Canceled))
+}
+
+func captureEvaluationTaskDeadline(ctx context.Context, runErr error, stopped *bool) {
+	if stopped != nil {
+		*stopped = evaluationTaskDeadlineStopped(ctx, runErr)
+	}
+}
+
 func (e *EvaluationService) runEvaluation(ctx context.Context, detail *types.EvaluationDetail, knowledgeBaseID string) error {
 	taskID := detail.Task.ID
+	runCtx, cancel := context.WithTimeoutCause(
+		ctx,
+		config.EvaluationTaskTimeout(e.config),
+		errEvaluationTaskTimeout,
+	)
+	defer cancel()
+
 	if err := e.evaluationMemoryStorage.update(taskID, func(params *types.EvaluationDetail) {
 		params.Task.Status = types.EvaluationStatueRunning
 		params.Task.ErrMsg = ""
@@ -185,24 +205,35 @@ func (e *EvaluationService) runEvaluation(ctx context.Context, detail *types.Eva
 		params.Task.CleanupErrors = nil
 	}); err != nil {
 		runErr := fmt.Errorf("mark evaluation task as running: %w", err)
-		if cleanupErr := e.deleteEvaluationKnowledgeBase(ctx, knowledgeBaseID); cleanupErr != nil {
+		if cleanupErr := e.deleteEvaluationKnowledgeBase(runCtx, knowledgeBaseID); cleanupErr != nil {
 			return errors.Join(runErr, fmt.Errorf("delete knowledge base %s: %w", knowledgeBaseID, cleanupErr))
 		}
 		return runErr
 	}
-	logger.Info(ctx, "Evaluation task status set to running")
+	logger.Info(runCtx, "Evaluation task status set to running")
 
 	cleanupErrors := make([]string, 0, 2)
-	runErr := e.evalDataset(ctx, detail, knowledgeBaseID, &cleanupErrors)
-	logger.Infof(ctx, "Cleaning up evaluation knowledge base: %s", knowledgeBaseID)
-	if cleanupErr := e.deleteEvaluationKnowledgeBase(ctx, knowledgeBaseID); cleanupErr != nil {
-		logger.Errorf(ctx, "Failed to delete evaluation knowledge base: %v, knowledge base ID: %s", cleanupErr, knowledgeBaseID)
+	taskDeadlineStoppedRun := false
+	runErr := e.evalDataset(runCtx, detail, knowledgeBaseID, &cleanupErrors, &taskDeadlineStoppedRun)
+	logger.Infof(runCtx, "Cleaning up evaluation knowledge base: %s", knowledgeBaseID)
+	if cleanupErr := e.deleteEvaluationKnowledgeBase(runCtx, knowledgeBaseID); cleanupErr != nil {
+		logger.Errorf(
+			runCtx,
+			"Failed to delete evaluation knowledge base: %v, knowledge base ID: %s",
+			cleanupErr,
+			knowledgeBaseID,
+		)
 		appendEvaluationCleanupError(&cleanupErrors, "knowledge base", knowledgeBaseID, cleanupErr)
 	}
 	endTime := time.Now()
+	terminalErr := runErr
 	status := types.EvaluationStatueSuccess
 	errMsg := ""
-	if runErr != nil {
+	if taskDeadlineStoppedRun {
+		terminalErr = context.DeadlineExceeded
+		status = types.EvaluationStatueTimedOut
+		errMsg = context.DeadlineExceeded.Error()
+	} else if runErr != nil {
 		status = types.EvaluationStatueFailed
 		errMsg = runErr.Error()
 	}
@@ -213,20 +244,21 @@ func (e *EvaluationService) runEvaluation(ctx context.Context, detail *types.Eva
 		params.Task.CleanupErrors = append([]string(nil), cleanupErrors...)
 		params.Task.EndTime = &endTime
 	}); err != nil {
-		if runErr != nil {
-			return errors.Join(runErr, fmt.Errorf("publish evaluation terminal state: %w", err))
+		publicationErr := fmt.Errorf("publish evaluation terminal state: %w", err)
+		if terminalErr != nil {
+			return errors.Join(terminalErr, publicationErr)
 		}
-		return fmt.Errorf("publish evaluation terminal state: %w", err)
+		return publicationErr
 	}
 
-	if runErr != nil {
-		return runErr
+	if terminalErr != nil {
+		return terminalErr
 	}
 	if len(cleanupErrors) > 0 {
-		logger.Warnf(ctx, "Evaluation task completed with cleanup warnings, task ID: %s", taskID)
+		logger.Warnf(runCtx, "Evaluation task completed with cleanup warnings, task ID: %s", taskID)
 		return nil
 	}
-	logger.Infof(ctx, "Evaluation task completed successfully, task ID: %s", taskID)
+	logger.Infof(runCtx, "Evaluation task completed successfully, task ID: %s", taskID)
 	return nil
 }
 
@@ -458,7 +490,7 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 // EvalDataset performs the actual evaluation of a dataset
 // Processes each QA pair in parallel and records metrics
 func (e *EvaluationService) EvalDataset(ctx context.Context, detail *types.EvaluationDetail, knowledgeBaseID string) error {
-	return e.evalDataset(ctx, detail, knowledgeBaseID, nil)
+	return e.evalDataset(ctx, detail, knowledgeBaseID, nil, nil)
 }
 
 func (e *EvaluationService) evalDataset(
@@ -466,7 +498,8 @@ func (e *EvaluationService) evalDataset(
 	detail *types.EvaluationDetail,
 	knowledgeBaseID string,
 	cleanupErrors *[]string,
-) error {
+	taskDeadlineStoppedRun *bool,
+) (runErr error) {
 	logger.Info(ctx, "Start evaluating dataset")
 	logger.Infof(ctx, "Task ID: %s, Dataset ID: %s", detail.Task.ID, detail.Task.DatasetID)
 
@@ -474,15 +507,18 @@ func (e *EvaluationService) evalDataset(
 	dataset, err := e.dataset.GetDatasetByID(ctx, detail.Task.DatasetID)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to get dataset: %v", err)
+		captureEvaluationTaskDeadline(ctx, err, taskDeadlineStoppedRun)
 		return err
 	}
 	logger.Infof(ctx, "Dataset retrieved successfully with %d QA pairs", len(dataset))
 
 	// Update total QA pairs count in task details
-	e.evaluationMemoryStorage.update(detail.Task.ID, func(params *types.EvaluationDetail) {
+	if err := e.evaluationMemoryStorage.update(detail.Task.ID, func(params *types.EvaluationDetail) {
 		params.Task.Total = len(dataset)
 		logger.Infof(ctx, "Updated task total to %d QA pairs", params.Task.Total)
-	})
+	}); err != nil {
+		return fmt.Errorf("publish evaluation total: %w", err)
+	}
 
 	// Extract and organize passages from dataset
 	passages := getPassageList(dataset)
@@ -492,12 +528,14 @@ func (e *EvaluationService) evalDataset(
 	knowledge, err := e.knowledgeService.CreateKnowledgeFromPassageSync(ctx, knowledgeBaseID, passages, "")
 	if err != nil {
 		logger.Errorf(ctx, "Failed to create knowledge from passages: %v", err)
+		captureEvaluationTaskDeadline(ctx, err, taskDeadlineStoppedRun)
 		return err
 	}
 	logger.Infof(ctx, "Knowledge created and indexed successfully, ID: %s", knowledge.ID)
 
 	// Clean up the temporary knowledge created by this method.
 	defer func() {
+		captureEvaluationTaskDeadline(ctx, runErr, taskDeadlineStoppedRun)
 		logger.Infof(ctx, "Cleaning up resources - deleting knowledge: %s", knowledge.ID)
 		if err := e.deleteEvaluationKnowledge(ctx, knowledge.ID); err != nil {
 			logger.Errorf(ctx, "Failed to delete knowledge: %v, knowledge ID: %s", err, knowledge.ID)
@@ -557,6 +595,10 @@ func (e *EvaluationService) evalDataset(
 
 			// Publish each completed QA pair and its aggregate metric as one ordered snapshot.
 			publishMu.Lock()
+			if err := workerCtx.Err(); err != nil {
+				publishMu.Unlock()
+				return err
+			}
 			metricHook.recordFinish(i)
 			finished += 1
 			finishedSnapshot := finished

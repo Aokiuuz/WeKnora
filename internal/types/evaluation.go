@@ -30,11 +30,13 @@ func newJieba() *gojieba.Jieba {
 // EvaluationStatue represents the status of an evaluation task
 type EvaluationStatue int
 
+// Evaluation task status values describe the lifecycle state exposed by the API.
 const (
-	EvaluationStatuePending EvaluationStatue = iota // Task is waiting to start
-	EvaluationStatueRunning                         // Task is in progress
-	EvaluationStatueSuccess                         // Task completed successfully
-	EvaluationStatueFailed                          // Task failed
+	EvaluationStatuePending  EvaluationStatue = iota // Task is waiting to start
+	EvaluationStatueRunning                          // Task is in progress
+	EvaluationStatueSuccess                          // Task completed successfully
+	EvaluationStatueFailed                           // Task failed
+	EvaluationStatueTimedOut                         // Task exceeded its configured deadline
 )
 
 // EvaluationTask contains information about an evaluation task
