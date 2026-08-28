@@ -8,6 +8,6 @@ import (
 
 // EvaluationTaskRepository persists tenant-scoped evaluation task snapshots.
 type EvaluationTaskRepository interface {
-	CreateTask(ctx context.Context, task *types.EvaluationTaskEntity) error
+	CreateTask(ctx context.Context, tenantID uint64, task *types.EvaluationTaskEntity) error
 	GetTask(ctx context.Context, tenantID uint64, taskID string) (*types.EvaluationTaskEntity, error)
 }

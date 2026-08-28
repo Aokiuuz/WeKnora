@@ -29,10 +29,10 @@ type EvaluationTaskEntity struct {
 	TemporaryKnowledgeBaseID string `json:"-" gorm:"column:temporary_kb_id;type:varchar(64);not null"`
 	TemporaryKnowledgeID     string `json:"-" gorm:"type:varchar(64)"`
 
-	OwnerID        string    `json:"-" gorm:"type:varchar(36);not null"`
-	LeaseExpiresAt time.Time `json:"-" gorm:"not null;index"`
-	HeartbeatAt    time.Time `json:"-" gorm:"not null"`
-	Version        uint64    `json:"version" gorm:"not null;default:1"`
+	OwnerID        string     `json:"-" gorm:"type:varchar(36);not null"`
+	LeaseExpiresAt *time.Time `json:"-" gorm:"index"`
+	HeartbeatAt    time.Time  `json:"-" gorm:"not null"`
+	Version        uint64     `json:"version" gorm:"not null;default:1"`
 }
 
 // TableName binds EvaluationTaskEntity to the evaluation task table.

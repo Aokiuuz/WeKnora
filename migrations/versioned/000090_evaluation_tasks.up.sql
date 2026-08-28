@@ -16,12 +16,14 @@ CREATE TABLE IF NOT EXISTS evaluation_tasks (
     temporary_kb_id        VARCHAR(64) NOT NULL,
     temporary_knowledge_id VARCHAR(64),
     owner_id               VARCHAR(36) NOT NULL,
-    lease_expires_at       TIMESTAMPTZ NOT NULL,
+    lease_expires_at       TIMESTAMPTZ,
     heartbeat_at           TIMESTAMPTZ NOT NULL,
     version                BIGINT NOT NULL DEFAULT 1,
     created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    deleted_at             TIMESTAMPTZ
+    deleted_at             TIMESTAMPTZ,
+    CONSTRAINT evaluation_tasks_active_lease_check
+        CHECK (status NOT IN (0, 1) OR lease_expires_at IS NOT NULL)
 );
 
 COMMENT ON TABLE evaluation_tasks IS

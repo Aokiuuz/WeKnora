@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -70,6 +71,7 @@ func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 
 	assertSQLiteShareLinkInvitationsWork(t, db)
 	assertSQLiteMCPOAuthPrincipalUpsertWorks(t, db)
+	assertSQLiteEvaluationTaskSchema(t, db)
 	require.False(t, sqliteColumnExists(t, db, "knowledges", "tag_id"),
 		"SQLite migrations must drop legacy knowledges.tag_id after multi-tag migration")
 }
@@ -133,6 +135,7 @@ func TestSQLiteMigrationsUpgradeV4PreservesData(t *testing.T) {
 		"legacy-knowledge-1", "legacy-tag-1",
 	).Scan(&relationCount))
 	require.Equal(t, 1, relationCount)
+	assertSQLiteEvaluationTaskSchema(t, db)
 	require.False(t, sqliteColumnExists(t, db, "knowledges", "tag_id"))
 }
 
@@ -244,6 +247,60 @@ func assertSQLiteMCPOAuthPrincipalUpsertWorks(t *testing.T, db *sql.DB) {
 		"SELECT COUNT(*) FROM mcp_oauth_tokens WHERE tenant_id = 1 AND service_id = 'svc-migration-1'",
 	).Scan(&rowCount))
 	require.Equal(t, 1, rowCount)
+}
+
+func assertSQLiteEvaluationTaskSchema(t *testing.T, db *sql.DB) {
+	t.Helper()
+
+	assertSQLitePartialIndex(t, db, "idx_evaluation_tasks_tenant_started", "WHERE deleted_at IS NULL")
+	assertSQLitePartialIndex(t, db, "idx_evaluation_tasks_tenant_status", "WHERE deleted_at IS NULL")
+	assertSQLitePartialIndex(
+		t,
+		db,
+		"idx_evaluation_tasks_active_lease",
+		"WHERE deleted_at IS NULL AND status IN (0, 1)",
+	)
+
+	insert := `INSERT INTO evaluation_tasks (
+		id, tenant_id, dataset_id, status, start_time, cleanup_errors, params, metric,
+		temporary_kb_id, owner_id, lease_expires_at, heartbeat_at
+	) VALUES (?, 1, 'default', 0, CURRENT_TIMESTAMP, ?, ?, ?, 'kb', 'owner', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+
+	_, err := db.Exec(insert, "invalid-cleanup-errors", "not-json", `{}`, nil)
+	require.Error(t, err)
+	_, err = db.Exec(insert, "invalid-params", `[]`, "not-json", nil)
+	require.Error(t, err)
+	_, err = db.Exec(insert, "invalid-metric", `[]`, `{}`, "not-json")
+	require.Error(t, err)
+
+	_, err = db.Exec(insert, "nullable-lease", `[]`, `{}`, nil)
+	require.NoError(t, err)
+	_, err = db.Exec("UPDATE evaluation_tasks SET lease_expires_at = NULL WHERE id = ?", "nullable-lease")
+	require.Error(t, err)
+	_, err = db.Exec(
+		"UPDATE evaluation_tasks SET status = 2, lease_expires_at = NULL WHERE id = ?",
+		"nullable-lease",
+	)
+	require.NoError(t, err)
+}
+
+func assertSQLitePartialIndex(t *testing.T, db *sql.DB, name, predicate string) {
+	t.Helper()
+	var definition string
+	require.NoError(t, db.QueryRow(
+		"SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?",
+		name,
+	).Scan(&definition))
+	normalizedDefinition := strings.Join(strings.Fields(strings.ToLower(definition)), " ")
+	normalizedPredicate := strings.Join(strings.Fields(strings.ToLower(predicate)), " ")
+	require.Contains(t, normalizedDefinition, normalizedPredicate)
+
+	var partial int
+	require.NoError(t, db.QueryRow(
+		"SELECT partial FROM pragma_index_list('evaluation_tasks') WHERE name = ?",
+		name,
+	).Scan(&partial))
+	require.Equal(t, 1, partial)
 }
 
 func copySQLiteMigrationsV4(t *testing.T, repoRoot string) string {
