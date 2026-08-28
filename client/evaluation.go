@@ -1,78 +1,166 @@
-// Package client provides the implementation for interacting with the WeKnora API
-// The Evaluation related interfaces are used for starting and retrieving model evaluation task results
-// Evaluation tasks can be used to measure model performance and
-// compare different embedding models, chat models, and reranking models
+// Package client provides the implementation for interacting with the WeKnora API.
+// Evaluation interfaces start an evaluation task and retrieve its result.
 package client
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 )
 
-// EvaluationTask represents an evaluation task
-// Contains basic information about a model evaluation task
+// EvaluationStatus is the numeric lifecycle status returned by the evaluation API.
+type EvaluationStatus int
+
+const (
+	// EvaluationStatusPending indicates that the task is waiting to run.
+	EvaluationStatusPending EvaluationStatus = iota
+	// EvaluationStatusRunning indicates that the task is running.
+	EvaluationStatusRunning
+	// EvaluationStatusSuccess indicates that the task completed successfully.
+	EvaluationStatusSuccess
+	// EvaluationStatusFailed indicates that the task failed.
+	EvaluationStatusFailed
+)
+
+// EvaluationTask contains the task state returned by the evaluation API.
 type EvaluationTask struct {
-	ID          string `json:"id"`           // Task unique identifier
-	Status      string `json:"status"`       // Task status: pending, running, completed, failed
-	Progress    int    `json:"progress"`     // Task progress, integer value 0-100
-	DatasetID   string `json:"dataset_id"`   // Evaluation dataset ID
-	EmbeddingID string `json:"embedding_id"` // Embedding model ID
-	ChatID      string `json:"chat_id"`      // Chat model ID
-	RerankID    string `json:"rerank_id"`    // Reranking model ID
-	CreatedAt   string `json:"created_at"`   // Task creation time
-	CompleteAt  string `json:"complete_at"`  // Task completion time
-	ErrorMsg    string `json:"error_msg"`    // Error message, has value when task fails
+	ID        string           `json:"id"`
+	TenantID  uint64           `json:"tenant_id"`
+	DatasetID string           `json:"dataset_id"`
+	StartTime time.Time        `json:"start_time"`
+	Status    EvaluationStatus `json:"status"`
+	ErrMsg    string           `json:"err_msg,omitempty"`
+	Total     int              `json:"total,omitempty"`
+	Finished  int              `json:"finished,omitempty"`
 }
 
-// EvaluationResult represents the evaluation results
-// Contains detailed evaluation result information
+// UnmarshalJSON validates that an evaluation task contains a numeric status.
+func (t *EvaluationTask) UnmarshalJSON(data []byte) error {
+	type wireTask struct {
+		ID        string            `json:"id"`
+		TenantID  uint64            `json:"tenant_id"`
+		DatasetID string            `json:"dataset_id"`
+		StartTime time.Time         `json:"start_time"`
+		Status    *EvaluationStatus `json:"status"`
+		ErrMsg    string            `json:"err_msg,omitempty"`
+		Total     int               `json:"total,omitempty"`
+		Finished  int               `json:"finished,omitempty"`
+	}
+
+	var wire wireTask
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return fmt.Errorf("decode evaluation task: %w", err)
+	}
+	if wire.Status == nil {
+		return errors.New("decode evaluation task: missing numeric status")
+	}
+
+	*t = EvaluationTask{
+		ID:        wire.ID,
+		TenantID:  wire.TenantID,
+		DatasetID: wire.DatasetID,
+		StartTime: wire.StartTime,
+		Status:    *wire.Status,
+		ErrMsg:    wire.ErrMsg,
+		Total:     wire.Total,
+		Finished:  wire.Finished,
+	}
+	return nil
+}
+
+// EvaluationResult contains the task, request parameters, and optional metrics.
 type EvaluationResult struct {
-	TaskID       string                   `json:"task_id"`       // Associated task ID
-	Status       string                   `json:"status"`        // Task status
-	Progress     int                      `json:"progress"`      // Task progress
-	TotalQueries int                      `json:"total_queries"` // Total number of queries
-	TotalSamples int                      `json:"total_samples"` // Total number of samples
-	Metrics      map[string]float64       `json:"metrics"`       // Evaluation metrics collection
-	QueriesStat  []map[string]interface{} `json:"queries_stat"`  // Statistics for each query
-	CreatedAt    string                   `json:"created_at"`    // Creation time
-	CompleteAt   string                   `json:"complete_at"`   // Completion time
-	ErrorMsg     string                   `json:"error_msg"`     // Error message
+	Task   *EvaluationTask         `json:"task"`
+	Params json.RawMessage         `json:"params"`
+	Metric *EvaluationMetricResult `json:"metric,omitempty"`
 }
 
-// EvaluationRequest represents an evaluation request
-// Parameters used to start a new evaluation task
+// EvaluationMetricResult contains retrieval and generation metrics.
+type EvaluationMetricResult struct {
+	RetrievalMetrics  EvaluationRetrievalMetrics  `json:"retrieval_metrics"`
+	GenerationMetrics EvaluationGenerationMetrics `json:"generation_metrics"`
+}
+
+// EvaluationRetrievalMetrics contains retrieval quality metrics.
+type EvaluationRetrievalMetrics struct {
+	Precision float64 `json:"precision"`
+	Recall    float64 `json:"recall"`
+	NDCG3     float64 `json:"ndcg3"`
+	NDCG10    float64 `json:"ndcg10"`
+	MRR       float64 `json:"mrr"`
+	MAP       float64 `json:"map"`
+}
+
+// EvaluationGenerationMetrics contains answer generation quality metrics.
+type EvaluationGenerationMetrics struct {
+	BLEU1  float64 `json:"bleu1"`
+	BLEU2  float64 `json:"bleu2"`
+	BLEU4  float64 `json:"bleu4"`
+	ROUGE1 float64 `json:"rouge1"`
+	ROUGE2 float64 `json:"rouge2"`
+	ROUGEL float64 `json:"rougel"`
+}
+
+// EvaluationRequest contains the parameters accepted by the evaluation API.
 type EvaluationRequest struct {
-	DatasetID        string `json:"dataset_id"`   // Dataset ID to evaluate
-	EmbeddingModelID string `json:"embedding_id"` // Embedding model ID
-	ChatModelID      string `json:"chat_id"`      // Chat model ID
-	RerankModelID    string `json:"rerank_id"`    // Reranking model ID
+	DatasetID       string `json:"dataset_id"`
+	KnowledgeBaseID string `json:"knowledge_base_id"`
+	ChatModelID     string `json:"chat_id"`
+	RerankModelID   string `json:"rerank_id"`
+
+	// EmbeddingModelID is retained for source compatibility.
+	// Deprecated: use KnowledgeBaseID. A non-empty value returns an explicit error.
+	EmbeddingModelID string `json:"-"`
 }
 
-// EvaluationTaskResponse represents an evaluation task response
-// API response structure for evaluation tasks
+// ErrEvaluationEmbeddingModelUnsupported reports use of the deprecated embedding model field.
+var ErrEvaluationEmbeddingModelUnsupported = errors.New(
+	"evaluation request EmbeddingModelID is unsupported; use KnowledgeBaseID",
+)
+
+// MarshalJSON emits only fields accepted by the evaluation API.
+func (r EvaluationRequest) MarshalJSON() ([]byte, error) {
+	if r.EmbeddingModelID != "" {
+		return nil, ErrEvaluationEmbeddingModelUnsupported
+	}
+
+	type wireRequest struct {
+		DatasetID       string `json:"dataset_id"`
+		KnowledgeBaseID string `json:"knowledge_base_id"`
+		ChatModelID     string `json:"chat_id"`
+		RerankModelID   string `json:"rerank_id"`
+	}
+	return json.Marshal(wireRequest{
+		DatasetID:       r.DatasetID,
+		KnowledgeBaseID: r.KnowledgeBaseID,
+		ChatModelID:     r.ChatModelID,
+		RerankModelID:   r.RerankModelID,
+	})
+}
+
+// EvaluationTaskResponse is the API envelope returned when starting an evaluation.
 type EvaluationTaskResponse struct {
-	Success bool           `json:"success"` // Whether operation was successful
-	Data    EvaluationTask `json:"data"`    // Evaluation task data
+	Success bool              `json:"success"`
+	Data    *EvaluationResult `json:"data"`
 }
 
-// EvaluationResultResponse represents an evaluation result response
-// API response structure for evaluation results
+// EvaluationResultResponse is the API envelope returned when retrieving an evaluation.
 type EvaluationResultResponse struct {
-	Success bool             `json:"success"` // Whether operation was successful
-	Data    EvaluationResult `json:"data"`    // Evaluation result data
+	Success bool              `json:"success"`
+	Data    *EvaluationResult `json:"data"`
 }
 
-// StartEvaluation starts an evaluation task
-// Creates and starts a new evaluation task based on provided parameters
-// Parameters:
-//   - ctx: Context, used for passing request context information such as deadline, cancellation signals, etc.
-//   - request: Evaluation request parameters, including dataset ID and model IDs
-//
-// Returns:
-//   - *EvaluationTask: Created evaluation task information
-//   - error: Error information if the request fails
+// StartEvaluation starts an evaluation task and returns its nested task state.
 func (c *Client) StartEvaluation(ctx context.Context, request *EvaluationRequest) (*EvaluationTask, error) {
+	if request == nil {
+		return nil, errors.New("evaluation request is required")
+	}
+
 	resp, err := c.doRequest(ctx, http.MethodPost, "/api/v1/evaluation", request, nil)
 	if err != nil {
 		return nil, err
@@ -82,19 +170,14 @@ func (c *Client) StartEvaluation(ctx context.Context, request *EvaluationRequest
 	if err := parseResponse(resp, &response); err != nil {
 		return nil, err
 	}
+	if err := validateEvaluationResult(response.Data); err != nil {
+		return nil, err
+	}
 
-	return &response.Data, nil
+	return response.Data.Task, nil
 }
 
-// GetEvaluationResult retrieves evaluation results
-// Retrieves detailed results for an evaluation task by task ID
-// Parameters:
-//   - ctx: Context, used for passing request context information
-//   - taskID: Evaluation task ID, used to identify the specific evaluation task to query
-//
-// Returns:
-//   - *EvaluationResult: Detailed evaluation task results
-//   - error: Error information if the request fails
+// GetEvaluationResult retrieves the nested details of an evaluation task.
 func (c *Client) GetEvaluationResult(ctx context.Context, taskID string) (*EvaluationResult, error) {
 	queryParams := url.Values{}
 	queryParams.Add("task_id", taskID)
@@ -108,6 +191,23 @@ func (c *Client) GetEvaluationResult(ctx context.Context, taskID string) (*Evalu
 	if err := parseResponse(resp, &response); err != nil {
 		return nil, err
 	}
+	if err := validateEvaluationResult(response.Data); err != nil {
+		return nil, err
+	}
 
-	return &response.Data, nil
+	return response.Data, nil
+}
+
+func validateEvaluationResult(result *EvaluationResult) error {
+	if result == nil {
+		return errors.New("evaluation response is missing data")
+	}
+	if result.Task == nil {
+		return errors.New("evaluation response is missing data.task")
+	}
+	params := bytes.TrimSpace(result.Params)
+	if len(params) == 0 || bytes.Equal(params, []byte("null")) {
+		return errors.New("evaluation response is missing data.params")
+	}
+	return nil
 }
