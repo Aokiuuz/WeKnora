@@ -81,6 +81,19 @@ func (s *stubEvaluationDatasetRegistry) ListVersions(
 	return s.versions[datasetID], nil
 }
 
+func (s *stubEvaluationDatasetRegistry) GetVersion(
+	_ context.Context, _ uint64, datasetVersionID string,
+) (*types.EvaluationDatasetVersion, error) {
+	for _, versions := range s.versions {
+		for _, version := range versions {
+			if version.ID == datasetVersionID {
+				return version, nil
+			}
+		}
+	}
+	return nil, interfaces.ErrEvaluationDatasetVersionNotFound
+}
+
 func (s *stubEvaluationDatasetRegistry) GetVersionContent(
 	context.Context, uint64, string,
 ) (*types.EvaluationDatasetVersionContent, error) {

@@ -137,6 +137,10 @@ func evaluationEntityToDetail(entity *types.EvaluationTaskEntity) (*types.Evalua
 		normalizedEndTime := entity.EndTime.UTC()
 		endTime = &normalizedEndTime
 	}
+	experiment, provenanceComplete, err := decodeEvaluationExperiment(entity)
+	if err != nil {
+		return nil, err
+	}
 	return &types.EvaluationDetail{
 		Task: &types.EvaluationTask{
 			ID:            entity.ID,
@@ -150,9 +154,49 @@ func evaluationEntityToDetail(entity *types.EvaluationTaskEntity) (*types.Evalua
 			Total:         entity.Total,
 			Finished:      entity.Finished,
 		},
-		Params: params,
-		Metric: metric,
+		Params:             params,
+		Metric:             metric,
+		Experiment:         experiment,
+		ProvenanceComplete: provenanceComplete,
 	}, nil
+}
+
+// decodeEvaluationExperiment restores the frozen experiment manifest. Pre-M3
+// tasks keep null provenance: experiment=nil and provenance_complete=false
+// instead of an empty fabricated object.
+func decodeEvaluationExperiment(
+	entity *types.EvaluationTaskEntity,
+) (*types.EvaluationExperimentSnapshot, bool, error) {
+	trimmed := bytes.TrimSpace(entity.ExperimentSnapshot)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, false, nil
+	}
+	var shape map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &shape); err != nil || shape == nil {
+		return nil, false, errors.New("decode evaluation experiment: invalid JSON object")
+	}
+	var experiment types.EvaluationExperimentSnapshot
+	if err := json.Unmarshal(trimmed, &experiment); err != nil {
+		return nil, false, fmt.Errorf("decode evaluation experiment: %w", err)
+	}
+	complete := entity.DatasetVersionID != nil && *entity.DatasetVersionID != "" &&
+		entity.DatasetContentSHA256 != nil && len(*entity.DatasetContentSHA256) == 64 &&
+		entity.ExperimentSHA256 != nil && len(*entity.ExperimentSHA256) == 64
+	return &experiment, complete, nil
+}
+
+// encodeEvaluationExperiment serializes the frozen manifest for persistence.
+func encodeEvaluationExperiment(
+	experiment *types.EvaluationExperimentSnapshot,
+) (types.JSON, error) {
+	if experiment == nil {
+		return nil, nil
+	}
+	canonical, err := experiment.CanonicalJSON()
+	if err != nil {
+		return nil, fmt.Errorf("encode evaluation experiment: %w", err)
+	}
+	return types.JSON(canonical), nil
 }
 
 func decodeEvaluationParams(value types.JSON) (*types.ChatManage, error) {

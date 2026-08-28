@@ -136,6 +136,16 @@ func (s *EvaluationDatasetRegistryService) ListVersions(
 	return s.repo.ListVersions(ctx, tenantID, datasetID)
 }
 
+// GetVersion returns one visible immutable version; unknown versions fail
+// explicitly and never fall back to a default dataset.
+func (s *EvaluationDatasetRegistryService) GetVersion(
+	ctx context.Context,
+	tenantID uint64,
+	datasetVersionID string,
+) (*types.EvaluationDatasetVersion, error) {
+	return s.repo.GetVersion(ctx, tenantID, datasetVersionID)
+}
+
 // GetVersionContent returns the full ordered content of one visible version.
 func (s *EvaluationDatasetRegistryService) GetVersionContent(
 	ctx context.Context,

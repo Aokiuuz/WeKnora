@@ -31,6 +31,11 @@ type EvaluationDatasetRegistryService interface {
 	) (*types.EvaluationDatasetVersion, error)
 	ListDatasets(ctx context.Context, tenantID uint64) ([]*types.EvaluationDataset, error)
 	ListVersions(ctx context.Context, tenantID uint64, datasetID string) ([]*types.EvaluationDatasetVersion, error)
+	GetVersion(
+		ctx context.Context,
+		tenantID uint64,
+		datasetVersionID string,
+	) (*types.EvaluationDatasetVersion, error)
 	GetVersionContent(
 		ctx context.Context,
 		tenantID uint64,

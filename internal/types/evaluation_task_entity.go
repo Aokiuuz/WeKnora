@@ -26,6 +26,14 @@ type EvaluationTaskEntity struct {
 	Params        JSON `json:"params" gorm:"type:jsonb;not null;default:'{}'"`
 	Metric        JSON `json:"metric,omitempty" gorm:"type:jsonb"`
 
+	// Frozen experiment provenance (M3). All four stay nil for pre-M3 tasks:
+	// null provenance is reported as experiment=null and
+	// provenance_complete=false instead of being backfilled.
+	DatasetVersionID     *string `json:"dataset_version_id,omitempty" gorm:"type:varchar(64)"`
+	DatasetContentSHA256 *string `json:"dataset_content_sha256,omitempty" gorm:"type:char(64)"`
+	ExperimentSnapshot   JSON    `json:"-" gorm:"type:jsonb"`
+	ExperimentSHA256     *string `json:"experiment_sha256,omitempty" gorm:"type:char(64)"`
+
 	TemporaryKnowledgeBaseID string `json:"-" gorm:"column:temporary_kb_id;type:varchar(64);not null"`
 	TemporaryKnowledgeID     string `json:"-" gorm:"type:varchar(64)"`
 

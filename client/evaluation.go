@@ -78,6 +78,53 @@ type EvaluationResult struct {
 	Task   *EvaluationTask         `json:"task"`
 	Params json.RawMessage         `json:"params"`
 	Metric *EvaluationMetricResult `json:"metric,omitempty"`
+
+	// Experiment is the frozen schema-version-1 experiment manifest; null
+	// for pre-M3 tasks. ProvenanceComplete distinguishes full provenance
+	// from legacy tasks without a snapshot.
+	Experiment         *EvaluationExperimentSnapshot `json:"experiment"`
+	ProvenanceComplete bool                          `json:"provenance_complete"`
+}
+
+// EvaluationDatasetRef pins the dataset identity inside an experiment snapshot.
+type EvaluationDatasetRef struct {
+	DatasetID        string `json:"dataset_id"`
+	DatasetVersionID string `json:"dataset_version_id"`
+	VersionNumber    int    `json:"version_number"`
+	ArtifactSHA256   string `json:"artifact_sha256"`
+	ContentSHA256    string `json:"content_sha256"`
+}
+
+// EvaluationGenerationConfig is the resolved generation section of an
+// experiment snapshot, including the seed visibility contract.
+type EvaluationGenerationConfig struct {
+	Seed         *int   `json:"seed"`
+	SeedProvided bool   `json:"seed_provided"`
+	SeedSupport  string `json:"seed_support"`
+}
+
+// EvaluationExperimentSnapshot is the SDK view of the frozen experiment
+// manifest. Less frequently consumed sections stay as raw JSON so the wire
+// schema can grow without breaking the SDK.
+type EvaluationExperimentSnapshot struct {
+	SchemaVersion         int                        `json:"schema_version"`
+	Dataset               EvaluationDatasetRef       `json:"dataset"`
+	SourceKnowledgeBaseID *string                    `json:"source_knowledge_base_id"`
+	Models                json.RawMessage            `json:"models"`
+	Configuration         EvaluationExperimentConfig `json:"configuration"`
+	MetricPlan            json.RawMessage            `json:"metric_plan"`
+	Code                  json.RawMessage            `json:"code"`
+	Environment           json.RawMessage            `json:"environment"`
+	Reproducibility       json.RawMessage            `json:"reproducibility"`
+}
+
+// EvaluationExperimentConfig carries the resolved parameter groups; the
+// generation group is structured because seed semantics are part of the M3
+// contract.
+type EvaluationExperimentConfig struct {
+	Retrieval  json.RawMessage            `json:"retrieval"`
+	Rerank     json.RawMessage            `json:"rerank"`
+	Generation EvaluationGenerationConfig `json:"generation"`
 }
 
 // EvaluationMetricResult contains retrieval and generation metrics.
@@ -113,6 +160,11 @@ type EvaluationRequest struct {
 	ChatModelID     string `json:"chat_id"`
 	RerankModelID   string `json:"rerank_id"`
 
+	// DatasetVersionID optionally pins one immutable dataset version.
+	DatasetVersionID string `json:"dataset_version_id,omitempty"`
+	// Seed distinguishes "not provided" (nil) from an explicit seed=0.
+	Seed *int `json:"seed,omitempty"`
+
 	// EmbeddingModelID is retained for source compatibility.
 	// Deprecated: use KnowledgeBaseID. A non-empty value returns an explicit error.
 	EmbeddingModelID string `json:"-"`
@@ -130,16 +182,20 @@ func (r EvaluationRequest) MarshalJSON() ([]byte, error) {
 	}
 
 	type wireRequest struct {
-		DatasetID       string `json:"dataset_id"`
-		KnowledgeBaseID string `json:"knowledge_base_id"`
-		ChatModelID     string `json:"chat_id"`
-		RerankModelID   string `json:"rerank_id"`
+		DatasetID        string `json:"dataset_id"`
+		KnowledgeBaseID  string `json:"knowledge_base_id"`
+		ChatModelID      string `json:"chat_id"`
+		RerankModelID    string `json:"rerank_id"`
+		DatasetVersionID string `json:"dataset_version_id,omitempty"`
+		Seed             *int   `json:"seed,omitempty"`
 	}
 	return json.Marshal(wireRequest{
-		DatasetID:       r.DatasetID,
-		KnowledgeBaseID: r.KnowledgeBaseID,
-		ChatModelID:     r.ChatModelID,
-		RerankModelID:   r.RerankModelID,
+		DatasetID:        r.DatasetID,
+		KnowledgeBaseID:  r.KnowledgeBaseID,
+		ChatModelID:      r.ChatModelID,
+		RerankModelID:    r.RerankModelID,
+		DatasetVersionID: r.DatasetVersionID,
+		Seed:             r.Seed,
 	})
 }
 

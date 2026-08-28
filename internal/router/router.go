@@ -13,6 +13,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/dig"
 
+	"github.com/Tencent/WeKnora/internal/buildinfo"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/handler"
 	"github.com/Tencent/WeKnora/internal/handler/session"
@@ -154,7 +155,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 	}
 
 	// 前端静态文件（仅 Lite 版本内嵌前端）
-	if handler.Edition == "lite" {
+	if buildinfo.Edition == "lite" {
 		serveFrontendStatic(r)
 	}
 

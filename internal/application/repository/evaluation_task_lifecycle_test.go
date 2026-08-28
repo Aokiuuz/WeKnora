@@ -490,3 +490,63 @@ func TestEvaluationTaskRepositoryAllowsOnlyOneConcurrentProgressWriter(t *testin
 	assert.Equal(t, 2, persisted.Total)
 	assert.Equal(t, 1, persisted.Finished)
 }
+
+func TestEvaluationTaskLifecycleNeverModifiesExperimentSnapshot(t *testing.T) {
+	db := setupEvaluationTaskRepositoryTestDB(t)
+	repo := NewEvaluationTaskRepository(db)
+	ctx := context.Background()
+
+	task := newEvaluationTaskEntity(23, "experiment-frozen")
+	datasetVersionID := "dataset-version-1"
+	contentSHA256 := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	experimentSHA256 := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	snapshot := types.JSON(`{"schema_version":1,"dataset":{"dataset_id":"default"}}`)
+	task.DatasetVersionID = &datasetVersionID
+	task.DatasetContentSHA256 = &contentSHA256
+	task.ExperimentSnapshot = snapshot
+	task.ExperimentSHA256 = &experimentSHA256
+	require.NoError(t, repo.CreateTask(ctx, task.TenantID, task))
+
+	assertFrozen := func(stage string, entity *types.EvaluationTaskEntity) {
+		t.Helper()
+		require.NotNil(t, entity, stage)
+		require.NotNil(t, entity.DatasetVersionID, stage)
+		assert.Equal(t, datasetVersionID, *entity.DatasetVersionID, stage)
+		require.NotNil(t, entity.DatasetContentSHA256, stage)
+		assert.Equal(t, contentSHA256, *entity.DatasetContentSHA256, stage)
+		assert.JSONEq(t, string(snapshot), string(entity.ExperimentSnapshot), stage)
+		require.NotNil(t, entity.ExperimentSHA256, stage)
+		assert.Equal(t, experimentSHA256, *entity.ExperimentSHA256, stage)
+	}
+
+	now := time.Date(2026, 8, 28, 9, 0, 0, 0, time.UTC)
+	started, err := repo.TryStartTask(ctx, types.EvaluationTaskStartCommand{
+		TenantID: task.TenantID, TaskID: task.ID, OwnerID: task.OwnerID,
+		ExpectedVersion: task.Version, Now: now, LeaseExpiresAt: now.Add(time.Minute),
+	})
+	require.NoError(t, err)
+	assertFrozen("TryStartTask", started)
+
+	progress, err := repo.PublishProgress(ctx, types.EvaluationTaskProgressCommand{
+		TenantID: task.TenantID, TaskID: task.ID, OwnerID: task.OwnerID,
+		ExpectedVersion: started.Version, Total: 2, Finished: 1,
+		Metric: types.JSON(`{"retrieval_metrics":{"precision":0.5}}`),
+		Now: now.Add(10 * time.Second), LeaseExpiresAt: now.Add(time.Minute),
+	})
+	require.NoError(t, err)
+	assertFrozen("PublishProgress", progress)
+
+	terminal, err := repo.PublishTerminal(ctx, types.EvaluationTaskTerminalCommand{
+		TenantID: task.TenantID, TaskID: task.ID, OwnerID: task.OwnerID,
+		ExpectedVersion: progress.Version, Status: types.EvaluationStatueSuccess,
+		EndTime: now.Add(20 * time.Second),
+		Metric:  types.JSON(`{"retrieval_metrics":{"precision":0.5}}`),
+	})
+	require.NoError(t, err)
+	assertFrozen("PublishTerminal", terminal)
+
+	// A fresh read after the full lifecycle still returns the frozen bytes.
+	persisted, err := repo.GetTask(ctx, task.TenantID, task.ID)
+	require.NoError(t, err)
+	assertFrozen("GetTask after terminal", persisted)
+}

@@ -12,6 +12,9 @@ type EvaluationService interface {
 	Evaluation(ctx context.Context, datasetID string, knowledgeBaseID string,
 		chatModelID string, rerankModelID string,
 	) (*types.EvaluationDetail, error)
+	// EvaluationWithOptions starts a new evaluation task with the M3 option
+	// set: dataset version binding, configuration overrides, and seed.
+	EvaluationWithOptions(ctx context.Context, options *types.EvaluationOptions) (*types.EvaluationDetail, error)
 	// EvaluationResult retrieves evaluation result by task ID
 	EvaluationResult(ctx context.Context, taskID string) (*types.EvaluationDetail, error)
 }

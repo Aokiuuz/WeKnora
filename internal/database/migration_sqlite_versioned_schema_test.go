@@ -39,14 +39,15 @@ var versionedSQLiteColumns = map[string][]string{
 	"tenant_invitations": {"token", "accepted_count"},        // 000054
 	"embed_channels":     {"allow_memory"},                   // 000060
 	"mcp_oauth_tokens":   {"principal_type", "principal_id"}, // 000064
-	"evaluation_tasks": { // 000090
+	"evaluation_tasks": { // 000090, 000095 (SQLite 000018)
 		"tenant_id", "dataset_id", "status", "start_time", "end_time", "total", "finished", "err_msg",
 		"cleanup_errors", "params", "metric", "temporary_kb_id", "temporary_knowledge_id", "owner_id",
 		"lease_expires_at", "heartbeat_at", "version", "created_at", "updated_at", "deleted_at",
+		"dataset_version_id", "dataset_content_sha256", "experiment_snapshot", "experiment_sha256",
 	},
 }
 
-const expectedSQLiteMigrationVersion = 17
+const expectedSQLiteMigrationVersion = 18
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -288,6 +289,32 @@ func assertSQLiteEvaluationTaskSchema(t *testing.T, db *sql.DB) {
 		"nullable-lease",
 	)
 	require.NoError(t, err)
+
+	// 000095 / SQLite 000018: experiment snapshot columns and their partial index.
+	assertSQLitePartialIndex(t, db, "idx_evaluation_tasks_dataset_version",
+		"WHERE deleted_at IS NULL AND dataset_version_id IS NOT NULL")
+
+	_, err = db.Exec(`INSERT INTO evaluation_tasks (
+		id, tenant_id, dataset_id, status, start_time, cleanup_errors, params,
+		temporary_kb_id, owner_id, lease_expires_at, heartbeat_at,
+		dataset_version_id, dataset_content_sha256, experiment_snapshot, experiment_sha256
+	) VALUES ('snapshot-row', 1, 'default', 0, CURRENT_TIMESTAMP, '[]', '{}', 'kb', 'owner',
+		CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'version-1', ?, ?, ?)`,
+		strings.Repeat("a", 64), `{"schema_version":1}`, strings.Repeat("b", 64))
+	require.NoError(t, err)
+
+	// Pre-M3 rows keep null provenance.
+	var nullSnapshot sql.NullString
+	require.NoError(t, db.QueryRow(
+		"SELECT experiment_snapshot FROM evaluation_tasks WHERE id = 'nullable-lease'",
+	).Scan(&nullSnapshot))
+	require.False(t, nullSnapshot.Valid)
+
+	// Malformed hashes and non-JSON snapshots are rejected.
+	_, err = db.Exec("UPDATE evaluation_tasks SET dataset_content_sha256 = 'short' WHERE id = 'snapshot-row'")
+	require.Error(t, err)
+	_, err = db.Exec("UPDATE evaluation_tasks SET experiment_snapshot = 'not-json' WHERE id = 'snapshot-row'")
+	require.Error(t, err)
 }
 
 func assertSQLitePartialIndex(t *testing.T, db *sql.DB, name, predicate string) {
