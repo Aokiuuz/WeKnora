@@ -32,11 +32,12 @@ type EvaluationStatue int
 
 // Evaluation task status values describe the lifecycle state exposed by the API.
 const (
-	EvaluationStatuePending  EvaluationStatue = iota // Task is waiting to start
-	EvaluationStatueRunning                          // Task is in progress
-	EvaluationStatueSuccess                          // Task completed successfully
-	EvaluationStatueFailed                           // Task failed
-	EvaluationStatueTimedOut                         // Task exceeded its configured deadline
+	EvaluationStatuePending     EvaluationStatue = iota // Task is waiting to start
+	EvaluationStatueRunning                             // Task is in progress
+	EvaluationStatueSuccess                             // Task completed successfully
+	EvaluationStatueFailed                              // Task failed
+	EvaluationStatueTimedOut                            // Task exceeded its configured deadline
+	EvaluationStatueInterrupted                         // Task lease expired and recovery cleanup completed
 )
 
 // EvaluationTask contains information about an evaluation task

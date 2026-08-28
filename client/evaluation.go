@@ -25,6 +25,10 @@ const (
 	EvaluationStatusSuccess
 	// EvaluationStatusFailed indicates that the task failed.
 	EvaluationStatusFailed
+	// EvaluationStatusTimedOut indicates that the task exceeded its deadline.
+	EvaluationStatusTimedOut
+	// EvaluationStatusInterrupted indicates that task execution was interrupted.
+	EvaluationStatusInterrupted
 )
 
 // EvaluationTask contains the task state returned by the evaluation API.
@@ -33,10 +37,14 @@ type EvaluationTask struct {
 	TenantID  uint64           `json:"tenant_id"`
 	DatasetID string           `json:"dataset_id"`
 	StartTime time.Time        `json:"start_time"`
+	EndTime   *time.Time       `json:"end_time,omitempty"`
 	Status    EvaluationStatus `json:"status"`
 	ErrMsg    string           `json:"err_msg,omitempty"`
-	Total     int              `json:"total,omitempty"`
-	Finished  int              `json:"finished,omitempty"`
+
+	CleanupErrors []string `json:"cleanup_errors,omitempty"`
+
+	Total    int `json:"total,omitempty"`
+	Finished int `json:"finished,omitempty"`
 }
 
 // UnmarshalJSON validates that an evaluation task contains a numeric status.
@@ -46,10 +54,14 @@ func (t *EvaluationTask) UnmarshalJSON(data []byte) error {
 		TenantID  uint64            `json:"tenant_id"`
 		DatasetID string            `json:"dataset_id"`
 		StartTime time.Time         `json:"start_time"`
+		EndTime   *time.Time        `json:"end_time,omitempty"`
 		Status    *EvaluationStatus `json:"status"`
 		ErrMsg    string            `json:"err_msg,omitempty"`
-		Total     int               `json:"total,omitempty"`
-		Finished  int               `json:"finished,omitempty"`
+
+		CleanupErrors []string `json:"cleanup_errors,omitempty"`
+
+		Total    int `json:"total,omitempty"`
+		Finished int `json:"finished,omitempty"`
 	}
 
 	var wire wireTask
@@ -59,18 +71,27 @@ func (t *EvaluationTask) UnmarshalJSON(data []byte) error {
 	if wire.Status == nil {
 		return errors.New("decode evaluation task: missing numeric status")
 	}
+	if !wire.Status.valid() {
+		return fmt.Errorf("decode evaluation task: unknown numeric status %d", *wire.Status)
+	}
 
 	*t = EvaluationTask{
-		ID:        wire.ID,
-		TenantID:  wire.TenantID,
-		DatasetID: wire.DatasetID,
-		StartTime: wire.StartTime,
-		Status:    *wire.Status,
-		ErrMsg:    wire.ErrMsg,
-		Total:     wire.Total,
-		Finished:  wire.Finished,
+		ID:            wire.ID,
+		TenantID:      wire.TenantID,
+		DatasetID:     wire.DatasetID,
+		StartTime:     wire.StartTime,
+		EndTime:       wire.EndTime,
+		Status:        *wire.Status,
+		ErrMsg:        wire.ErrMsg,
+		CleanupErrors: wire.CleanupErrors,
+		Total:         wire.Total,
+		Finished:      wire.Finished,
 	}
 	return nil
+}
+
+func (s EvaluationStatus) valid() bool {
+	return s >= EvaluationStatusPending && s <= EvaluationStatusInterrupted
 }
 
 // EvaluationResult contains the task, request parameters, and optional metrics.

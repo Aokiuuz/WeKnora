@@ -51,6 +51,25 @@ type EvaluationTaskStartCommand struct {
 	LeaseExpiresAt  time.Time
 }
 
+// EvaluationTaskHeartbeatCommand renews the lease of one running task without
+// changing its business snapshot version.
+type EvaluationTaskHeartbeatCommand struct {
+	TenantID       uint64
+	TaskID         string
+	OwnerID        string
+	Now            time.Time
+	LeaseExpiresAt time.Time
+}
+
+// EvaluationTaskClaimExpiredCommand assigns a bounded batch of expired active
+// tasks to one recovery owner.
+type EvaluationTaskClaimExpiredCommand struct {
+	OwnerID        string
+	Now            time.Time
+	LeaseExpiresAt time.Time
+	Limit          int
+}
+
 // EvaluationTaskProgressCommand conditionally publishes one complete progress
 // snapshot and renews the running task lease.
 type EvaluationTaskProgressCommand struct {

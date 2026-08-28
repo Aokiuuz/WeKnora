@@ -8,7 +8,31 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"time"
 )
+
+func TestEvaluationStatusValuesMatchHTTPContract(t *testing.T) {
+	tests := []struct {
+		name string
+		got  EvaluationStatus
+		want EvaluationStatus
+	}{
+		{name: "pending", got: EvaluationStatusPending, want: 0},
+		{name: "running", got: EvaluationStatusRunning, want: 1},
+		{name: "success", got: EvaluationStatusSuccess, want: 2},
+		{name: "failed", got: EvaluationStatusFailed, want: 3},
+		{name: "timed out", got: EvaluationStatusTimedOut, want: 4},
+		{name: "interrupted", got: EvaluationStatusInterrupted, want: 5},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.want {
+				t.Fatalf("status = %d, want %d", tt.got, tt.want)
+			}
+		})
+	}
+}
 
 func TestEvaluationMethodSignaturesRemainCompatible(t *testing.T) {
 	client := NewClient("http://example.test")
@@ -120,6 +144,47 @@ func TestGetEvaluationResultParsesNestedDetail(t *testing.T) {
 	}
 }
 
+func TestGetEvaluationResultParsesInterruptedTerminalTask(t *testing.T) {
+	const endTime = "2026-08-28T08:05:06Z"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		task := evaluationTaskFixture(5)
+		task["end_time"] = endTime
+		task["err_msg"] = "evaluation worker interrupted"
+		task["cleanup_errors"] = []string{"delete temporary knowledge base: unavailable"}
+		writeEvaluationResponse(t, w, map[string]any{
+			"task":   task,
+			"params": map[string]any{},
+		})
+	}))
+	defer srv.Close()
+
+	result, err := NewClient(srv.URL).GetEvaluationResult(context.Background(), "evaluation-1")
+	if err != nil {
+		t.Fatalf("GetEvaluationResult() error = %v", err)
+	}
+
+	if result.Task.Status != EvaluationStatusInterrupted {
+		t.Fatalf("result.Task.Status = %d, want %d", result.Task.Status, EvaluationStatusInterrupted)
+	}
+	if result.Task.EndTime == nil {
+		t.Fatal("result.Task.EndTime must preserve the terminal timestamp")
+	}
+	wantEndTime, err := time.Parse(time.RFC3339, endTime)
+	if err != nil {
+		t.Fatalf("parse fixture end time: %v", err)
+	}
+	if !result.Task.EndTime.Equal(wantEndTime) {
+		t.Fatalf("result.Task.EndTime = %s, want %s", result.Task.EndTime, wantEndTime)
+	}
+	wantCleanupErrors := []string{"delete temporary knowledge base: unavailable"}
+	if !reflect.DeepEqual(result.Task.CleanupErrors, wantCleanupErrors) {
+		t.Fatalf("result.Task.CleanupErrors = %#v, want %#v", result.Task.CleanupErrors, wantCleanupErrors)
+	}
+	if result.Task.ErrMsg != "evaluation worker interrupted" {
+		t.Fatalf("result.Task.ErrMsg = %q, want interruption message", result.Task.ErrMsg)
+	}
+}
+
 func TestGetEvaluationResultRejectsStringStatus(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		task := evaluationTaskFixture(1)
@@ -134,6 +199,19 @@ func TestGetEvaluationResultRejectsStringStatus(t *testing.T) {
 	_, err := NewClient(srv.URL).GetEvaluationResult(context.Background(), "evaluation-1")
 	if err == nil {
 		t.Fatal("GetEvaluationResult() must reject a string status")
+	}
+}
+
+func TestEvaluationTaskRejectsUnknownNumericStatus(t *testing.T) {
+	task := evaluationTaskFixture(99)
+	payload, err := json.Marshal(task)
+	if err != nil {
+		t.Fatalf("marshal fixture: %v", err)
+	}
+
+	var decoded EvaluationTask
+	if err := json.Unmarshal(payload, &decoded); err == nil {
+		t.Fatal("EvaluationTask must reject an unknown numeric status")
 	}
 }
 

@@ -217,6 +217,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewModelService))
 	must(container.Provide(service.NewDatasetService))
 	must(container.Provide(service.NewEvaluationService))
+	must(container.Provide(service.NewEvaluationTaskRecoveryRunner))
 	must(container.Provide(service.NewUserService))
 	must(container.Provide(service.NewSystemSettingService))
 	must(container.Provide(func(
@@ -359,6 +360,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Invoke(startDataSourceScheduler))
 	logger.Debugf(ctx, "[Container] Data source sync framework registered")
 	must(container.Invoke(startAuditLogRetention))
+	must(container.Invoke(startEvaluationTaskRecovery))
 	logger.Debugf(ctx, "[Container] Audit log retention runner registered")
 	must(container.Provide(service.NewHousekeepingService))
 	must(container.Invoke(startHousekeepingService))
@@ -1792,6 +1794,19 @@ func startAuditLogRetention(
 ) {
 	runner.Start(context.Background())
 	cleaner.RegisterWithName("AuditLogRetentionRunner", func() error {
+		runner.Stop()
+		return nil
+	})
+}
+
+// startEvaluationTaskRecovery starts the expired-task scan loop and registers
+// its graceful shutdown callback.
+func startEvaluationTaskRecovery(
+	runner *service.EvaluationTaskRecoveryRunner,
+	cleaner interfaces.ResourceCleaner,
+) {
+	runner.Start(context.Background())
+	cleaner.RegisterWithName("EvaluationTaskRecoveryRunner", func() error {
 		runner.Stop()
 		return nil
 	})

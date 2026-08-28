@@ -27,6 +27,14 @@ type EvaluationTaskRepository interface {
 	CreateTask(ctx context.Context, tenantID uint64, task *types.EvaluationTaskEntity) error
 	GetTask(ctx context.Context, tenantID uint64, taskID string) (*types.EvaluationTaskEntity, error)
 	TryStartTask(ctx context.Context, command types.EvaluationTaskStartCommand) (*types.EvaluationTaskEntity, error)
+	HeartbeatTask(
+		ctx context.Context,
+		command types.EvaluationTaskHeartbeatCommand,
+	) (*types.EvaluationTaskEntity, error)
+	ClaimExpiredTasks(
+		ctx context.Context,
+		command types.EvaluationTaskClaimExpiredCommand,
+	) ([]*types.EvaluationTaskEntity, error)
 	PublishProgress(
 		ctx context.Context,
 		command types.EvaluationTaskProgressCommand,

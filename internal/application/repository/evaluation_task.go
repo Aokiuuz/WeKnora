@@ -184,6 +184,133 @@ func (r *evaluationTaskRepository) TryStartTask(
 	)
 }
 
+// HeartbeatTask renews one running task lease without changing its business version.
+func (r *evaluationTaskRepository) HeartbeatTask(
+	ctx context.Context,
+	command types.EvaluationTaskHeartbeatCommand,
+) (*types.EvaluationTaskEntity, error) {
+	if command.TenantID == 0 || command.TaskID == "" || command.OwnerID == "" {
+		return nil, errors.New("heartbeat evaluation task: tenant_id, task_id, and owner_id are required")
+	}
+	if command.Now.IsZero() || command.LeaseExpiresAt.IsZero() {
+		return nil, errors.New("heartbeat evaluation task: now and lease_expires_at are required")
+	}
+	command.Now = command.Now.UTC()
+	command.LeaseExpiresAt = command.LeaseExpiresAt.UTC()
+	if !command.LeaseExpiresAt.After(command.Now) {
+		return nil, errors.New("heartbeat evaluation task: lease_expires_at must be after now")
+	}
+
+	var updated types.EvaluationTaskEntity
+	result := r.db.WithContext(ctx).
+		Model(&updated).
+		Clauses(clause.Returning{}).
+		Where(
+			"tenant_id = ? AND id = ? AND owner_id = ? AND status = ? AND lease_expires_at > ?",
+			command.TenantID,
+			command.TaskID,
+			command.OwnerID,
+			types.EvaluationStatueRunning,
+			command.Now,
+		).
+		Updates(map[string]any{
+			"heartbeat_at": gorm.Expr(
+				"CASE WHEN heartbeat_at > ? THEN heartbeat_at ELSE ? END",
+				command.Now, command.Now,
+			),
+			"lease_expires_at": gorm.Expr(
+				"CASE WHEN lease_expires_at > ? THEN lease_expires_at ELSE ? END",
+				command.LeaseExpiresAt, command.LeaseExpiresAt,
+			),
+			"updated_at": gorm.Expr(
+				"CASE WHEN updated_at > ? THEN updated_at ELSE ? END",
+				command.Now, command.Now,
+			),
+		})
+	if result.Error != nil {
+		return nil, fmt.Errorf("heartbeat evaluation task %s: %w", command.TaskID, result.Error)
+	}
+	if result.RowsAffected > 1 {
+		return nil, fmt.Errorf(
+			"heartbeat evaluation task %s: invariant violation: updated %d rows",
+			command.TaskID,
+			result.RowsAffected,
+		)
+	}
+	if result.RowsAffected == 0 {
+		return nil, r.classifyEvaluationTaskHeartbeatConflict(ctx, command)
+	}
+	normalizeEvaluationTaskTimes(&updated)
+	return &updated, nil
+}
+
+// ClaimExpiredTasks atomically assigns expired active tasks to a recovery owner.
+func (r *evaluationTaskRepository) ClaimExpiredTasks(
+	ctx context.Context,
+	command types.EvaluationTaskClaimExpiredCommand,
+) ([]*types.EvaluationTaskEntity, error) {
+	if command.OwnerID == "" {
+		return nil, errors.New("claim expired evaluation tasks: owner_id is required")
+	}
+	if command.Now.IsZero() || command.LeaseExpiresAt.IsZero() {
+		return nil, errors.New("claim expired evaluation tasks: now and lease_expires_at are required")
+	}
+	if command.Limit <= 0 {
+		return nil, errors.New("claim expired evaluation tasks: limit must be positive")
+	}
+	command.Now = command.Now.UTC()
+	command.LeaseExpiresAt = command.LeaseExpiresAt.UTC()
+	if !command.LeaseExpiresAt.After(command.Now) {
+		return nil, errors.New("claim expired evaluation tasks: lease_expires_at must be after now")
+	}
+
+	activeStatuses := []types.EvaluationStatue{
+		types.EvaluationStatuePending,
+		types.EvaluationStatueRunning,
+	}
+	candidates := r.db.WithContext(ctx).
+		Model(&types.EvaluationTaskEntity{}).
+		Select("id").
+		Where("status IN ? AND lease_expires_at <= ?", activeStatuses, command.Now).
+		Order("lease_expires_at ASC").
+		Order("id ASC").
+		Limit(command.Limit)
+
+	var claimed []*types.EvaluationTaskEntity
+	result := r.db.WithContext(ctx).
+		Model(&claimed).
+		Clauses(clause.Returning{}).
+		Where("id IN (?)", candidates).
+		Where("status IN ? AND lease_expires_at <= ?", activeStatuses, command.Now).
+		Updates(map[string]any{
+			"owner_id": command.OwnerID,
+			"heartbeat_at": gorm.Expr(
+				"CASE WHEN heartbeat_at > ? THEN heartbeat_at ELSE ? END",
+				command.Now, command.Now,
+			),
+			"lease_expires_at": command.LeaseExpiresAt,
+			"updated_at": gorm.Expr(
+				"CASE WHEN updated_at > ? THEN updated_at ELSE ? END",
+				command.Now, command.Now,
+			),
+			"version": gorm.Expr("version + 1"),
+		})
+	if result.Error != nil {
+		return nil, fmt.Errorf("claim expired evaluation tasks: %w", result.Error)
+	}
+	if result.RowsAffected > int64(command.Limit) {
+		return nil, fmt.Errorf(
+			"claim expired evaluation tasks: invariant violation: claimed %d rows with limit %d",
+			result.RowsAffected,
+			command.Limit,
+		)
+	}
+	for _, task := range claimed {
+		normalizeEvaluationTaskTimes(task)
+	}
+	return claimed, nil
+}
+
 // PublishProgress atomically publishes a complete progress snapshot and renews its lease.
 func (r *evaluationTaskRepository) PublishProgress(
 	ctx context.Context,
@@ -219,8 +346,8 @@ func (r *evaluationTaskRepository) PublishProgress(
 		command.OwnerID,
 		command.ExpectedVersion,
 		[]types.EvaluationStatue{types.EvaluationStatueRunning},
-		"(total = 0 OR total = ?) AND finished <= ?",
-		[]any{command.Total, command.Finished},
+		"(total = 0 OR total = ?) AND finished <= ? AND lease_expires_at > ?",
+		[]any{command.Total, command.Finished, command.Now},
 		map[string]any{
 			"total":    command.Total,
 			"finished": command.Finished,
@@ -241,6 +368,7 @@ func (r *evaluationTaskRepository) PublishProgress(
 		},
 		func(task *types.EvaluationTaskEntity) bool {
 			return task.Status == types.EvaluationStatueRunning &&
+				task.LeaseExpiresAt != nil && task.LeaseExpiresAt.After(command.Now) &&
 				(task.Total == 0 || task.Total == command.Total) &&
 				task.Finished <= command.Finished
 		},
@@ -273,8 +401,8 @@ func (r *evaluationTaskRepository) RecordTemporaryKnowledge(
 		command.OwnerID,
 		command.ExpectedVersion,
 		[]types.EvaluationStatue{types.EvaluationStatueRunning},
-		"(temporary_knowledge_id IS NULL OR temporary_knowledge_id = '')",
-		nil,
+		"(temporary_knowledge_id IS NULL OR temporary_knowledge_id = '') AND lease_expires_at > ?",
+		[]any{command.UpdatedAt},
 		map[string]any{
 			"temporary_knowledge_id": command.TemporaryKnowledgeID,
 			"updated_at": gorm.Expr(
@@ -284,7 +412,9 @@ func (r *evaluationTaskRepository) RecordTemporaryKnowledge(
 			"version": gorm.Expr("version + 1"),
 		},
 		func(task *types.EvaluationTaskEntity) bool {
-			return task.Status == types.EvaluationStatueRunning && task.TemporaryKnowledgeID == ""
+			return task.Status == types.EvaluationStatueRunning &&
+				task.LeaseExpiresAt != nil && task.LeaseExpiresAt.After(command.UpdatedAt) &&
+				task.TemporaryKnowledgeID == ""
 		},
 		"record temporary knowledge for",
 	)
@@ -312,9 +442,11 @@ func (r *evaluationTaskRepository) PublishTerminal(
 		if command.ErrMsg != "" {
 			return nil, errors.New("publish evaluation terminal state: successful task must not have err_msg")
 		}
-	case types.EvaluationStatueFailed, types.EvaluationStatueTimedOut:
+	case types.EvaluationStatueFailed, types.EvaluationStatueTimedOut, types.EvaluationStatueInterrupted:
 		if command.ErrMsg == "" {
-			return nil, errors.New("publish evaluation terminal state: failed or timed out task requires err_msg")
+			return nil, errors.New(
+				"publish evaluation terminal state: failed, timed out, or interrupted task requires err_msg",
+			)
 		}
 	default:
 		return nil, errors.New("publish evaluation terminal state: unsupported terminal status")
@@ -336,8 +468,8 @@ func (r *evaluationTaskRepository) PublishTerminal(
 		command.OwnerID,
 		command.ExpectedVersion,
 		[]types.EvaluationStatue{types.EvaluationStatuePending, types.EvaluationStatueRunning},
-		"start_time <= ? AND heartbeat_at <= ?",
-		[]any{command.EndTime, command.EndTime},
+		"start_time <= ? AND heartbeat_at <= ? AND lease_expires_at > ?",
+		[]any{command.EndTime, command.EndTime, command.EndTime},
 		map[string]any{
 			"status":           command.Status,
 			"end_time":         command.EndTime,
@@ -353,9 +485,32 @@ func (r *evaluationTaskRepository) PublishTerminal(
 		},
 		func(task *types.EvaluationTaskEntity) bool {
 			return (task.Status == types.EvaluationStatuePending || task.Status == types.EvaluationStatueRunning) &&
+				task.LeaseExpiresAt != nil && task.LeaseExpiresAt.After(command.EndTime) &&
 				!task.StartTime.After(command.EndTime) && !task.HeartbeatAt.After(command.EndTime)
 		},
 		"publish terminal state for",
+	)
+}
+
+func (r *evaluationTaskRepository) classifyEvaluationTaskHeartbeatConflict(
+	ctx context.Context,
+	command types.EvaluationTaskHeartbeatCommand,
+) error {
+	task, err := r.GetTask(ctx, command.TenantID, command.TaskID)
+	if err != nil {
+		return fmt.Errorf("heartbeat evaluation task %s: %w", command.TaskID, err)
+	}
+	if task.OwnerID != command.OwnerID {
+		return fmt.Errorf("heartbeat evaluation task %s: %w", command.TaskID, ErrEvaluationTaskOwnerConflict)
+	}
+	if task.Status != types.EvaluationStatueRunning ||
+		task.LeaseExpiresAt == nil || !task.LeaseExpiresAt.After(command.Now) {
+		return fmt.Errorf("heartbeat evaluation task %s: %w", command.TaskID, ErrEvaluationTaskStateConflict)
+	}
+	return fmt.Errorf(
+		"heartbeat evaluation task %s: concurrent state changed: %w",
+		command.TaskID,
+		ErrEvaluationTaskStateConflict,
 	)
 }
 

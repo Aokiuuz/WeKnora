@@ -7,16 +7,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
 type evaluationRunState struct {
-	tenantID uint64
-	taskID   string
-	ownerID  string
-	version  uint64
-	metric   types.JSON
+	tenantID       uint64
+	taskID         string
+	ownerID        string
+	version        uint64
+	metric         types.JSON
+	leaseExpiresAt time.Time
 }
 
 func newEvaluationRunState(entity *types.EvaluationTaskEntity) (*evaluationRunState, error) {
@@ -25,17 +25,18 @@ func newEvaluationRunState(entity *types.EvaluationTaskEntity) (*evaluationRunSt
 			"initialize evaluation run state: persisted tenant, task, owner, and version are required",
 		)
 	}
+	var leaseExpiresAt time.Time
+	if entity.LeaseExpiresAt != nil {
+		leaseExpiresAt = entity.LeaseExpiresAt.UTC()
+	}
 	return &evaluationRunState{
-		tenantID: entity.TenantID,
-		taskID:   entity.ID,
-		ownerID:  entity.OwnerID,
-		version:  entity.Version,
-		metric:   append(types.JSON(nil), entity.Metric...),
+		tenantID:       entity.TenantID,
+		taskID:         entity.ID,
+		ownerID:        entity.OwnerID,
+		version:        entity.Version,
+		metric:         append(types.JSON(nil), entity.Metric...),
+		leaseExpiresAt: leaseExpiresAt,
 	}, nil
-}
-
-func evaluationLeaseExpiresAt(cfg *config.Config, now time.Time) time.Time {
-	return now.UTC().Add(config.EvaluationTaskTimeout(cfg) + 2*evaluationCleanupTimeout)
 }
 
 func evaluationDetailToEntity(
@@ -220,5 +221,5 @@ func encodeEvaluationCleanupErrors(cleanupErrors []string) (types.JSON, error) {
 }
 
 func isKnownEvaluationStatus(status types.EvaluationStatue) bool {
-	return status >= types.EvaluationStatuePending && status <= types.EvaluationStatueTimedOut
+	return status >= types.EvaluationStatuePending && status <= types.EvaluationStatueInterrupted
 }

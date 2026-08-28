@@ -39,6 +39,9 @@ type EvaluationService struct {
 	modelService             interfaces.ModelService         // Service for model operations
 	evaluationTaskRepository interfaces.EvaluationTaskRepository
 	ownerID                  string
+	heartbeatInterval        time.Duration
+	heartbeatTimeout         time.Duration
+	runningLeaseDuration     time.Duration
 }
 
 func NewEvaluationService(
@@ -62,21 +65,38 @@ func NewEvaluationService(
 	}
 }
 
+// evaluationCleanupContext builds the bounded context for one cleanup call.
+// The context always detaches from cancellation that already happened before
+// entry, so a reached request or task deadline never blocks resource cleanup.
+// Cancellation that happens after entry, such as heartbeat ownership loss,
+// still propagates and interrupts the in-flight cleanup.
+func evaluationCleanupContext(parent context.Context) (context.Context, context.CancelFunc) {
+	cleanupCtx, cancel := context.WithTimeout(logger.CloneContext(parent), evaluationCleanupTimeout)
+	if parent.Err() != nil {
+		return cleanupCtx, cancel
+	}
+	stop := context.AfterFunc(parent, cancel)
+	return cleanupCtx, func() {
+		stop()
+		cancel()
+	}
+}
+
 func (e *EvaluationService) deleteEvaluationKnowledge(ctx context.Context, knowledgeID string) error {
-	cleanupCtx, cancel := context.WithTimeout(logger.CloneContext(ctx), evaluationCleanupTimeout)
+	cleanupCtx, cancel := evaluationCleanupContext(ctx)
 	defer cancel()
 	return e.knowledgeService.DeleteKnowledge(cleanupCtx, knowledgeID)
 }
 
 func (e *EvaluationService) deleteEvaluationKnowledgeBase(ctx context.Context, knowledgeBaseID string) error {
-	cleanupCtx, cancel := context.WithTimeout(logger.CloneContext(ctx), evaluationCleanupTimeout)
+	cleanupCtx, cancel := evaluationCleanupContext(ctx)
 	defer cancel()
 	return e.knowledgeBaseService.DeleteKnowledgeBase(cleanupCtx, knowledgeBaseID)
 }
 
 func (e *EvaluationService) cleanupEvaluationKnowledgeBase(ctx context.Context, knowledgeBaseID string) {
 	logger.Infof(ctx, "Cleaning up evaluation knowledge base: %s", knowledgeBaseID)
-	if err := e.deleteEvaluationKnowledgeBase(ctx, knowledgeBaseID); err != nil {
+	if err := e.deleteEvaluationKnowledgeBase(logger.CloneContext(ctx), knowledgeBaseID); err != nil {
 		logger.Errorf(
 			ctx,
 			"Failed to delete evaluation knowledge base: %v, knowledge base ID: %s",
@@ -113,12 +133,14 @@ func (e *EvaluationService) runEvaluation(
 		return errors.New("run evaluation: task detail is required")
 	}
 	taskID := detail.Task.ID
-	runCtx, cancel := context.WithTimeoutCause(
+	taskCtx, cancelTask := context.WithTimeoutCause(
 		ctx,
 		config.EvaluationTaskTimeout(e.config),
 		errEvaluationTaskTimeout,
 	)
-	defer cancel()
+	defer cancelTask()
+	runCtx, cancelRun := context.WithCancelCause(taskCtx)
+	defer cancelRun(nil)
 
 	entity, err := e.evaluationTaskRepository.GetTask(runCtx, detail.Task.TenantID, taskID)
 	if err != nil {
@@ -143,7 +165,7 @@ func (e *EvaluationService) runEvaluation(
 		OwnerID:         e.ownerID,
 		ExpectedVersion: entity.Version,
 		Now:             startTime,
-		LeaseExpiresAt:  evaluationLeaseExpiresAt(e.config, startTime),
+		LeaseExpiresAt:  e.evaluationLeaseExpiresAt(startTime),
 	})
 	if err != nil {
 		return fmt.Errorf("mark evaluation task as running: %w", err)
@@ -157,19 +179,42 @@ func (e *EvaluationService) runEvaluation(
 		return err
 	}
 	logger.Info(runCtx, "Evaluation task status set to running")
+	heartbeat := e.startEvaluationHeartbeat(runCtx, runState, cancelRun)
+	if ownershipErr := context.Cause(runCtx); evaluationHeartbeatOwnershipLost(ownershipErr) {
+		heartbeatErr := heartbeat.StopAndWait()
+		if heartbeatErr != nil {
+			return heartbeatErr
+		}
+		return ownershipErr
+	}
 
 	cleanupErrors := make([]string, 0, 2)
 	taskDeadlineStoppedRun := false
 	runErr := e.evalDataset(
 		runCtx,
+		heartbeat.ctx,
 		persistedDetail,
 		knowledgeBaseID,
 		runState,
 		&cleanupErrors,
 		&taskDeadlineStoppedRun,
 	)
+	if ownershipErr := context.Cause(runCtx); evaluationHeartbeatOwnershipLost(ownershipErr) {
+		heartbeatErr := heartbeat.StopAndWait()
+		if runErr != nil {
+			return errors.Join(runErr, heartbeatErr)
+		}
+		return heartbeatErr
+	}
+	if evaluationTaskWriteAuthorityLost(runErr) {
+		heartbeatErr := heartbeat.StopAndWait()
+		if heartbeatErr != nil {
+			return errors.Join(runErr, heartbeatErr)
+		}
+		return runErr
+	}
 	logger.Infof(runCtx, "Cleaning up evaluation knowledge base: %s", knowledgeBaseID)
-	if cleanupErr := e.deleteEvaluationKnowledgeBase(runCtx, knowledgeBaseID); cleanupErr != nil {
+	if cleanupErr := e.deleteEvaluationKnowledgeBase(heartbeat.ctx, knowledgeBaseID); cleanupErr != nil {
 		logger.Errorf(
 			runCtx,
 			"Failed to delete evaluation knowledge base: %v, knowledge base ID: %s",
@@ -177,6 +222,13 @@ func (e *EvaluationService) runEvaluation(
 			knowledgeBaseID,
 		)
 		appendEvaluationCleanupError(&cleanupErrors, "knowledge base", knowledgeBaseID, cleanupErr)
+	}
+	heartbeatErr := heartbeat.StopAndWait()
+	if heartbeatErr != nil {
+		if runErr != nil {
+			return errors.Join(runErr, heartbeatErr)
+		}
+		return heartbeatErr
 	}
 	endTime := time.Now().UTC()
 	terminalErr := runErr
@@ -437,7 +489,7 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 		detail,
 		knowledgeBaseID,
 		e.ownerID,
-		evaluationLeaseExpiresAt(e.config, now),
+		e.evaluationLeaseExpiresAt(now),
 	)
 	if err != nil {
 		return nil, err
@@ -501,7 +553,7 @@ func (e *EvaluationService) EvalDataset(ctx context.Context, detail *types.Evalu
 			OwnerID:         e.ownerID,
 			ExpectedVersion: entity.Version,
 			Now:             now,
-			LeaseExpiresAt:  evaluationLeaseExpiresAt(e.config, now),
+			LeaseExpiresAt:  e.evaluationLeaseExpiresAt(now),
 		})
 		if err != nil {
 			return fmt.Errorf("mark evaluation task as running: %w", err)
@@ -518,11 +570,12 @@ func (e *EvaluationService) EvalDataset(ctx context.Context, detail *types.Evalu
 	if err != nil {
 		return err
 	}
-	return e.evalDataset(ctx, persistedDetail, knowledgeBaseID, runState, nil, nil)
+	return e.evalDataset(ctx, logger.CloneContext(ctx), persistedDetail, knowledgeBaseID, runState, nil, nil)
 }
 
 func (e *EvaluationService) evalDataset(
 	ctx context.Context,
+	cleanupCtx context.Context,
 	detail *types.EvaluationDetail,
 	knowledgeBaseID string,
 	runState *evaluationRunState,
@@ -567,7 +620,16 @@ func (e *EvaluationService) evalDataset(
 	defer func() {
 		captureEvaluationTaskDeadline(ctx, runErr, taskDeadlineStoppedRun)
 		logger.Infof(ctx, "Cleaning up resources - deleting knowledge: %s", knowledge.ID)
-		if err := e.deleteEvaluationKnowledge(ctx, knowledge.ID); err != nil {
+		if evaluationHeartbeatOwnershipLost(context.Cause(ctx)) ||
+			evaluationTaskWriteAuthorityLost(runErr) {
+			logger.Warnf(
+				ctx,
+				"Skipping evaluation Knowledge cleanup after ownership loss: %s",
+				knowledge.ID,
+			)
+			return
+		}
+		if err := e.deleteEvaluationKnowledge(cleanupCtx, knowledge.ID); err != nil {
 			logger.Errorf(ctx, "Failed to delete knowledge: %v, knowledge ID: %s", err, knowledge.ID)
 			appendEvaluationCleanupError(cleanupErrors, "knowledge", knowledge.ID, err)
 		}
@@ -708,7 +770,7 @@ func (e *EvaluationService) publishEvaluationProgress(
 			Finished:        finished,
 			Metric:          metricJSON,
 			Now:             now,
-			LeaseExpiresAt:  evaluationLeaseExpiresAt(e.config, now),
+			LeaseExpiresAt:  e.evaluationLeaseExpiresAt(now),
 		},
 	)
 	if err != nil {

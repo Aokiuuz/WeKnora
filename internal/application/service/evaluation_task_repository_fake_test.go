@@ -117,15 +117,20 @@ type fakeEvaluationTaskRepository struct {
 	tasks map[evaluationTaskRepositoryKey]*types.EvaluationTaskEntity
 	calls []evaluationTaskRepositoryCall
 
-	createErr    error
-	getErr       error
-	startErr     error
-	progressErr  error
-	knowledgeErr error
-	terminalErr  error
+	createErr           error
+	getErr              error
+	startErr            error
+	progressErr         error
+	knowledgeErr        error
+	terminalErr         error
+	heartbeatErr        error
+	heartbeatErrs       []error
+	heartbeatBlockCount int
+	claimErr            error
 
 	startEntered chan<- struct{}
 	startRelease <-chan struct{}
+	claimEntered chan struct{}
 }
 
 type evaluationTaskRepositoryKey struct {
@@ -353,7 +358,8 @@ func (r *fakeEvaluationTaskRepository) PublishTerminal(
 	}
 	if command.Status != types.EvaluationStatueSuccess &&
 		command.Status != types.EvaluationStatueFailed &&
-		command.Status != types.EvaluationStatueTimedOut {
+		command.Status != types.EvaluationStatueTimedOut &&
+		command.Status != types.EvaluationStatueInterrupted {
 		return nil, interfaces.ErrEvaluationTaskStateConflict
 	}
 	endTime := command.EndTime.UTC()
@@ -368,6 +374,105 @@ func (r *fakeEvaluationTaskRepository) PublishTerminal(
 	}
 	task.Version++
 	return cloneEvaluationTaskEntity(task), nil
+}
+
+func (r *fakeEvaluationTaskRepository) HeartbeatTask(
+	ctx context.Context,
+	command types.EvaluationTaskHeartbeatCommand,
+) (*types.EvaluationTaskEntity, error) {
+	r.mu.Lock()
+	r.recordLocked("HeartbeatTask", command.TenantID, command.TaskID)
+	blockUntilContextDone := r.heartbeatBlockCount > 0
+	if blockUntilContextDone {
+		r.heartbeatBlockCount--
+	}
+	heartbeatErr := r.heartbeatErr
+	if len(r.heartbeatErrs) > 0 {
+		heartbeatErr = r.heartbeatErrs[0]
+		r.heartbeatErrs = r.heartbeatErrs[1:]
+	}
+	r.mu.Unlock()
+
+	if blockUntilContextDone {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if heartbeatErr != nil {
+		return nil, heartbeatErr
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	task, err := r.mutableTaskInStatesLocked(
+		command.TenantID,
+		command.TaskID,
+		command.OwnerID,
+		taskVersionIgnored,
+		types.EvaluationStatueRunning,
+	)
+	if err != nil {
+		return nil, err
+	}
+	now := command.Now.UTC()
+	leaseExpiresAt := command.LeaseExpiresAt.UTC()
+	if task.HeartbeatAt.Before(now) {
+		task.HeartbeatAt = now
+	}
+	if task.LeaseExpiresAt == nil || task.LeaseExpiresAt.Before(leaseExpiresAt) {
+		task.LeaseExpiresAt = &leaseExpiresAt
+	}
+	if task.UpdatedAt.Before(now) {
+		task.UpdatedAt = now
+	}
+	return cloneEvaluationTaskEntity(task), nil
+}
+
+func (r *fakeEvaluationTaskRepository) setHeartbeatErr(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.heartbeatErr = err
+}
+
+func (r *fakeEvaluationTaskRepository) ClaimExpiredTasks(
+	_ context.Context,
+	command types.EvaluationTaskClaimExpiredCommand,
+) ([]*types.EvaluationTaskEntity, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.recordLocked("ClaimExpiredTasks", 0, "")
+	if r.claimEntered != nil {
+		select {
+		case r.claimEntered <- struct{}{}:
+		default:
+		}
+	}
+	if r.claimErr != nil {
+		return nil, r.claimErr
+	}
+	claimed := make([]*types.EvaluationTaskEntity, 0, command.Limit)
+	now := command.Now.UTC()
+	leaseExpiresAt := command.LeaseExpiresAt.UTC()
+	for _, task := range r.tasks {
+		if len(claimed) >= command.Limit {
+			break
+		}
+		if task.Status != types.EvaluationStatuePending && task.Status != types.EvaluationStatueRunning {
+			continue
+		}
+		if task.LeaseExpiresAt == nil || task.LeaseExpiresAt.After(now) {
+			continue
+		}
+		task.OwnerID = command.OwnerID
+		task.HeartbeatAt = now
+		task.LeaseExpiresAt = &leaseExpiresAt
+		if task.UpdatedAt.Before(now) {
+			task.UpdatedAt = now
+		}
+		task.Version++
+		claimed = append(claimed, cloneEvaluationTaskEntity(task))
+	}
+	return claimed, nil
 }
 
 func (r *fakeEvaluationTaskRepository) register(task *types.EvaluationTaskEntity) {
@@ -452,11 +557,13 @@ func (r *fakeEvaluationTaskRepository) mutableTaskInStatesLocked(
 	if !statusMatches {
 		return nil, interfaces.ErrEvaluationTaskStateConflict
 	}
-	if task.Version != expectedVersion {
+	if expectedVersion != taskVersionIgnored && task.Version != expectedVersion {
 		return nil, interfaces.ErrEvaluationTaskVersionConflict
 	}
 	return task, nil
 }
+
+const taskVersionIgnored = ^uint64(0)
 
 func cloneEvaluationTaskEntity(task *types.EvaluationTaskEntity) *types.EvaluationTaskEntity {
 	if task == nil {
