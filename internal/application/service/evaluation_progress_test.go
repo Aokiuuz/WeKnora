@@ -117,16 +117,19 @@ func TestEvaluationServicePublishesProgressWithoutRace(t *testing.T) {
 			ID:        "evaluation-progress-task",
 			DatasetID: "dataset",
 		},
-		Params: &types.ChatManage{},
+		Params: &types.ChatManage{PipelineRequest: types.PipelineRequest{
+			ChatModelID: "test-chat-model",
+		}},
 	}
 	storage.register(detail)
 
 	service := &EvaluationService{
-		dataset:                 &evaluationProgressDatasetStub{dataset: dataset},
-		knowledgeService:        &evaluationProgressKnowledgeStub{},
-		knowledgeBaseService:    &evaluationProgressKnowledgeBaseStub{},
-		sessionService:          &evaluationProgressSessionStub{firstWorkerPastError: firstWorkerPastError},
-		evaluationMemoryStorage: storage,
+		dataset:                  &evaluationProgressDatasetStub{dataset: dataset},
+		knowledgeService:         &evaluationProgressKnowledgeStub{},
+		knowledgeBaseService:     &evaluationProgressKnowledgeBaseStub{},
+		sessionService:           &evaluationProgressSessionStub{firstWorkerPastError: firstWorkerPastError},
+		evaluationTaskRepository: storage,
+		ownerID:                  storage.ownerID,
 	}
 
 	if err := service.EvalDataset(ctx, detail, "knowledge-base"); err != nil {

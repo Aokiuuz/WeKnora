@@ -147,7 +147,9 @@ func newEvaluationTerminalDetail(storage *evaluationMemoryStorage) *types.Evalua
 			StartTime: time.Now().Add(-time.Minute),
 			Status:    types.EvaluationStatuePending,
 		},
-		Params: &types.ChatManage{},
+		Params: &types.ChatManage{PipelineRequest: types.PipelineRequest{
+			ChatModelID: "test-chat-model",
+		}},
 	}
 	storage.register(detail)
 	return detail
@@ -173,8 +175,9 @@ func TestEvaluationServicePublishesTerminalStateAfterCleanup(t *testing.T) {
 			release:   cleanupRelease,
 			deleteErr: knowledgeBaseCleanupErr,
 		},
-		sessionService:          &evaluationTerminalSessionStub{},
-		evaluationMemoryStorage: storage,
+		sessionService:           &evaluationTerminalSessionStub{},
+		evaluationTaskRepository: storage,
+		ownerID:                  storage.ownerID,
 	}
 
 	result := make(chan error, 1)
@@ -267,8 +270,9 @@ func TestEvaluationServicePreservesPrimaryErrorAlongsideCleanupErrors(t *testing
 			recorder:  recorder,
 			deleteErr: errors.New("knowledge base cleanup failed"),
 		},
-		sessionService:          &evaluationTerminalSessionStub{err: workerErr},
-		evaluationMemoryStorage: storage,
+		sessionService:           &evaluationTerminalSessionStub{err: workerErr},
+		evaluationTaskRepository: storage,
+		ownerID:                  storage.ownerID,
 	}
 
 	runErr := service.runEvaluation(context.Background(), detail, "evaluation-kb")

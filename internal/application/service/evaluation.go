@@ -13,6 +13,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 	"github.com/Tencent/WeKnora/internal/utils"
+	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -30,14 +31,14 @@ arels: qid -> aid
 
 // EvaluationService handles evaluation tasks for knowledge base and chat models
 type EvaluationService struct {
-	config               *config.Config                  // Application configuration
-	dataset              interfaces.DatasetService       // Service for dataset operations
-	knowledgeBaseService interfaces.KnowledgeBaseService // Service for knowledge base operations
-	knowledgeService     interfaces.KnowledgeService     // Service for knowledge operations
-	sessionService       interfaces.SessionService       // Service for chat sessions
-	modelService         interfaces.ModelService         // Service for model operations
-
-	evaluationMemoryStorage *evaluationMemoryStorage // In-memory storage for evaluation tasks
+	config                   *config.Config                  // Application configuration
+	dataset                  interfaces.DatasetService       // Service for dataset operations
+	knowledgeBaseService     interfaces.KnowledgeBaseService // Service for knowledge base operations
+	knowledgeService         interfaces.KnowledgeService     // Service for knowledge operations
+	sessionService           interfaces.SessionService       // Service for chat sessions
+	modelService             interfaces.ModelService         // Service for model operations
+	evaluationTaskRepository interfaces.EvaluationTaskRepository
+	ownerID                  string
 }
 
 func NewEvaluationService(
@@ -47,104 +48,18 @@ func NewEvaluationService(
 	knowledgeService interfaces.KnowledgeService,
 	sessionService interfaces.SessionService,
 	modelService interfaces.ModelService,
+	evaluationTaskRepository interfaces.EvaluationTaskRepository,
 ) interfaces.EvaluationService {
-	evaluationMemoryStorage := newEvaluationMemoryStorage()
 	return &EvaluationService{
-		config:                  config,
-		dataset:                 dataset,
-		knowledgeBaseService:    knowledgeBaseService,
-		knowledgeService:        knowledgeService,
-		sessionService:          sessionService,
-		modelService:            modelService,
-		evaluationMemoryStorage: evaluationMemoryStorage,
+		config:                   config,
+		dataset:                  dataset,
+		knowledgeBaseService:     knowledgeBaseService,
+		knowledgeService:         knowledgeService,
+		sessionService:           sessionService,
+		modelService:             modelService,
+		evaluationTaskRepository: evaluationTaskRepository,
+		ownerID:                  uuid.NewString(),
 	}
-}
-
-// evaluationMemoryStorage stores evaluation tasks in memory with thread-safe access
-type evaluationMemoryStorage struct {
-	store map[string]*types.EvaluationDetail // Map of taskID to evaluation details
-	mu    *sync.RWMutex                      // Read-write lock for concurrent access
-}
-
-func newEvaluationMemoryStorage() *evaluationMemoryStorage {
-	res := &evaluationMemoryStorage{
-		store: make(map[string]*types.EvaluationDetail),
-		mu:    &sync.RWMutex{},
-	}
-	return res
-}
-
-// cloneEvaluationSnapshot copies stored task data and immutable evaluation request configuration.
-// ChatManage.Clone intentionally starts with fresh pipeline execution state, which Evaluation Params never store.
-func cloneEvaluationSnapshot(detail *types.EvaluationDetail) *types.EvaluationDetail {
-	if detail == nil {
-		return nil
-	}
-
-	cloned := *detail
-	if detail.Task != nil {
-		task := *detail.Task
-		if detail.Task.EndTime != nil {
-			endTime := *detail.Task.EndTime
-			task.EndTime = &endTime
-		}
-		task.CleanupErrors = append([]string(nil), detail.Task.CleanupErrors...)
-		cloned.Task = &task
-	}
-	if detail.Params != nil {
-		cloned.Params = detail.Params.Clone()
-		if detail.Params.CitationEnabled != nil {
-			citationEnabled := *detail.Params.CitationEnabled
-			cloned.Params.CitationEnabled = &citationEnabled
-		}
-		if detail.Params.SummaryConfig.Thinking != nil {
-			thinkingEnabled := *detail.Params.SummaryConfig.Thinking
-			cloned.Params.SummaryConfig.Thinking = &thinkingEnabled
-		}
-		if detail.Params.KnowledgeBaseIDs == nil {
-			cloned.Params.KnowledgeBaseIDs = nil
-		}
-		if detail.Params.KnowledgeIDs == nil {
-			cloned.Params.KnowledgeIDs = nil
-		}
-		if detail.Params.SearchTargets == nil {
-			cloned.Params.SearchTargets = nil
-		}
-	}
-	if detail.Metric != nil {
-		metric := *detail.Metric
-		cloned.Metric = &metric
-	}
-	return &cloned
-}
-
-func (e *evaluationMemoryStorage) register(params *types.EvaluationDetail) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	logger.Infof(context.Background(), "Registering evaluation task: %s", params.Task.ID)
-	e.store[params.Task.ID] = cloneEvaluationSnapshot(params)
-}
-
-func (e *evaluationMemoryStorage) get(taskID string) (*types.EvaluationDetail, error) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	logger.Infof(context.Background(), "Getting evaluation task: %s", taskID)
-	res, ok := e.store[taskID]
-	if !ok {
-		return nil, errors.New("task not found")
-	}
-	return cloneEvaluationSnapshot(res), nil
-}
-
-func (e *evaluationMemoryStorage) update(taskID string, fn func(params *types.EvaluationDetail)) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	params, ok := e.store[taskID]
-	if !ok {
-		return errors.New("task not found")
-	}
-	fn(params)
-	return nil
 }
 
 func (e *EvaluationService) deleteEvaluationKnowledge(ctx context.Context, knowledgeID string) error {
@@ -194,6 +109,9 @@ func (e *EvaluationService) runEvaluation(
 	detail *types.EvaluationDetail,
 	knowledgeBaseID string,
 ) error {
+	if detail == nil || detail.Task == nil {
+		return errors.New("run evaluation: task detail is required")
+	}
 	taskID := detail.Task.ID
 	runCtx, cancel := context.WithTimeoutCause(
 		ctx,
@@ -202,23 +120,54 @@ func (e *EvaluationService) runEvaluation(
 	)
 	defer cancel()
 
-	if err := e.evaluationMemoryStorage.update(taskID, func(params *types.EvaluationDetail) {
-		params.Task.Status = types.EvaluationStatueRunning
-		params.Task.ErrMsg = ""
-		params.Task.EndTime = nil
-		params.Task.CleanupErrors = nil
-	}); err != nil {
-		runErr := fmt.Errorf("mark evaluation task as running: %w", err)
-		if cleanupErr := e.deleteEvaluationKnowledgeBase(runCtx, knowledgeBaseID); cleanupErr != nil {
-			return errors.Join(runErr, fmt.Errorf("delete knowledge base %s: %w", knowledgeBaseID, cleanupErr))
-		}
-		return runErr
+	entity, err := e.evaluationTaskRepository.GetTask(runCtx, detail.Task.TenantID, taskID)
+	if err != nil {
+		return fmt.Errorf("load evaluation task before start: %w", err)
+	}
+	if entity.TemporaryKnowledgeBaseID == "" {
+		return errors.New("run evaluation: persisted temporary knowledge base ID is required")
+	}
+	if knowledgeBaseID != "" && knowledgeBaseID != entity.TemporaryKnowledgeBaseID {
+		logger.Warnf(
+			runCtx,
+			"Ignoring local evaluation knowledge base ID %s; persisted task uses %s",
+			knowledgeBaseID,
+			entity.TemporaryKnowledgeBaseID,
+		)
+	}
+	knowledgeBaseID = entity.TemporaryKnowledgeBaseID
+	startTime := time.Now().UTC()
+	started, err := e.evaluationTaskRepository.TryStartTask(runCtx, types.EvaluationTaskStartCommand{
+		TenantID:        entity.TenantID,
+		TaskID:          entity.ID,
+		OwnerID:         e.ownerID,
+		ExpectedVersion: entity.Version,
+		Now:             startTime,
+		LeaseExpiresAt:  evaluationLeaseExpiresAt(e.config, startTime),
+	})
+	if err != nil {
+		return fmt.Errorf("mark evaluation task as running: %w", err)
+	}
+	runState, err := newEvaluationRunState(started)
+	if err != nil {
+		return err
+	}
+	persistedDetail, err := evaluationEntityToDetail(started)
+	if err != nil {
+		return err
 	}
 	logger.Info(runCtx, "Evaluation task status set to running")
 
 	cleanupErrors := make([]string, 0, 2)
 	taskDeadlineStoppedRun := false
-	runErr := e.evalDataset(runCtx, detail, knowledgeBaseID, &cleanupErrors, &taskDeadlineStoppedRun)
+	runErr := e.evalDataset(
+		runCtx,
+		persistedDetail,
+		knowledgeBaseID,
+		runState,
+		&cleanupErrors,
+		&taskDeadlineStoppedRun,
+	)
 	logger.Infof(runCtx, "Cleaning up evaluation knowledge base: %s", knowledgeBaseID)
 	if cleanupErr := e.deleteEvaluationKnowledgeBase(runCtx, knowledgeBaseID); cleanupErr != nil {
 		logger.Errorf(
@@ -229,7 +178,7 @@ func (e *EvaluationService) runEvaluation(
 		)
 		appendEvaluationCleanupError(&cleanupErrors, "knowledge base", knowledgeBaseID, cleanupErr)
 	}
-	endTime := time.Now()
+	endTime := time.Now().UTC()
 	terminalErr := runErr
 	status := types.EvaluationStatueSuccess
 	errMsg := ""
@@ -242,12 +191,32 @@ func (e *EvaluationService) runEvaluation(
 		errMsg = runErr.Error()
 	}
 
-	if err := e.evaluationMemoryStorage.update(taskID, func(params *types.EvaluationDetail) {
-		params.Task.Status = status
-		params.Task.ErrMsg = errMsg
-		params.Task.CleanupErrors = append([]string(nil), cleanupErrors...)
-		params.Task.EndTime = &endTime
-	}); err != nil {
+	cleanupJSON, encodeErr := encodeEvaluationCleanupErrors(cleanupErrors)
+	if encodeErr != nil {
+		if terminalErr != nil {
+			return errors.Join(terminalErr, encodeErr)
+		}
+		return encodeErr
+	}
+	publicationCtx, publicationCancel := context.WithTimeout(
+		logger.CloneContext(runCtx),
+		evaluationCleanupTimeout,
+	)
+	defer publicationCancel()
+	if _, err := e.evaluationTaskRepository.PublishTerminal(
+		publicationCtx,
+		types.EvaluationTaskTerminalCommand{
+			TenantID:        runState.tenantID,
+			TaskID:          runState.taskID,
+			OwnerID:         runState.ownerID,
+			ExpectedVersion: runState.version,
+			Status:          status,
+			EndTime:         endTime,
+			ErrMsg:          errMsg,
+			CleanupErrors:   cleanupJSON,
+			Metric:          append(types.JSON(nil), runState.metric...),
+		},
+	); err != nil {
 		publicationErr := fmt.Errorf("publish evaluation terminal state: %w", err)
 		if terminalErr != nil {
 			return errors.Join(terminalErr, publicationErr)
@@ -270,22 +239,16 @@ func (e *EvaluationService) EvaluationResult(ctx context.Context, taskID string)
 	logger.Info(ctx, "Start getting evaluation result")
 	logger.Infof(ctx, "Task ID: %s", taskID)
 
-	detail, err := e.evaluationMemoryStorage.get(taskID)
+	tenantID := types.MustTenantIDFromContext(ctx)
+	entity, err := e.evaluationTaskRepository.GetTask(ctx, tenantID, taskID)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to get evaluation task: %v", err)
 		return nil, err
 	}
-
-	tenantID := types.MustTenantIDFromContext(ctx)
-	logger.Infof(
-		ctx,
-		"Checking tenant ID match, task tenant ID: %d, current tenant ID: %d",
-		detail.Task.TenantID, tenantID,
-	)
-
-	if tenantID != detail.Task.TenantID {
-		logger.Error(ctx, "Tenant ID mismatch")
-		return nil, errors.New("tenant ID does not match")
+	detail, err := evaluationEntityToDetail(entity)
+	if err != nil {
+		logger.Errorf(ctx, "Failed to decode evaluation task: %v", err)
+		return nil, err
 	}
 
 	logger.Info(ctx, "Evaluation result retrieved successfully")
@@ -430,13 +393,14 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 	logger.Infof(ctx, "Generated task ID: %s", taskID)
 
 	// Prepare evaluation detail with all parameters
+	now := time.Now().UTC()
 	detail := &types.EvaluationDetail{
 		Task: &types.EvaluationTask{
 			ID:        taskID,
 			TenantID:  tenantID,
 			DatasetID: datasetID,
 			Status:    types.EvaluationStatuePending,
-			StartTime: time.Now(),
+			StartTime: now,
 		},
 		Params: &types.ChatManage{
 			PipelineRequest: types.PipelineRequest{
@@ -469,11 +433,27 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 		},
 	}
 
-	runDetail := cloneEvaluationSnapshot(detail)
-
-	// Store evaluation task in memory storage
-	logger.Info(ctx, "Registering evaluation task")
-	e.evaluationMemoryStorage.register(detail)
+	entity, err := evaluationDetailToEntity(
+		detail,
+		knowledgeBaseID,
+		e.ownerID,
+		evaluationLeaseExpiresAt(e.config, now),
+	)
+	if err != nil {
+		return nil, err
+	}
+	logger.Info(ctx, "Persisting evaluation task")
+	if err := e.evaluationTaskRepository.CreateTask(ctx, tenantID, entity); err != nil {
+		return nil, fmt.Errorf("persist evaluation task: %w", err)
+	}
+	runDetail, err := evaluationEntityToDetail(entity)
+	if err != nil {
+		return nil, err
+	}
+	responseDetail, err := evaluationEntityToDetail(entity)
+	if err != nil {
+		return nil, err
+	}
 
 	// Start evaluation in background goroutine
 	logger.Info(ctx, "Starting evaluation in background")
@@ -488,22 +468,70 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 	cleanupKnowledgeBase = false
 
 	logger.Infof(ctx, "Evaluation task created successfully, task ID: %s", taskID)
-	return detail, nil
+	return responseDetail, nil
 }
 
 // EvalDataset performs the actual evaluation of a dataset
 // Processes each QA pair in parallel and records metrics
 func (e *EvaluationService) EvalDataset(ctx context.Context, detail *types.EvaluationDetail, knowledgeBaseID string) error {
-	return e.evalDataset(ctx, detail, knowledgeBaseID, nil, nil)
+	if detail == nil || detail.Task == nil {
+		return errors.New("evaluate dataset: task detail is required")
+	}
+	entity, err := e.evaluationTaskRepository.GetTask(ctx, detail.Task.TenantID, detail.Task.ID)
+	if err != nil {
+		return fmt.Errorf("load evaluation task: %w", err)
+	}
+	if entity.TemporaryKnowledgeBaseID == "" {
+		return errors.New("evaluate dataset: persisted temporary knowledge base ID is required")
+	}
+	if knowledgeBaseID != "" && knowledgeBaseID != entity.TemporaryKnowledgeBaseID {
+		logger.Warnf(
+			ctx,
+			"Ignoring local evaluation knowledge base ID %s; persisted task uses %s",
+			knowledgeBaseID,
+			entity.TemporaryKnowledgeBaseID,
+		)
+	}
+	knowledgeBaseID = entity.TemporaryKnowledgeBaseID
+	if entity.Status == types.EvaluationStatuePending {
+		now := time.Now().UTC()
+		entity, err = e.evaluationTaskRepository.TryStartTask(ctx, types.EvaluationTaskStartCommand{
+			TenantID:        entity.TenantID,
+			TaskID:          entity.ID,
+			OwnerID:         e.ownerID,
+			ExpectedVersion: entity.Version,
+			Now:             now,
+			LeaseExpiresAt:  evaluationLeaseExpiresAt(e.config, now),
+		})
+		if err != nil {
+			return fmt.Errorf("mark evaluation task as running: %w", err)
+		}
+	}
+	if entity.Status != types.EvaluationStatueRunning || entity.OwnerID != e.ownerID {
+		return errors.New("evaluate dataset: task is not running for this service instance")
+	}
+	runState, err := newEvaluationRunState(entity)
+	if err != nil {
+		return err
+	}
+	persistedDetail, err := evaluationEntityToDetail(entity)
+	if err != nil {
+		return err
+	}
+	return e.evalDataset(ctx, persistedDetail, knowledgeBaseID, runState, nil, nil)
 }
 
 func (e *EvaluationService) evalDataset(
 	ctx context.Context,
 	detail *types.EvaluationDetail,
 	knowledgeBaseID string,
+	runState *evaluationRunState,
 	cleanupErrors *[]string,
 	taskDeadlineStoppedRun *bool,
 ) (runErr error) {
+	defer func() {
+		captureEvaluationTaskDeadline(ctx, runErr, taskDeadlineStoppedRun)
+	}()
 	logger.Info(ctx, "Start evaluating dataset")
 	logger.Infof(ctx, "Task ID: %s, Dataset ID: %s", detail.Task.ID, detail.Task.DatasetID)
 
@@ -516,13 +544,11 @@ func (e *EvaluationService) evalDataset(
 	}
 	logger.Infof(ctx, "Dataset retrieved successfully with %d QA pairs", len(dataset))
 
-	// Update total QA pairs count in task details
-	if err := e.evaluationMemoryStorage.update(detail.Task.ID, func(params *types.EvaluationDetail) {
-		params.Task.Total = len(dataset)
-		logger.Infof(ctx, "Updated task total to %d QA pairs", params.Task.Total)
-	}); err != nil {
+	// Publish the total before creating any temporary Knowledge resource.
+	if err := e.publishEvaluationProgress(ctx, runState, len(dataset), 0, nil); err != nil {
 		return fmt.Errorf("publish evaluation total: %w", err)
 	}
+	logger.Infof(ctx, "Updated task total to %d QA pairs", len(dataset))
 
 	// Extract and organize passages from dataset
 	passages := getPassageList(dataset)
@@ -546,6 +572,22 @@ func (e *EvaluationService) evalDataset(
 			appendEvaluationCleanupError(cleanupErrors, "knowledge", knowledge.ID, err)
 		}
 	}()
+
+	recorded, err := e.evaluationTaskRepository.RecordTemporaryKnowledge(
+		ctx,
+		types.EvaluationTaskKnowledgeCommand{
+			TenantID:             runState.tenantID,
+			TaskID:               runState.taskID,
+			OwnerID:              runState.ownerID,
+			ExpectedVersion:      runState.version,
+			TemporaryKnowledgeID: knowledge.ID,
+			UpdatedAt:            time.Now().UTC(),
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("record temporary evaluation knowledge: %w", err)
+	}
+	runState.version = recorded.Version
 
 	// Initialize parallel evaluation metrics
 	var finished int
@@ -607,10 +649,13 @@ func (e *EvaluationService) evalDataset(
 			finished += 1
 			finishedSnapshot := finished
 			metricResult := metricHook.MetricResult()
-			updateErr := e.evaluationMemoryStorage.update(detail.Task.ID, func(params *types.EvaluationDetail) {
-				params.Metric = metricResult
-				params.Task.Finished = finishedSnapshot
-			})
+			updateErr := e.publishEvaluationProgress(
+				workerCtx,
+				runState,
+				len(dataset),
+				finishedSnapshot,
+				metricResult,
+			)
 			publishMu.Unlock()
 			if updateErr != nil {
 				return fmt.Errorf("publish progress for QA pair %d: %w", i, updateErr)
@@ -629,14 +674,48 @@ func (e *EvaluationService) evalDataset(
 
 	// Final update of evaluation metrics
 	finalMetric := metricHook.MetricResult()
-	if err := e.evaluationMemoryStorage.update(detail.Task.ID, func(params *types.EvaluationDetail) {
-		params.Metric = finalMetric
-		params.Task.Finished = finished
-	}); err != nil {
+	if err := e.publishEvaluationProgress(ctx, runState, len(dataset), finished, finalMetric); err != nil {
 		return fmt.Errorf("publish final evaluation progress: %w", err)
 	}
 
 	logger.Infof(ctx, "Dataset evaluation completed successfully, task ID: %s", detail.Task.ID)
+	return nil
+}
+
+func (e *EvaluationService) publishEvaluationProgress(
+	ctx context.Context,
+	runState *evaluationRunState,
+	total int,
+	finished int,
+	metric *types.MetricResult,
+) error {
+	if runState == nil {
+		return errors.New("publish evaluation progress: run state is required")
+	}
+	metricJSON, err := encodeEvaluationMetric(metric)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	updated, err := e.evaluationTaskRepository.PublishProgress(
+		ctx,
+		types.EvaluationTaskProgressCommand{
+			TenantID:        runState.tenantID,
+			TaskID:          runState.taskID,
+			OwnerID:         runState.ownerID,
+			ExpectedVersion: runState.version,
+			Total:           total,
+			Finished:        finished,
+			Metric:          metricJSON,
+			Now:             now,
+			LeaseExpiresAt:  evaluationLeaseExpiresAt(e.config, now),
+		},
+	)
+	if err != nil {
+		return err
+	}
+	runState.version = updated.Version
+	runState.metric = append(types.JSON(nil), updated.Metric...)
 	return nil
 }
 

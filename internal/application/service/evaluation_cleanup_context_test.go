@@ -200,7 +200,9 @@ func TestEvalDatasetUsesBoundedDetachedCleanupContexts(t *testing.T) {
 			ID:        "evaluation-task",
 			DatasetID: "dataset",
 		},
-		Params: &types.ChatManage{},
+		Params: &types.ChatManage{PipelineRequest: types.PipelineRequest{
+			ChatModelID: "test-chat-model",
+		}},
 	}
 	storage.register(detail)
 	service := &EvaluationService{
@@ -209,9 +211,10 @@ func TestEvalDatasetUsesBoundedDetachedCleanupContexts(t *testing.T) {
 			recorder:  recorder,
 			deleteErr: cleanupErr,
 		},
-		knowledgeBaseService:    &evaluationCleanupContextNoopKnowledgeBaseStub{},
-		sessionService:          &evaluationCleanupContextSessionStub{},
-		evaluationMemoryStorage: storage,
+		knowledgeBaseService:     &evaluationCleanupContextNoopKnowledgeBaseStub{},
+		sessionService:           &evaluationCleanupContextSessionStub{},
+		evaluationTaskRepository: storage,
+		ownerID:                  storage.ownerID,
 	}
 
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))

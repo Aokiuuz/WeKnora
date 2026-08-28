@@ -1,0 +1,224 @@
+package service
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/Tencent/WeKnora/internal/config"
+	"github.com/Tencent/WeKnora/internal/types"
+)
+
+type evaluationRunState struct {
+	tenantID uint64
+	taskID   string
+	ownerID  string
+	version  uint64
+	metric   types.JSON
+}
+
+func newEvaluationRunState(entity *types.EvaluationTaskEntity) (*evaluationRunState, error) {
+	if entity == nil || entity.TenantID == 0 || entity.ID == "" || entity.OwnerID == "" || entity.Version == 0 {
+		return nil, errors.New(
+			"initialize evaluation run state: persisted tenant, task, owner, and version are required",
+		)
+	}
+	return &evaluationRunState{
+		tenantID: entity.TenantID,
+		taskID:   entity.ID,
+		ownerID:  entity.OwnerID,
+		version:  entity.Version,
+		metric:   append(types.JSON(nil), entity.Metric...),
+	}, nil
+}
+
+func evaluationLeaseExpiresAt(cfg *config.Config, now time.Time) time.Time {
+	return now.UTC().Add(config.EvaluationTaskTimeout(cfg) + 2*evaluationCleanupTimeout)
+}
+
+func evaluationDetailToEntity(
+	detail *types.EvaluationDetail,
+	temporaryKnowledgeBaseID string,
+	ownerID string,
+	leaseExpiresAt time.Time,
+) (*types.EvaluationTaskEntity, error) {
+	if detail == nil || detail.Task == nil || detail.Params == nil {
+		return nil, errors.New("persist evaluation detail: task and params are required")
+	}
+	if detail.Task.ID == "" || detail.Task.TenantID == 0 || detail.Task.DatasetID == "" {
+		return nil, errors.New("persist evaluation detail: id, tenant_id, and dataset_id are required")
+	}
+	if detail.Task.StartTime.IsZero() {
+		return nil, errors.New("persist evaluation detail: start_time is required")
+	}
+	if temporaryKnowledgeBaseID == "" || ownerID == "" || leaseExpiresAt.IsZero() {
+		return nil, errors.New("persist evaluation detail: temporary knowledge base, owner, and lease are required")
+	}
+	if !isKnownEvaluationStatus(detail.Task.Status) {
+		return nil, fmt.Errorf("persist evaluation detail: unsupported status %d", detail.Task.Status)
+	}
+
+	params, err := json.Marshal(detail.Params)
+	if err != nil {
+		return nil, fmt.Errorf("persist evaluation params: %w", err)
+	}
+	cleanupErrors := detail.Task.CleanupErrors
+	if cleanupErrors == nil {
+		cleanupErrors = []string{}
+	}
+	cleanupJSON, err := json.Marshal(cleanupErrors)
+	if err != nil {
+		return nil, fmt.Errorf("persist evaluation cleanup errors: %w", err)
+	}
+	var metricJSON types.JSON
+	if detail.Metric != nil {
+		encodedMetric, marshalErr := json.Marshal(detail.Metric)
+		if marshalErr != nil {
+			return nil, fmt.Errorf("persist evaluation metric: %w", marshalErr)
+		}
+		metricJSON = types.JSON(encodedMetric)
+	}
+
+	startTime := detail.Task.StartTime.UTC()
+	leaseExpiresAt = leaseExpiresAt.UTC()
+	var endTime *time.Time
+	if detail.Task.EndTime != nil {
+		normalizedEndTime := detail.Task.EndTime.UTC()
+		endTime = &normalizedEndTime
+	}
+	return &types.EvaluationTaskEntity{
+		ID:                       detail.Task.ID,
+		TenantID:                 detail.Task.TenantID,
+		DatasetID:                detail.Task.DatasetID,
+		Status:                   detail.Task.Status,
+		StartTime:                startTime,
+		EndTime:                  endTime,
+		Total:                    detail.Task.Total,
+		Finished:                 detail.Task.Finished,
+		ErrMsg:                   detail.Task.ErrMsg,
+		CleanupErrors:            types.JSON(cleanupJSON),
+		Params:                   types.JSON(params),
+		Metric:                   metricJSON,
+		TemporaryKnowledgeBaseID: temporaryKnowledgeBaseID,
+		OwnerID:                  ownerID,
+		LeaseExpiresAt:           &leaseExpiresAt,
+	}, nil
+}
+
+func evaluationEntityToDetail(entity *types.EvaluationTaskEntity) (*types.EvaluationDetail, error) {
+	if entity == nil {
+		return nil, errors.New("decode evaluation task: entity is required")
+	}
+	if entity.ID == "" || entity.TenantID == 0 || entity.DatasetID == "" || entity.StartTime.IsZero() {
+		return nil, errors.New("decode evaluation task: id, tenant_id, dataset_id, and start_time are required")
+	}
+	if !isKnownEvaluationStatus(entity.Status) {
+		return nil, fmt.Errorf("decode evaluation task: unsupported status %d", entity.Status)
+	}
+
+	params, err := decodeEvaluationParams(entity.Params)
+	if err != nil {
+		return nil, err
+	}
+	cleanupErrors, err := decodeEvaluationCleanupErrors(entity.CleanupErrors)
+	if err != nil {
+		return nil, err
+	}
+	metric, err := decodeEvaluationMetric(entity.Metric)
+	if err != nil {
+		return nil, err
+	}
+
+	startTime := entity.StartTime.UTC()
+	var endTime *time.Time
+	if entity.EndTime != nil {
+		normalizedEndTime := entity.EndTime.UTC()
+		endTime = &normalizedEndTime
+	}
+	return &types.EvaluationDetail{
+		Task: &types.EvaluationTask{
+			ID:            entity.ID,
+			TenantID:      entity.TenantID,
+			DatasetID:     entity.DatasetID,
+			StartTime:     startTime,
+			EndTime:       endTime,
+			Status:        entity.Status,
+			ErrMsg:        entity.ErrMsg,
+			CleanupErrors: cleanupErrors,
+			Total:         entity.Total,
+			Finished:      entity.Finished,
+		},
+		Params: params,
+		Metric: metric,
+	}, nil
+}
+
+func decodeEvaluationParams(value types.JSON) (*types.ChatManage, error) {
+	if len(value) == 0 || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		return nil, errors.New("decode evaluation params: JSON object is required")
+	}
+	var shape map[string]json.RawMessage
+	if err := json.Unmarshal(value, &shape); err != nil || shape == nil {
+		return nil, errors.New("decode evaluation params: invalid JSON object")
+	}
+	var params types.ChatManage
+	if err := json.Unmarshal(value, &params); err != nil {
+		return nil, fmt.Errorf("decode evaluation params: %w", err)
+	}
+	if params.ChatModelID == "" {
+		return nil, errors.New("decode evaluation params: chat_model_id is required")
+	}
+	return &params, nil
+}
+
+func decodeEvaluationCleanupErrors(value types.JSON) ([]string, error) {
+	var cleanupErrors []string
+	if err := json.Unmarshal(value, &cleanupErrors); err != nil || cleanupErrors == nil {
+		return nil, errors.New("decode evaluation cleanup errors: invalid JSON string array")
+	}
+	return cleanupErrors, nil
+}
+
+func decodeEvaluationMetric(value types.JSON) (*types.MetricResult, error) {
+	trimmed := bytes.TrimSpace(value)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, nil
+	}
+	var shape map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &shape); err != nil || shape == nil {
+		return nil, errors.New("decode evaluation metric: invalid JSON object")
+	}
+	var metric types.MetricResult
+	if err := json.Unmarshal(trimmed, &metric); err != nil {
+		return nil, fmt.Errorf("decode evaluation metric: %w", err)
+	}
+	return &metric, nil
+}
+
+func encodeEvaluationMetric(metric *types.MetricResult) (types.JSON, error) {
+	if metric == nil {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(metric)
+	if err != nil {
+		return nil, fmt.Errorf("encode evaluation metric: %w", err)
+	}
+	return types.JSON(encoded), nil
+}
+
+func encodeEvaluationCleanupErrors(cleanupErrors []string) (types.JSON, error) {
+	if cleanupErrors == nil {
+		cleanupErrors = []string{}
+	}
+	encoded, err := json.Marshal(cleanupErrors)
+	if err != nil {
+		return nil, fmt.Errorf("encode evaluation cleanup errors: %w", err)
+	}
+	return types.JSON(encoded), nil
+}
+
+func isKnownEvaluationStatus(status types.EvaluationStatue) bool {
+	return status >= types.EvaluationStatuePending && status <= types.EvaluationStatueTimedOut
+}

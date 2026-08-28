@@ -291,6 +291,8 @@ func newEvaluationTaskEntity(tenantID uint64, suffix string) *types.EvaluationTa
 		OwnerID:                  "owner-" + suffix,
 		LeaseExpiresAt:           ptrToTime(now.Add(time.Minute)),
 		HeartbeatAt:              now,
+		CreatedAt:                now,
+		UpdatedAt:                now,
 	}
 }
 

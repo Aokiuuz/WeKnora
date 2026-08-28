@@ -140,7 +140,9 @@ func TestEvalDatasetCancelsBlockedWorkerAfterFirstError(t *testing.T) {
 			ID:        "evaluation-task",
 			DatasetID: "dataset",
 		},
-		Params: &types.ChatManage{},
+		Params: &types.ChatManage{PipelineRequest: types.PipelineRequest{
+			ChatModelID: "test-chat-model",
+		}},
 	}
 	storage.register(detail)
 	service := &EvaluationService{
@@ -153,7 +155,8 @@ func TestEvalDatasetCancelsBlockedWorkerAfterFirstError(t *testing.T) {
 			safetyRelease:   safetyRelease,
 			firstErr:        firstErr,
 		},
-		evaluationMemoryStorage: storage,
+		evaluationTaskRepository: storage,
+		ownerID:                  storage.ownerID,
 	}
 
 	result := make(chan error, 1)
