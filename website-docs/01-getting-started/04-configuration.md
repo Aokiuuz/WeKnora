@@ -98,15 +98,16 @@ flowchart LR
 
 > 每个知识库的 `ChunkingConfig` 会覆盖这里的全局默认值。
 
-### evaluation（`EvaluationConfig`）——评测任务生命周期
+### evaluation（`EvaluationConfig`）——评估任务生命周期
 
 | 名称 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `task_timeout` | duration | 2h | 单个后台评测任务总超时（env `WEKNORA_EVALUATION_TASK_TIMEOUT` 可覆盖） |
+| `task_timeout` | duration | 2h | 单个后台评估任务执行超时（env `WEKNORA_EVALUATION_TASK_TIMEOUT` 可覆盖） |
 
-该超时从后台 goroutine 开始运行时计时，覆盖数据集加载、同步建索引和问答评测。超时通过 Go context
+该超时从后台 goroutine 开始运行时计时，覆盖数据集加载、同步建索引和问答评估。超时通过 Go context
 协作传播，下游调用需要检查 context 才能及时停止。YAML 配置缺失、为零或为负数时使用 2 小时默认值；
 环境变量仅接受正数 Go duration，无效、零或负数值会被忽略，并保留 YAML 配置或代码默认值。
+临时 Knowledge 与评估知识库清理分别使用独立的 30 秒 context，不占用该执行 deadline。
 
 ### extract（`ExtractManagerConfig`）——知识图谱抽取模板
 
@@ -267,7 +268,7 @@ AWS S3 的 `S3_ACCESS_KEY` / `S3_SECRET_KEY` 可以**同时留空**，此时走 
 | `WEKNORA_CHAT_ATTACHMENT_TTL_HOURS` / `_WAIT_TIMEOUT_SEC` / `_OCR_CONCURRENCY` / `_OCR_MAX_PAGES` | 24 / 60 / 8 / 8 | 聊天附件解析保留时长、等待超时与 OCR 并发/页数上限 |
 | `WEKNORA_HOUSEKEEPING_ENABLED` | 启用 | 回收卡在 processing 的脏数据 |
 | `WEKNORA_DOCUMENT_PROCESS_TIMEOUT` / `WEKNORA_DOCREADER_CALL_TIMEOUT` | 2h / 30m | 文档处理任务与单次 RPC 超时 |
-| `WEKNORA_EVALUATION_TASK_TIMEOUT` | 2h | 单个后台评测任务总超时（Go duration） |
+| `WEKNORA_EVALUATION_TASK_TIMEOUT` | 2h | 单个后台评估任务执行超时（Go duration） |
 
 ### 可观测性（Langfuse）
 

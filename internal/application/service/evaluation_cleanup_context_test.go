@@ -217,8 +217,8 @@ func TestEvalDatasetUsesBoundedDetachedCleanupContexts(t *testing.T) {
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
 	canceledCtx, cancel := context.WithCancel(ctx)
 	cancel()
-	if err := service.EvalDataset(canceledCtx, detail, "evaluation-kb"); err != nil {
-		t.Fatalf("EvalDataset() error = %v, want nil", err)
+	if err := service.EvalDataset(canceledCtx, detail, "evaluation-kb"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("EvalDataset() error = %v, want context.Canceled", err)
 	}
 
 	observations := recorder.snapshot()

@@ -11,6 +11,25 @@ import (
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 )
 
+const evaluationTimeoutTestWait = 2 * time.Second
+
+type evaluationContextObservation struct {
+	err         error
+	deadline    time.Time
+	hasDeadline bool
+	done        <-chan struct{}
+}
+
+func observeEvaluationContext(ctx context.Context) evaluationContextObservation {
+	deadline, hasDeadline := ctx.Deadline()
+	return evaluationContextObservation{
+		err:         ctx.Err(),
+		deadline:    deadline,
+		hasDeadline: hasDeadline,
+		done:        ctx.Done(),
+	}
+}
+
 type evaluationTimeoutDatasetStub struct {
 	interfaces.DatasetService
 }
@@ -32,8 +51,9 @@ func (s *evaluationTimeoutDatasetStub) GetDatasetByID(
 
 type evaluationTimeoutKnowledgeStub struct {
 	interfaces.KnowledgeService
-	waitForDeleteDeadline bool
-	deleteObserved        chan error
+	deleteEntered chan<- evaluationContextObservation
+	deleteRelease <-chan struct{}
+	deleteErr     error
 }
 
 func (s *evaluationTimeoutKnowledgeStub) CreateKnowledgeFromPassageSync(
@@ -46,13 +66,17 @@ func (s *evaluationTimeoutKnowledgeStub) CreateKnowledgeFromPassageSync(
 }
 
 func (s *evaluationTimeoutKnowledgeStub) DeleteKnowledge(ctx context.Context, _ string) error {
-	if s.waitForDeleteDeadline {
-		<-ctx.Done()
-		if s.deleteObserved != nil {
-			s.deleteObserved <- ctx.Err()
+	if s.deleteEntered != nil {
+		s.deleteEntered <- observeEvaluationContext(ctx)
+	}
+	if s.deleteRelease != nil {
+		select {
+		case <-s.deleteRelease:
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
-	return nil
+	return s.deleteErr
 }
 
 type evaluationTimeoutKnowledgeBaseStub struct {
@@ -65,9 +89,10 @@ func (s *evaluationTimeoutKnowledgeBaseStub) DeleteKnowledgeBase(context.Context
 
 type evaluationTimeoutSessionStub struct {
 	interfaces.SessionService
-	err           error
-	observed      chan error
-	safetyRelease <-chan struct{}
+	err             error
+	contextObserved chan<- evaluationContextObservation
+	deadlineError   chan<- error
+	safetyRelease   <-chan struct{}
 }
 
 func (s *evaluationTimeoutSessionStub) KnowledgeQAByEvent(
@@ -75,13 +100,16 @@ func (s *evaluationTimeoutSessionStub) KnowledgeQAByEvent(
 	_ *types.ChatManage,
 	_ []types.EventType,
 ) error {
+	if s.contextObserved != nil {
+		s.contextObserved <- observeEvaluationContext(ctx)
+	}
 	if s.err != nil {
 		return s.err
 	}
 	select {
 	case <-ctx.Done():
-		if s.observed != nil {
-			s.observed <- ctx.Err()
+		if s.deadlineError != nil {
+			s.deadlineError <- ctx.Err()
 		}
 		return ctx.Err()
 	case <-s.safetyRelease:
@@ -102,19 +130,164 @@ func newEvaluationTimeoutDetail(storage *evaluationMemoryStorage) *types.Evaluat
 	return detail
 }
 
-func TestEvaluationServiceMarksTaskTimedOut(t *testing.T) {
+func waitForEvaluationObservation(
+	t *testing.T,
+	observed <-chan evaluationContextObservation,
+	name string,
+) evaluationContextObservation {
+	t.Helper()
+	select {
+	case observation := <-observed:
+		return observation
+	case <-time.After(evaluationTimeoutTestWait):
+		t.Fatalf("timed out waiting for %s context", name)
+		return evaluationContextObservation{}
+	}
+}
+
+func waitForEvaluationRun(t *testing.T, result <-chan error) error {
+	t.Helper()
+	select {
+	case runErr := <-result:
+		return runErr
+	case <-time.After(evaluationTimeoutTestWait):
+		t.Fatal("timed out waiting for evaluation run")
+		return nil
+	}
+}
+
+func waitPastEvaluationTaskDeadline(t *testing.T, observation evaluationContextObservation) {
+	t.Helper()
+	if !observation.hasDeadline {
+		t.Fatal("evaluation task context has no deadline")
+	}
+	delay := time.Until(observation.deadline)
+	if delay > 0 {
+		timer := time.NewTimer(delay + 10*time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-time.After(evaluationTimeoutTestWait):
+			t.Fatal("timed out waiting for evaluation task deadline")
+		}
+	}
+	select {
+	case <-observation.done:
+	case <-time.After(evaluationTimeoutTestWait):
+		t.Fatal("evaluation task context did not stop at its deadline")
+	}
+}
+
+func requireIndependentEvaluationCleanupContext(t *testing.T, observation evaluationContextObservation) {
+	t.Helper()
+	if observation.err != nil {
+		t.Fatalf("cleanup context error on entry = %v, want nil", observation.err)
+	}
+	if !observation.hasDeadline {
+		t.Fatal("cleanup context has no deadline")
+	}
+	if remaining := time.Until(observation.deadline); remaining < evaluationCleanupTimeout/2 {
+		t.Fatalf(
+			"cleanup context deadline remaining = %v, want an independent %v budget",
+			remaining,
+			evaluationCleanupTimeout,
+		)
+	}
+	select {
+	case <-observation.done:
+		t.Fatal("cleanup context was canceled with the evaluation task context")
+	default:
+	}
+}
+
+func requireEvaluationRunningWithoutEndTime(t *testing.T, storage *evaluationMemoryStorage, taskID string) {
+	t.Helper()
+	current, err := storage.get(taskID)
+	if err != nil {
+		t.Fatalf("storage.get() error = %v", err)
+	}
+	if current.Task.Status != types.EvaluationStatueRunning {
+		t.Fatalf("task status during cleanup = %v, want Running", current.Task.Status)
+	}
+	if current.Task.EndTime != nil {
+		t.Fatalf("task end time during cleanup = %v, want nil", current.Task.EndTime)
+	}
+}
+
+func requireEvaluationTerminal(
+	t *testing.T,
+	storage *evaluationMemoryStorage,
+	taskID string,
+	status types.EvaluationStatue,
+	errMsg string,
+) *types.EvaluationDetail {
+	t.Helper()
+	terminal, err := storage.get(taskID)
+	if err != nil {
+		t.Fatalf("storage.get() error = %v", err)
+	}
+	if terminal.Task.Status != status {
+		t.Fatalf("terminal task status = %v, want %v", terminal.Task.Status, status)
+	}
+	if terminal.Task.ErrMsg != errMsg {
+		t.Fatalf("terminal task error = %q, want %q", terminal.Task.ErrMsg, errMsg)
+	}
+	if terminal.Task.EndTime == nil {
+		t.Fatal("terminal task end time is nil")
+	}
+	return terminal
+}
+
+func TestEvaluationStatusValuesRemainCompatible(t *testing.T) {
+	tests := []struct {
+		name   string
+		status types.EvaluationStatue
+		want   int
+	}{
+		{name: "pending", status: types.EvaluationStatuePending, want: 0},
+		{name: "running", status: types.EvaluationStatueRunning, want: 1},
+		{name: "success", status: types.EvaluationStatueSuccess, want: 2},
+		{name: "failed", status: types.EvaluationStatueFailed, want: 3},
+		{name: "timed out", status: types.EvaluationStatueTimedOut, want: 4},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := int(test.status); got != test.want {
+				t.Fatalf("status value = %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
+func TestEvaluationServiceMarksTaskTimedOutAfterIndependentCleanup(t *testing.T) {
+	cleanupErr := errors.New("delete failed after timeout")
 	storage := newEvaluationMemoryStorage()
 	detail := newEvaluationTimeoutDetail(storage)
-	observed := make(chan error, 1)
-	safetyRelease := make(chan struct{})
+	workerDeadlineError := make(chan error, 1)
+	taskContextObserved := make(chan evaluationContextObservation, 1)
+	cleanupEntered := make(chan evaluationContextObservation, 1)
+	cleanupRelease := make(chan struct{})
+	cleanupReleased := false
+	defer func() {
+		if !cleanupReleased {
+			close(cleanupRelease)
+		}
+	}()
 	service := &EvaluationService{
 		config: &config.Config{
 			Evaluation: &config.EvaluationConfig{TaskTimeout: 20 * time.Millisecond},
 		},
-		dataset:                 &evaluationTimeoutDatasetStub{},
-		knowledgeService:        &evaluationTimeoutKnowledgeStub{},
-		knowledgeBaseService:    &evaluationTimeoutKnowledgeBaseStub{},
-		sessionService:          &evaluationTimeoutSessionStub{observed: observed, safetyRelease: safetyRelease},
+		dataset: &evaluationTimeoutDatasetStub{},
+		knowledgeService: &evaluationTimeoutKnowledgeStub{
+			deleteEntered: cleanupEntered,
+			deleteRelease: cleanupRelease,
+			deleteErr:     cleanupErr,
+		},
+		knowledgeBaseService: &evaluationTimeoutKnowledgeBaseStub{},
+		sessionService: &evaluationTimeoutSessionStub{
+			contextObserved: taskContextObserved,
+			deadlineError:   workerDeadlineError,
+		},
 		evaluationMemoryStorage: storage,
 	}
 
@@ -122,108 +295,153 @@ func TestEvaluationServiceMarksTaskTimedOut(t *testing.T) {
 	go func() {
 		result <- service.runEvaluation(context.Background(), detail, "evaluation-kb")
 	}()
+	taskObservation := waitForEvaluationObservation(t, taskContextObserved, "task")
+	cleanupObservation := waitForEvaluationObservation(t, cleanupEntered, "cleanup")
+	waitPastEvaluationTaskDeadline(t, taskObservation)
+	requireIndependentEvaluationCleanupContext(t, cleanupObservation)
+	requireEvaluationRunningWithoutEndTime(t, storage, detail.Task.ID)
 	select {
 	case runErr := <-result:
-		if !errors.Is(runErr, context.DeadlineExceeded) {
-			t.Fatalf("runEvaluation() error = %v, want context.DeadlineExceeded", runErr)
-		}
-	case <-time.After(2 * time.Second):
-		close(safetyRelease)
-		select {
-		case <-result:
-		case <-time.After(2 * time.Second):
-			t.Fatal("evaluation task did not stop after safety release")
-		}
-		t.Fatal("timed out waiting for evaluation task deadline")
+		t.Fatalf("runEvaluation() completed during cleanup with error %v", runErr)
+	default:
 	}
 
+	close(cleanupRelease)
+	cleanupReleased = true
+	runErr := waitForEvaluationRun(t, result)
+	if !errors.Is(runErr, context.DeadlineExceeded) {
+		t.Fatalf("runEvaluation() error = %v, want context.DeadlineExceeded", runErr)
+	}
 	select {
-	case observedErr := <-observed:
+	case observedErr := <-workerDeadlineError:
 		if !errors.Is(observedErr, context.DeadlineExceeded) {
 			t.Fatalf("worker context error = %v, want context.DeadlineExceeded", observedErr)
 		}
 	default:
 		t.Fatal("worker did not observe the evaluation task deadline")
 	}
-	terminal, err := storage.get(detail.Task.ID)
-	if err != nil {
-		t.Fatalf("storage.get() error = %v", err)
+	terminal := requireEvaluationTerminal(
+		t,
+		storage,
+		detail.Task.ID,
+		types.EvaluationStatueTimedOut,
+		context.DeadlineExceeded.Error(),
+	)
+	if len(terminal.Task.CleanupErrors) != 1 {
+		t.Fatalf("cleanup errors = %v, want one error", terminal.Task.CleanupErrors)
 	}
-	if terminal.Task.Status != types.EvaluationStatueTimedOut {
-		t.Fatalf("terminal task status = %v, want TimedOut", terminal.Task.Status)
-	}
-	if terminal.Task.ErrMsg != context.DeadlineExceeded.Error() {
-		t.Fatalf("terminal task error = %q, want %q", terminal.Task.ErrMsg, context.DeadlineExceeded)
-	}
-}
-
-func TestEvaluationServiceKeepsBusinessErrorFailed(t *testing.T) {
-	workerErr := errors.New("worker failed")
-	storage := newEvaluationMemoryStorage()
-	detail := newEvaluationTimeoutDetail(storage)
-	service := &EvaluationService{
-		config: &config.Config{
-			Evaluation: &config.EvaluationConfig{TaskTimeout: time.Hour},
-		},
-		dataset:                 &evaluationTimeoutDatasetStub{},
-		knowledgeService:        &evaluationTimeoutKnowledgeStub{},
-		knowledgeBaseService:    &evaluationTimeoutKnowledgeBaseStub{},
-		sessionService:          &evaluationTimeoutSessionStub{err: workerErr},
-		evaluationMemoryStorage: storage,
-	}
-
-	runErr := service.runEvaluation(context.Background(), detail, "evaluation-kb")
-	if !errors.Is(runErr, workerErr) {
-		t.Fatalf("runEvaluation() error = %v, want errors.Is(error, workerErr)", runErr)
-	}
-	terminal, err := storage.get(detail.Task.ID)
-	if err != nil {
-		t.Fatalf("storage.get() error = %v", err)
-	}
-	if terminal.Task.Status != types.EvaluationStatueFailed {
-		t.Fatalf("terminal task status = %v, want Failed", terminal.Task.Status)
-	}
-	if terminal.Task.ErrMsg != workerErr.Error() {
-		t.Fatalf("terminal task error = %q, want %q", terminal.Task.ErrMsg, workerErr)
+	wantCleanupError := "delete knowledge evaluation-knowledge: " + cleanupErr.Error()
+	if terminal.Task.CleanupErrors[0] != wantCleanupError {
+		t.Fatalf("cleanup error = %q, want %q", terminal.Task.CleanupErrors[0], wantCleanupError)
 	}
 }
 
-func TestEvaluationServiceKeepsBusinessErrorWhenCleanupCrossesDeadline(t *testing.T) {
+func TestEvaluationServiceKeepsBusinessErrorWhenCleanupCrossesTaskDeadline(t *testing.T) {
 	workerErr := errors.New("worker failed before cleanup")
 	storage := newEvaluationMemoryStorage()
 	detail := newEvaluationTimeoutDetail(storage)
-	deleteObserved := make(chan error, 1)
+	taskContextObserved := make(chan evaluationContextObservation, 1)
+	cleanupEntered := make(chan evaluationContextObservation, 1)
+	cleanupRelease := make(chan struct{})
+	cleanupReleased := false
+	defer func() {
+		if !cleanupReleased {
+			close(cleanupRelease)
+		}
+	}()
 	service := &EvaluationService{
 		config: &config.Config{
 			Evaluation: &config.EvaluationConfig{TaskTimeout: 20 * time.Millisecond},
 		},
 		dataset: &evaluationTimeoutDatasetStub{},
 		knowledgeService: &evaluationTimeoutKnowledgeStub{
-			waitForDeleteDeadline: true,
-			deleteObserved:        deleteObserved,
+			deleteEntered: cleanupEntered,
+			deleteRelease: cleanupRelease,
 		},
-		knowledgeBaseService:    &evaluationTimeoutKnowledgeBaseStub{},
-		sessionService:          &evaluationTimeoutSessionStub{err: workerErr},
+		knowledgeBaseService: &evaluationTimeoutKnowledgeBaseStub{},
+		sessionService: &evaluationTimeoutSessionStub{
+			err:             workerErr,
+			contextObserved: taskContextObserved,
+		},
 		evaluationMemoryStorage: storage,
 	}
 
-	runErr := service.runEvaluation(context.Background(), detail, "evaluation-kb")
+	result := make(chan error, 1)
+	go func() {
+		result <- service.runEvaluation(context.Background(), detail, "evaluation-kb")
+	}()
+	taskObservation := waitForEvaluationObservation(t, taskContextObserved, "task")
+	cleanupObservation := waitForEvaluationObservation(t, cleanupEntered, "cleanup")
+	waitPastEvaluationTaskDeadline(t, taskObservation)
+	requireIndependentEvaluationCleanupContext(t, cleanupObservation)
+	requireEvaluationRunningWithoutEndTime(t, storage, detail.Task.ID)
+	select {
+	case runErr := <-result:
+		t.Fatalf("runEvaluation() completed during cleanup with error %v", runErr)
+	default:
+	}
+
+	close(cleanupRelease)
+	cleanupReleased = true
+	runErr := waitForEvaluationRun(t, result)
 	if !errors.Is(runErr, workerErr) {
 		t.Fatalf("runEvaluation() error = %v, want errors.Is(error, workerErr)", runErr)
 	}
-	if observedErr := <-deleteObserved; !errors.Is(observedErr, context.DeadlineExceeded) {
-		t.Fatalf("cleanup context error = %v, want context.DeadlineExceeded", observedErr)
+	requireEvaluationTerminal(t, storage, detail.Task.ID, types.EvaluationStatueFailed, workerErr.Error())
+}
+
+func TestEvaluationServiceKeepsSuccessWhenCleanupCrossesTaskDeadline(t *testing.T) {
+	storage := newEvaluationMemoryStorage()
+	detail := newEvaluationTimeoutDetail(storage)
+	taskContextObserved := make(chan evaluationContextObservation, 1)
+	cleanupEntered := make(chan evaluationContextObservation, 1)
+	cleanupRelease := make(chan struct{})
+	cleanupReleased := false
+	defer func() {
+		if !cleanupReleased {
+			close(cleanupRelease)
+		}
+	}()
+	qaCompleted := make(chan struct{})
+	close(qaCompleted)
+	service := &EvaluationService{
+		config: &config.Config{
+			Evaluation: &config.EvaluationConfig{TaskTimeout: 20 * time.Millisecond},
+		},
+		dataset: &evaluationTimeoutDatasetStub{},
+		knowledgeService: &evaluationTimeoutKnowledgeStub{
+			deleteEntered: cleanupEntered,
+			deleteRelease: cleanupRelease,
+		},
+		knowledgeBaseService: &evaluationTimeoutKnowledgeBaseStub{},
+		sessionService: &evaluationTimeoutSessionStub{
+			contextObserved: taskContextObserved,
+			safetyRelease:   qaCompleted,
+		},
+		evaluationMemoryStorage: storage,
 	}
-	terminal, err := storage.get(detail.Task.ID)
-	if err != nil {
-		t.Fatalf("storage.get() error = %v", err)
+
+	result := make(chan error, 1)
+	go func() {
+		result <- service.runEvaluation(context.Background(), detail, "evaluation-kb")
+	}()
+	taskObservation := waitForEvaluationObservation(t, taskContextObserved, "task")
+	cleanupObservation := waitForEvaluationObservation(t, cleanupEntered, "cleanup")
+	waitPastEvaluationTaskDeadline(t, taskObservation)
+	requireIndependentEvaluationCleanupContext(t, cleanupObservation)
+	requireEvaluationRunningWithoutEndTime(t, storage, detail.Task.ID)
+	select {
+	case runErr := <-result:
+		t.Fatalf("runEvaluation() completed during cleanup with error %v", runErr)
+	default:
 	}
-	if terminal.Task.Status != types.EvaluationStatueFailed {
-		t.Fatalf("terminal task status = %v, want Failed", terminal.Task.Status)
+
+	close(cleanupRelease)
+	cleanupReleased = true
+	if runErr := waitForEvaluationRun(t, result); runErr != nil {
+		t.Fatalf("runEvaluation() error = %v, want nil", runErr)
 	}
-	if terminal.Task.ErrMsg != workerErr.Error() {
-		t.Fatalf("terminal task error = %q, want %q", terminal.Task.ErrMsg, workerErr)
-	}
+	requireEvaluationTerminal(t, storage, detail.Task.ID, types.EvaluationStatueSuccess, "")
 }
 
 func TestEvaluationServiceKeepsDownstreamDeadlineFailureFailed(t *testing.T) {
@@ -244,46 +462,11 @@ func TestEvaluationServiceKeepsDownstreamDeadlineFailureFailed(t *testing.T) {
 	if !errors.Is(runErr, context.DeadlineExceeded) {
 		t.Fatalf("runEvaluation() error = %v, want context.DeadlineExceeded", runErr)
 	}
-	terminal, err := storage.get(detail.Task.ID)
-	if err != nil {
-		t.Fatalf("storage.get() error = %v", err)
-	}
-	if terminal.Task.Status != types.EvaluationStatueFailed {
-		t.Fatalf("terminal task status = %v, want Failed", terminal.Task.Status)
-	}
-}
-
-func TestEvaluationServiceKeepsSuccessWhenOnlyCleanupCrossesDeadline(t *testing.T) {
-	storage := newEvaluationMemoryStorage()
-	detail := newEvaluationTimeoutDetail(storage)
-	deleteObserved := make(chan error, 1)
-	qaCompleted := make(chan struct{})
-	close(qaCompleted)
-	service := &EvaluationService{
-		config: &config.Config{
-			Evaluation: &config.EvaluationConfig{TaskTimeout: 20 * time.Millisecond},
-		},
-		dataset: &evaluationTimeoutDatasetStub{},
-		knowledgeService: &evaluationTimeoutKnowledgeStub{
-			waitForDeleteDeadline: true,
-			deleteObserved:        deleteObserved,
-		},
-		knowledgeBaseService:    &evaluationTimeoutKnowledgeBaseStub{},
-		sessionService:          &evaluationTimeoutSessionStub{safetyRelease: qaCompleted},
-		evaluationMemoryStorage: storage,
-	}
-
-	if runErr := service.runEvaluation(context.Background(), detail, "evaluation-kb"); runErr != nil {
-		t.Fatalf("runEvaluation() error = %v, want nil", runErr)
-	}
-	if observedErr := <-deleteObserved; !errors.Is(observedErr, context.DeadlineExceeded) {
-		t.Fatalf("cleanup context error = %v, want context.DeadlineExceeded", observedErr)
-	}
-	terminal, err := storage.get(detail.Task.ID)
-	if err != nil {
-		t.Fatalf("storage.get() error = %v", err)
-	}
-	if terminal.Task.Status != types.EvaluationStatueSuccess {
-		t.Fatalf("terminal task status = %v, want Success", terminal.Task.Status)
-	}
+	requireEvaluationTerminal(
+		t,
+		storage,
+		detail.Task.ID,
+		types.EvaluationStatueFailed,
+		context.DeadlineExceeded.Error(),
+	)
 }

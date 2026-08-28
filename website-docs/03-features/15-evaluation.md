@@ -3,7 +3,9 @@
 换个向量模型、开不开重排、分块调大一点——这些改动到底有没有让效果变好？评估能力就是用来回答这个问题的：准备一份带标准答案的 QA 数据集，WeKnora 会自动建一个临时知识库灌进语料，逐题跑完整的检索 + 生成流程，最后给出一组可比较的分数（检索侧 Precision / Recall / NDCG / MRR / MAP，生成侧 BLEU / ROUGE）。
 
 ::: tip 目前只有 API
-评估暂时没有独立的界面入口，通过 `POST /api/v1/evaluation` 发起、`GET /api/v1/evaluation?task_id=...` 轮询结果，需要 Admin 权限。数据集是 Parquet 格式，格式要求见下文。
+评估暂时没有独立的界面入口。`POST /api/v1/evaluation` 需要 Admin 权限，
+`GET /api/v1/evaluation?task_id=...` 需要 Viewer 权限；API Key 需要 `RunEvaluations` 能力。
+数据集使用 Parquet 格式，格式要求见下文。
 :::
 
 用法建议：固定数据集，每次只改一个变量（比如只换 embedding 模型），对比同一组指标，否则分数变化归因不清。
@@ -23,7 +25,7 @@ evaluationRoutes := g.apiKeyGroup(r.Group("/evaluation"), apiKeyRunEvaluations(a
 | 方法 | 路径 | 权限 | 说明 |
 | --- | --- | --- | --- |
 | POST | `/api/v1/evaluation` | Admin（API Key 需 `RunEvaluations` 能力） | 创建评估任务，立即返回任务信息 |
-| GET | `/api/v1/evaluation?task_id=...` | Viewer | 查询任务状态、进度与指标结果 |
+| GET | `/api/v1/evaluation?task_id=...` | Viewer（API Key 需 `RunEvaluations` 能力） | 查询任务状态、进度与指标结果 |
 
 ### 创建评估任务
 
@@ -83,29 +85,57 @@ const (
 2. **参数装配**：从系统配置装配 `ChatManage` 评估参数——`VectorThreshold`、`KeywordThreshold`、`EmbeddingTopK`、`RerankTopK`、`RerankThreshold`、`MaxRounds`、`SummaryConfig`（MaxTokens / TopK / TopP / RepeatPenalty / Prompt / ContextTemplate 等）、`FallbackResponse`、改写提示词等；
 3. **任务注册**：以任务 ID 注册到内存存储，状态 `Pending`，立即返回响应；
 4. **后台执行**（goroutine）：发布 `Running` → 将数据集 corpus 灌入评估 KB → 并行评估每个 QA 对 → 汇聚指标；
-5. **稳定终态**：依次尝试临时资源清理，再一次发布 `Success` 或 `Failed`、执行错误、清理警告和结束时间。
+5. **稳定终态**：依次尝试临时资源清理，再一次发布 `Success`、`Failed` 或 `TimedOut`、执行错误、清理警告和结束时间。
 
 指标完成但清理仍在进行时，任务保持 `Running`。因此 `finished == total` 或 `metric` 已出现只表示评估计算完成，
 不能单独作为任务终止条件。
 
 后台任务默认具有 2 小时 deadline，可通过 `evaluation.task_timeout` 或 `WEKNORA_EVALUATION_TASK_TIMEOUT` 调整。
 deadline 覆盖数据集加载、同步建索引和 QA 执行；超时通过 context 协作传播，并以 `TimedOut`（状态值 4）结束。
+临时 Knowledge 和评估知识库各自使用保留租户信息、脱离任务取消且具有 30 秒 deadline 的清理 context。
+任务执行 deadline 不截断清理预算；两项清理尝试返回前，任务保持 `Running`。
 
-并发度取 `max(GOMAXPROCS - 1, 1)`（errgroup 限流）：
+并发度取 `max(GOMAXPROCS - 1, 1)`（errgroup 限流）。下面的代码展示 worker 取消和进度发布的关键顺序，
+知识库搜索目标等请求字段沿用前述参数装配结果：
 
 ```go
-var g errgroup.Group
+g, workerCtx := errgroup.WithContext(ctx)
+var publishMu sync.Mutex
+var finished int
 metricHook := NewHookMetric(len(dataset))
 g.SetLimit(max(runtime.GOMAXPROCS(0)-1, 1))
 for i, qaPair := range dataset {
     g.Go(func() error {
-        // 1. 克隆 ChatManage 配置
-        // 2. 走 KnowledgeQAByEvent 完整管道（检索 + 重排 + 生成）
-        // 3. 记录 MetricInput（检索到的 passage ID、生成文本、GT）
-        // 4. 加锁更新 finished 进度
+        if err := workerCtx.Err(); err != nil {
+            return err
+        }
+        chatManage := detail.Params.Clone()
+        chatManage.Query = qaPair.Question
+        chatManage.RewriteQuery = qaPair.Question
+        if err := e.sessionService.KnowledgeQAByEvent(workerCtx, chatManage, types.Pipline["rag"]); err != nil {
+            return err
+        }
+        metricHook.recordInit(i)
+        metricHook.recordQaPair(i, qaPair)
+        metricHook.recordSearchResult(i, chatManage.SearchResult)
+        metricHook.recordRerankResult(i, chatManage.RerankResult)
+        metricHook.recordChatResponse(i, chatManage.ChatResponse)
+
+        publishMu.Lock()
+        defer publishMu.Unlock()
+        if err := workerCtx.Err(); err != nil {
+            return err
+        }
+        metricHook.recordFinish(i)
+        finished++
+        metricResult := metricHook.MetricResult()
+        return e.evaluationMemoryStorage.update(detail.Task.ID, func(current *types.EvaluationDetail) {
+            current.Task.Finished = finished
+            current.Metric = metricResult
+        })
     })
 }
-g.Wait()
+runErr := g.Wait()
 ```
 
 每个样本产出一个 `MetricInput`（`internal/types/evaluation.go`）：
@@ -142,7 +172,7 @@ flowchart TD
     J --> K["记录 MetricInput<br/>(RetrievalIDs vs GT, 生成文本 vs 参考答案)"]
     K --> L["MetricList.Avg 汇聚 12 项指标均值"]
     L --> M["依次尝试清理临时 Knowledge 与评估知识库<br/>状态保持 Running"]
-    M --> O["一次发布 Success / Failed<br/>err_msg / cleanup_errors / end_time"]
+    M --> O["一次发布 Success / Failed / TimedOut<br/>err_msg / cleanup_errors / end_time"]
     O --> N["GET /api/v1/evaluation?task_id=...<br/>轮询进度与指标"]
 ```
 

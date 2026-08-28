@@ -288,6 +288,27 @@ func TestEvaluationServiceCleansTemporaryResourcesAfterBackgroundRun(t *testing.
 				t.Fatal("timed out waiting for temporary knowledge base cleanup")
 			}
 
+			var stored *types.EvaluationDetail
+			terminalDeadline := time.Now().Add(2 * time.Second)
+			for {
+				stored, err = service.EvaluationResult(ctx, detail.Task.ID)
+				if err != nil {
+					t.Fatalf("EvaluationResult() error = %v", err)
+				}
+				if stored.Task.Status == test.status && stored.Task.EndTime != nil {
+					break
+				}
+				if time.Now().After(terminalDeadline) {
+					t.Fatalf(
+						"task status = %v, end time = %v, want status %v with end time",
+						stored.Task.Status,
+						stored.Task.EndTime,
+						test.status,
+					)
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+
 			if got := recorder.snapshot(); !reflect.DeepEqual(got, test.events) {
 				t.Fatalf("cleanup events = %v, want %v", got, test.events)
 			}
@@ -295,13 +316,6 @@ func TestEvaluationServiceCleansTemporaryResourcesAfterBackgroundRun(t *testing.
 				t.Fatalf("temporary knowledge base cleanup count exceeded one")
 			}
 
-			stored, err := service.EvaluationResult(ctx, detail.Task.ID)
-			if err != nil {
-				t.Fatalf("EvaluationResult() error = %v", err)
-			}
-			if stored.Task.Status != test.status {
-				t.Fatalf("task status = %v, want %v", stored.Task.Status, test.status)
-			}
 			if stored.Task.ErrMsg != test.errMsg {
 				t.Fatalf("task error = %q, want %q", stored.Task.ErrMsg, test.errMsg)
 			}

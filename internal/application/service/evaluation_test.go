@@ -15,12 +15,15 @@ import (
 func newEvaluationStorageFixture() *types.EvaluationDetail {
 	citationEnabled := true
 	thinkingEnabled := false
+	endTime := time.Date(2026, time.August, 28, 9, 30, 0, 0, time.UTC)
 	return &types.EvaluationDetail{
 		Task: &types.EvaluationTask{
-			ID:        "evaluation-task",
-			DatasetID: "dataset",
-			Status:    types.EvaluationStatuePending,
-			Finished:  1,
+			ID:            "evaluation-task",
+			DatasetID:     "dataset",
+			EndTime:       &endTime,
+			Status:        types.EvaluationStatuePending,
+			CleanupErrors: []string{"cleanup warning"},
+			Finished:      1,
 		},
 		Params: &types.ChatManage{
 			PipelineRequest: types.PipelineRequest{
@@ -46,6 +49,13 @@ func assertEvaluationStorageFixture(t *testing.T, detail *types.EvaluationDetail
 	t.Helper()
 	if detail.Task.Status != types.EvaluationStatuePending || detail.Task.Finished != 1 {
 		t.Fatalf("Task = %+v, want pending with one finished item", detail.Task)
+	}
+	wantEndTime := time.Date(2026, time.August, 28, 9, 30, 0, 0, time.UTC)
+	if detail.Task.EndTime == nil || !detail.Task.EndTime.Equal(wantEndTime) {
+		t.Fatalf("Task.EndTime = %v, want %v", detail.Task.EndTime, wantEndTime)
+	}
+	if len(detail.Task.CleanupErrors) != 1 || detail.Task.CleanupErrors[0] != "cleanup warning" {
+		t.Fatalf("Task.CleanupErrors = %#v, want [cleanup warning]", detail.Task.CleanupErrors)
 	}
 	if detail.Params.Query != "original query" {
 		t.Fatalf("Params.Query = %q, want original query", detail.Params.Query)
@@ -75,6 +85,8 @@ func TestEvaluationMemoryStorageSnapshotsAreIsolated(t *testing.T) {
 
 		source.Task.Status = types.EvaluationStatueFailed
 		source.Task.Finished = 99
+		*source.Task.EndTime = source.Task.EndTime.Add(time.Hour)
+		source.Task.CleanupErrors[0] = "mutated cleanup warning"
 		source.Params.Query = "mutated query"
 		source.Params.KnowledgeBaseIDs = []string{"mutated-kb"}
 		source.Params.KnowledgeIDs[0] = "mutated-knowledge"
@@ -100,6 +112,8 @@ func TestEvaluationMemoryStorageSnapshotsAreIsolated(t *testing.T) {
 		}
 		first.Task.Status = types.EvaluationStatueSuccess
 		first.Task.Finished = 99
+		*first.Task.EndTime = first.Task.EndTime.Add(time.Hour)
+		first.Task.CleanupErrors[0] = "mutated cleanup warning"
 		first.Params.Query = "mutated query"
 		first.Params.KnowledgeBaseIDs = []string{"mutated-kb"}
 		first.Params.KnowledgeIDs[0] = "mutated-knowledge"
@@ -153,6 +167,12 @@ func TestEvaluationMemoryStorageConcurrentSnapshots(t *testing.T) {
 		for i := 0; i < 1000; i++ {
 			err := storage.update("evaluation-task", func(detail *types.EvaluationDetail) {
 				detail.Task.Finished = i
+				*detail.Task.EndTime = detail.Task.EndTime.Add(time.Nanosecond)
+				if i%2 == 0 {
+					detail.Task.CleanupErrors[0] = "cleanup warning a"
+				} else {
+					detail.Task.CleanupErrors[0] = "cleanup warning b"
+				}
 				detail.Metric.RetrievalMetrics.Recall = float64(i)
 			})
 			if err != nil {

@@ -47,7 +47,7 @@ type EvaluationConfig struct {
 	TaskTimeout time.Duration `yaml:"task_timeout" json:"task_timeout"`
 }
 
-// DefaultEvaluationTaskTimeout bounds one background evaluation task.
+// DefaultEvaluationTaskTimeout bounds the execution phase of one background evaluation task.
 const DefaultEvaluationTaskTimeout = 2 * time.Hour
 
 // EvaluationTaskTimeout returns the configured timeout or its safe default.

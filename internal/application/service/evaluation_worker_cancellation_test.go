@@ -60,16 +60,6 @@ func (s *evaluationCancellationKnowledgeStub) DeleteKnowledge(ctx context.Contex
 	return nil
 }
 
-type evaluationCancellationKnowledgeBaseStub struct {
-	interfaces.KnowledgeBaseService
-	recorder *evaluationCancellationCleanupRecorder
-}
-
-func (s *evaluationCancellationKnowledgeBaseStub) DeleteKnowledgeBase(ctx context.Context, id string) error {
-	s.recorder.record(ctx, "knowledge-base:"+id)
-	return nil
-}
-
 type evaluationCancellationSessionStub struct {
 	interfaces.SessionService
 	blockedEntered  chan struct{}
@@ -154,9 +144,8 @@ func TestEvalDatasetCancelsBlockedWorkerAfterFirstError(t *testing.T) {
 	}
 	storage.register(detail)
 	service := &EvaluationService{
-		dataset:              &evaluationCancellationDatasetStub{dataset: dataset},
-		knowledgeService:     &evaluationCancellationKnowledgeStub{recorder: recorder},
-		knowledgeBaseService: &evaluationCancellationKnowledgeBaseStub{recorder: recorder},
+		dataset:          &evaluationCancellationDatasetStub{dataset: dataset},
+		knowledgeService: &evaluationCancellationKnowledgeStub{recorder: recorder},
 		sessionService: &evaluationCancellationSessionStub{
 			blockedEntered:  blockedEntered,
 			blockedCanceled: blockedCanceled,
@@ -199,14 +188,11 @@ func TestEvalDatasetCancelsBlockedWorkerAfterFirstError(t *testing.T) {
 	}
 
 	events, cleanupErrs := recorder.snapshot()
-	wantEvents := []string{
-		"knowledge:evaluation-knowledge",
-		"knowledge-base:evaluation-kb",
-	}
+	wantEvents := []string{"knowledge:evaluation-knowledge"}
 	if !reflect.DeepEqual(events, wantEvents) {
 		t.Fatalf("cleanup events = %v, want %v", events, wantEvents)
 	}
-	if !reflect.DeepEqual(cleanupErrs, []error{nil, nil}) {
+	if !reflect.DeepEqual(cleanupErrs, []error{nil}) {
 		t.Fatalf("cleanup context errors = %v, want no errors", cleanupErrs)
 	}
 }

@@ -48,7 +48,7 @@ type EvaluationTask struct {
 	StartTime time.Time        `json:"start_time"`         // Task start time
 	EndTime   *time.Time       `json:"end_time,omitempty"` // Task completion time
 	Status    EvaluationStatue `json:"status"`             // Current task status
-	ErrMsg    string           `json:"err_msg,omitempty"`  // Error message if failed
+	ErrMsg    string           `json:"err_msg,omitempty"`  // Execution failure or timeout message
 
 	CleanupErrors []string `json:"cleanup_errors,omitempty"` // Temporary resource cleanup warnings
 

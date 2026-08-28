@@ -189,7 +189,11 @@ func captureEvaluationTaskDeadline(ctx context.Context, runErr error, stopped *b
 	}
 }
 
-func (e *EvaluationService) runEvaluation(ctx context.Context, detail *types.EvaluationDetail, knowledgeBaseID string) error {
+func (e *EvaluationService) runEvaluation(
+	ctx context.Context,
+	detail *types.EvaluationDetail,
+	knowledgeBaseID string,
+) error {
 	taskID := detail.Task.ID
 	runCtx, cancel := context.WithTimeoutCause(
 		ctx,
