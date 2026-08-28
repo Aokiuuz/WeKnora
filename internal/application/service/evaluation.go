@@ -138,6 +138,19 @@ func (e *evaluationMemoryStorage) update(taskID string, fn func(params *types.Ev
 	return nil
 }
 
+func (e *EvaluationService) cleanupEvaluationKnowledgeBase(ctx context.Context, knowledgeBaseID string) {
+	cleanupCtx := logger.CloneContext(ctx)
+	logger.Infof(cleanupCtx, "Cleaning up evaluation knowledge base: %s", knowledgeBaseID)
+	if err := e.knowledgeBaseService.DeleteKnowledgeBase(cleanupCtx, knowledgeBaseID); err != nil {
+		logger.Errorf(
+			cleanupCtx,
+			"Failed to delete evaluation knowledge base: %v, knowledge base ID: %s",
+			err,
+			knowledgeBaseID,
+		)
+	}
+}
+
 func (e *EvaluationService) EvaluationResult(ctx context.Context, taskID string) (*types.EvaluationDetail, error) {
 	logger.Info(ctx, "Start getting evaluation result")
 	logger.Infof(ctx, "Task ID: %s", taskID)
@@ -242,6 +255,12 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 		knowledgeBaseID = kb.ID
 		logger.Infof(ctx, "Created new knowledge base with ID: %s based on existing one", knowledgeBaseID)
 	}
+	cleanupKnowledgeBase := true
+	defer func() {
+		if cleanupKnowledgeBase {
+			e.cleanupEvaluationKnowledgeBase(ctx, knowledgeBaseID)
+		}
+	}()
 
 	// Set default values for optional parameters
 	if datasetID == "" {
@@ -343,10 +362,11 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 
 	// Start evaluation in background goroutine
 	logger.Info(ctx, "Starting evaluation in background")
-	go func(detail *types.EvaluationDetail) {
+	go func(detail *types.EvaluationDetail, knowledgeBaseID string) {
 		// Create new context with logger for background task
 		newCtx := logger.CloneContext(ctx)
 		logger.Infof(newCtx, "Background evaluation started for task ID: %s", taskID)
+		defer e.cleanupEvaluationKnowledgeBase(newCtx, knowledgeBaseID)
 
 		// Update task status to running
 		if err := e.evaluationMemoryStorage.update(taskID, func(params *types.EvaluationDetail) {
@@ -379,7 +399,8 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 			return
 		}
 		logger.Infof(newCtx, "Evaluation task completed successfully, task ID: %s", taskID)
-	}(runDetail)
+	}(runDetail, knowledgeBaseID)
+	cleanupKnowledgeBase = false
 
 	logger.Infof(ctx, "Evaluation task created successfully, task ID: %s", taskID)
 	return detail, nil
@@ -421,20 +442,11 @@ func (e *EvaluationService) EvalDataset(
 	}
 	logger.Infof(ctx, "Knowledge created and indexed successfully, ID: %s", knowledge.ID)
 
-	// Setup cleanup of temporary resources
+	// Clean up the temporary knowledge created by this method.
 	defer func() {
 		logger.Infof(ctx, "Cleaning up resources - deleting knowledge: %s", knowledge.ID)
 		if err := e.knowledgeService.DeleteKnowledge(ctx, knowledge.ID); err != nil {
 			logger.Errorf(ctx, "Failed to delete knowledge: %v, knowledge ID: %s", err, knowledge.ID)
-		}
-
-		logger.Infof(ctx, "Cleaning up resources - deleting knowledge base: %s", knowledgeBaseID)
-		if err := e.knowledgeBaseService.DeleteKnowledgeBase(ctx, knowledgeBaseID); err != nil {
-			logger.Errorf(
-				ctx,
-				"Failed to delete knowledge base: %v, knowledge base ID: %s",
-				err, knowledgeBaseID,
-			)
 		}
 	}()
 
