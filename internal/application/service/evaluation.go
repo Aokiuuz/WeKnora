@@ -445,6 +445,7 @@ func (e *EvaluationService) EvaluationWithOptions(
 	// the immutable experiment manifest before the task enters Pending.
 	if options.Seed != nil {
 		detail.Params.SummaryConfig.Seed = *options.Seed
+		detail.Params.SummaryConfig.SeedProvided = true
 	}
 	if err := applyEvaluationConfigurationOverrides(detail.Params, options.Configuration); err != nil {
 		return nil, err

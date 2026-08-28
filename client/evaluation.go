@@ -175,6 +175,15 @@ var ErrEvaluationEmbeddingModelUnsupported = errors.New(
 	"evaluation request EmbeddingModelID is unsupported; use KnowledgeBaseID",
 )
 
+// IsEvaluationSeedUnsupported reports whether err is the evaluation API's
+// 422 rejection of an explicit seed against a provider without seed support.
+// The task was not created; choosing a seed-capable provider or dropping the
+// seed are the only recoveries.
+func IsEvaluationSeedUnsupported(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnprocessableEntity
+}
+
 // MarshalJSON emits only fields accepted by the evaluation API.
 func (r EvaluationRequest) MarshalJSON() ([]byte, error) {
 	if r.EmbeddingModelID != "" {

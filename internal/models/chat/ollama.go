@@ -103,6 +103,10 @@ func (c *OllamaChat) buildChatRequest(messages []Message, opts *ChatOptions, isS
 		if opts.TopP > 0 {
 			chatReq.Options["top_p"] = opts.TopP
 		}
+		// 显式提供的 seed 真实下发到 Ollama options。
+		if ChatOptionsSeedProvided(opts) {
+			chatReq.Options["seed"] = opts.Seed
+		}
 		if opts.MaxTokens > 0 {
 			chatReq.Options["num_predict"] = opts.MaxTokens
 		}

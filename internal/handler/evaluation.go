@@ -1,8 +1,10 @@
 package handler
 
 import (
+	stderrors "errors"
 	"net/http"
 
+	"github.com/Tencent/WeKnora/internal/application/service"
 	"github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -87,7 +89,16 @@ func (e *EvaluationHandler) Evaluation(c *gin.Context) {
 	})
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewInternalServerError(err.Error()))
+		switch {
+		case stderrors.Is(err, service.ErrEvaluationSeedUnsupported):
+			c.Error(errors.NewUnprocessableEntityError(
+				"The requested seed is not supported by the chat model provider").WithDetails(err.Error()))
+		case stderrors.Is(err, interfaces.ErrEvaluationDatasetNotFound),
+			stderrors.Is(err, interfaces.ErrEvaluationDatasetVersionNotFound):
+			c.Error(errors.NewNotFoundError("Evaluation dataset not found").WithDetails(err.Error()))
+		default:
+			c.Error(errors.NewInternalServerError(err.Error()))
+		}
 		return
 	}
 

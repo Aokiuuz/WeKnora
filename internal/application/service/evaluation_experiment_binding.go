@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Tencent/WeKnora/internal/models/chat"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
@@ -101,6 +102,18 @@ func (e *EvaluationService) buildExperimentForTask(
 		return nil, "", err
 	}
 
+	// Seed capability is decided by the actual chat provider: an explicit
+	// seed against an unsupported provider fails the request instead of
+	// being silently saved-but-not-applied.
+	seedSupport := types.EvaluationSeedSupportNotRequested
+	if options.Seed != nil {
+		seedSupport = seedSupportForChatModel(chatModel)
+		if seedSupport == types.EvaluationSeedSupportUnsupported {
+			return nil, "", fmt.Errorf("evaluation seed %d: chat model %s: %w",
+				*options.Seed, detail.Params.ChatModelID, ErrEvaluationSeedUnsupported)
+		}
+	}
+
 	dbDriver := os.Getenv("DB_DRIVER")
 	if dbDriver == "" {
 		dbDriver = "postgres"
@@ -114,9 +127,30 @@ func (e *EvaluationService) buildExperimentForTask(
 		SummaryModel:          summaryModel,
 		Params:                detail.Params,
 		SeedProvided:          options.Seed != nil,
-		SeedSupport:           types.EvaluationSeedSupportUnavailable,
+		SeedSupport:           seedSupport,
 		DBDriver:              dbDriver,
 	})
+}
+
+// ErrEvaluationSeedUnsupported is the typed creation-time failure for an
+// explicit seed against a provider without seed support; HTTP maps it to 422.
+var ErrEvaluationSeedUnsupported = errors.New("evaluation seed is not supported by the chat model provider")
+
+// seedSupportForChatModel maps the resolved chat model to its seed
+// capability: OpenAI-compatible providers and Ollama forward the seed and are
+// reported applied; providers without a seed parameter report unsupported.
+func seedSupportForChatModel(model *types.Model) string {
+	if model == nil {
+		return types.EvaluationSeedSupportUnavailable
+	}
+	switch chat.ChatSeedSupportState(model.Parameters.Provider, model.Parameters.BaseURL, model.Source) {
+	case chat.ChatSeedSupportApplied:
+		return types.EvaluationSeedSupportApplied
+	case chat.ChatSeedSupportUnsupported:
+		return types.EvaluationSeedSupportUnsupported
+	default:
+		return types.EvaluationSeedSupportUnavailable
+	}
 }
 
 // resolveExperimentDatasetBinding pins the dataset version for one task. An

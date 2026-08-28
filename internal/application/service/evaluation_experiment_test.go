@@ -240,3 +240,50 @@ func TestDecodeEvaluationExperimentNullProvenance(t *testing.T) {
 	require.NotNil(t, experiment)
 	assert.False(t, complete, "snapshot without dataset binding and hash is not complete provenance")
 }
+
+func TestSeedSupportForChatModelClassification(t *testing.T) {
+	cases := []struct {
+		name  string
+		model *types.Model
+		want  string
+	}{
+		{"openai", &types.Model{Source: types.ModelSourceOpenAI,
+			Parameters: types.ModelParameters{Provider: "openai"}}, types.EvaluationSeedSupportApplied},
+		{"ollama", &types.Model{Source: types.ModelSourceLocal,
+			Parameters: types.ModelParameters{Provider: "ollama"}}, types.EvaluationSeedSupportApplied},
+		{"anthropic", &types.Model{Source: types.ModelSourceOpenAI,
+			Parameters: types.ModelParameters{Provider: "anthropic"}}, types.EvaluationSeedSupportUnsupported},
+		{"nil model", nil, types.EvaluationSeedSupportUnavailable},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, seedSupportForChatModel(tc.model))
+		})
+	}
+}
+
+func TestBuildEvaluationExperimentRecordsAppliedSeed(t *testing.T) {
+	input := evaluationExperimentInputFixture()
+	input.SeedSupport = types.EvaluationSeedSupportApplied
+	snapshot, _, err := BuildEvaluationExperimentSnapshot(input)
+	require.NoError(t, err)
+	assert.Equal(t, types.EvaluationSeedSupportApplied, snapshot.Configuration.Generation.SeedSupport)
+	require.NotNil(t, snapshot.Configuration.Generation.Seed)
+
+	// Applied seed means auditable reproducibility without seed warnings.
+	assert.Equal(t, types.EvaluationReproducibilityAuditable, snapshot.Reproducibility.Level)
+	for _, warning := range snapshot.Reproducibility.Warnings {
+		assert.NotContains(t, warning, "seed")
+	}
+
+	// Unrequested seed records the not_requested state and a null seed.
+	unrequested := evaluationExperimentInputFixture()
+	unrequested.SeedProvided = false
+	unrequested.SeedSupport = types.EvaluationSeedSupportNotRequested
+	unrequestedSnapshot, _, err := BuildEvaluationExperimentSnapshot(unrequested)
+	require.NoError(t, err)
+	assert.Nil(t, unrequestedSnapshot.Configuration.Generation.Seed)
+	assert.False(t, unrequestedSnapshot.Configuration.Generation.SeedProvided)
+	assert.Equal(t, types.EvaluationSeedSupportNotRequested,
+		unrequestedSnapshot.Configuration.Generation.SeedSupport)
+}
