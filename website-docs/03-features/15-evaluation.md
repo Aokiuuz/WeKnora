@@ -45,7 +45,8 @@ type EvaluationRequest struct {
 | `chat_id` | 否 | 缺省自动选择默认 Chat 模型 |
 | `rerank_id` | 否 | 缺省自动选择默认 Rerank 模型 |
 
-任务 ID 格式为 `evaluation-{tenantID}-{datasetID}`。任务对象（`internal/types/evaluation.go`）：
+任务 ID 由任务类型、租户 ID、毫秒时间戳、短通用唯一标识符（Universally Unique Identifier，UUID）和数据集 ID
+组成，例如 `evaluation_1_1787902200000_a1b2c3d4_default`。任务对象（`internal/types/evaluation.go`）：
 
 ```go
 type EvaluationTask struct {
@@ -53,8 +54,10 @@ type EvaluationTask struct {
     TenantID  uint64           `json:"tenant_id"`
     DatasetID string           `json:"dataset_id"`
     StartTime time.Time        `json:"start_time"`
+    EndTime   *time.Time       `json:"end_time,omitempty"`
     Status    EvaluationStatue `json:"status"`
     ErrMsg    string           `json:"err_msg,omitempty"`
+    CleanupErrors []string     `json:"cleanup_errors,omitempty"`
     Total     int              `json:"total,omitempty"`    // 样本总数
     Finished  int              `json:"finished,omitempty"` // 已完成数
 }
@@ -78,7 +81,11 @@ const (
 1. **知识库准备**：新建（或按参考 KB 配置克隆）评估专用知识库，取默认 Embedding 与 LLM 模型；
 2. **参数装配**：从系统配置装配 `ChatManage` 评估参数——`VectorThreshold`、`KeywordThreshold`、`EmbeddingTopK`、`RerankTopK`、`RerankThreshold`、`MaxRounds`、`SummaryConfig`（MaxTokens / TopK / TopP / RepeatPenalty / Prompt / ContextTemplate 等）、`FallbackResponse`、改写提示词等；
 3. **任务注册**：以任务 ID 注册到内存存储，状态 `Pending`，立即返回响应；
-4. **后台执行**（goroutine）：将数据集 corpus 灌入评估 KB → 并行评估每个 QA 对 → 汇聚指标 → 清理资源。
+4. **后台执行**（goroutine）：发布 `Running` → 将数据集 corpus 灌入评估 KB → 并行评估每个 QA 对 → 汇聚指标；
+5. **稳定终态**：依次尝试临时资源清理，再一次发布 `Success` 或 `Failed`、执行错误、清理警告和结束时间。
+
+指标完成但清理仍在进行时，任务保持 `Running`。因此 `finished == total` 或 `metric` 已出现只表示评估计算完成，
+不能单独作为任务终止条件。
 
 并发度取 `max(GOMAXPROCS - 1, 1)`（errgroup 限流）：
 
@@ -121,7 +128,7 @@ type MetricInput struct {
 flowchart TD
     A["POST /api/v1/evaluation<br/>(dataset_id, knowledge_base_id, chat_id, rerank_id)"] --> B["创建评估专用知识库<br/>(新建或克隆参考 KB 配置)"]
     B --> C["装配 ChatManage 评估参数<br/>(阈值 / TopK / Summary 配置)"]
-    C --> D["注册任务到内存存储<br/>ID = evaluation-{tenant}-{dataset}, 状态 Pending"]
+    C --> D["注册任务到内存存储<br/>唯一任务 ID, 状态 Pending"]
     D --> E["立即返回任务信息"]
     D --> F["goroutine 后台执行, 状态 Running"]
     F --> G["加载 Parquet 数据集<br/>queries / corpus / qrels / answers / qas"]
@@ -130,8 +137,9 @@ flowchart TD
     I --> J["每个问题跑 KnowledgeQAByEvent<br/>检索 + 重排 + 生成"]
     J --> K["记录 MetricInput<br/>(RetrievalIDs vs GT, 生成文本 vs 参考答案)"]
     K --> L["MetricList.Avg 汇聚 12 项指标均值"]
-    L --> M["写回 EvaluationDetail, 状态 Success / Failed<br/>清理评估知识库"]
-    M --> N["GET /api/v1/evaluation?task_id=...<br/>轮询进度与指标"]
+    L --> M["依次尝试清理临时 Knowledge 与评估知识库<br/>状态保持 Running"]
+    M --> O["一次发布 Success / Failed<br/>err_msg / cleanup_errors / end_time"]
+    O --> N["GET /api/v1/evaluation?task_id=...<br/>轮询进度与指标"]
 ```
 
 ## 指标清单
@@ -227,16 +235,20 @@ type QAPair struct {
 
 ## 结果查询
 
-`GET /api/v1/evaluation?task_id=evaluation-{tenant}-{dataset}`，返回 `EvaluationDetail`：
+`GET /api/v1/evaluation?task_id=evaluation_1_1787902200000_a1b2c3d4_default`，返回 `EvaluationDetail`：
 
 ```json
 {
   "success": true,
   "data": {
     "task": {
-      "id": "evaluation-1-default",
+      "id": "evaluation_1_1787902200000_a1b2c3d4_default",
       "dataset_id": "default",
       "status": 2,
+      "end_time": "2026-08-28T15:30:00Z",
+      "cleanup_errors": [
+        "delete knowledge evaluation-knowledge: cleanup failed"
+      ],
       "total": 100,
       "finished": 100
     },
@@ -256,7 +268,9 @@ type QAPair struct {
 }
 ```
 
-任务运行期间可轮询该接口获取 `finished / total` 进度；`status = 3` 时 `err_msg` 携带失败原因。
+任务运行期间可轮询该接口获取 `finished / total` 进度。`end_time` 只在终态出现，使用 RFC 3339 时间字符串；
+`status = 3` 时 `err_msg` 携带首个评估执行错误。`cleanup_errors` 只在存在清理警告时出现，内容为人工诊断文本，
+不覆盖 `err_msg`，也不使已完成的评估从 `status = 2` 变为失败。客户端不应把该文本作为机器协议解析。
 
 > **注意**：评估结果存储在**内存**（`evaluationMemoryStorage`：`map[string]*EvaluationDetail` + `sync.RWMutex`，见 `internal/application/service/evaluation.go`），服务重启后任务与结果会丢失，需重新发起评估。
 
