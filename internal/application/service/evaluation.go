@@ -16,6 +16,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const evaluationCleanupTimeout = 30 * time.Second
+
 /*
 corpus: pid -> content
 queries: qid -> content
@@ -138,12 +140,23 @@ func (e *evaluationMemoryStorage) update(taskID string, fn func(params *types.Ev
 	return nil
 }
 
+func (e *EvaluationService) deleteEvaluationKnowledge(ctx context.Context, knowledgeID string) error {
+	cleanupCtx, cancel := context.WithTimeout(logger.CloneContext(ctx), evaluationCleanupTimeout)
+	defer cancel()
+	return e.knowledgeService.DeleteKnowledge(cleanupCtx, knowledgeID)
+}
+
+func (e *EvaluationService) deleteEvaluationKnowledgeBase(ctx context.Context, knowledgeBaseID string) error {
+	cleanupCtx, cancel := context.WithTimeout(logger.CloneContext(ctx), evaluationCleanupTimeout)
+	defer cancel()
+	return e.knowledgeBaseService.DeleteKnowledgeBase(cleanupCtx, knowledgeBaseID)
+}
+
 func (e *EvaluationService) cleanupEvaluationKnowledgeBase(ctx context.Context, knowledgeBaseID string) {
-	cleanupCtx := logger.CloneContext(ctx)
-	logger.Infof(cleanupCtx, "Cleaning up evaluation knowledge base: %s", knowledgeBaseID)
-	if err := e.knowledgeBaseService.DeleteKnowledgeBase(cleanupCtx, knowledgeBaseID); err != nil {
+	logger.Infof(ctx, "Cleaning up evaluation knowledge base: %s", knowledgeBaseID)
+	if err := e.deleteEvaluationKnowledgeBase(ctx, knowledgeBaseID); err != nil {
 		logger.Errorf(
-			cleanupCtx,
+			ctx,
 			"Failed to delete evaluation knowledge base: %v, knowledge base ID: %s",
 			err,
 			knowledgeBaseID,
@@ -445,7 +458,7 @@ func (e *EvaluationService) EvalDataset(
 	// Clean up the temporary knowledge created by this method.
 	defer func() {
 		logger.Infof(ctx, "Cleaning up resources - deleting knowledge: %s", knowledge.ID)
-		if err := e.knowledgeService.DeleteKnowledge(ctx, knowledge.ID); err != nil {
+		if err := e.deleteEvaluationKnowledge(ctx, knowledge.ID); err != nil {
 			logger.Errorf(ctx, "Failed to delete knowledge: %v, knowledge ID: %s", err, knowledge.ID)
 		}
 	}()
