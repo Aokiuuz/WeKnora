@@ -70,11 +70,50 @@ func newEvaluationMemoryStorage() *evaluationMemoryStorage {
 	return res
 }
 
+// cloneEvaluationSnapshot copies stored task data and immutable evaluation request configuration.
+// ChatManage.Clone intentionally starts with fresh pipeline execution state, which Evaluation Params never store.
+func cloneEvaluationSnapshot(detail *types.EvaluationDetail) *types.EvaluationDetail {
+	if detail == nil {
+		return nil
+	}
+
+	cloned := *detail
+	if detail.Task != nil {
+		task := *detail.Task
+		cloned.Task = &task
+	}
+	if detail.Params != nil {
+		cloned.Params = detail.Params.Clone()
+		if detail.Params.CitationEnabled != nil {
+			citationEnabled := *detail.Params.CitationEnabled
+			cloned.Params.CitationEnabled = &citationEnabled
+		}
+		if detail.Params.SummaryConfig.Thinking != nil {
+			thinkingEnabled := *detail.Params.SummaryConfig.Thinking
+			cloned.Params.SummaryConfig.Thinking = &thinkingEnabled
+		}
+		if detail.Params.KnowledgeBaseIDs == nil {
+			cloned.Params.KnowledgeBaseIDs = nil
+		}
+		if detail.Params.KnowledgeIDs == nil {
+			cloned.Params.KnowledgeIDs = nil
+		}
+		if detail.Params.SearchTargets == nil {
+			cloned.Params.SearchTargets = nil
+		}
+	}
+	if detail.Metric != nil {
+		metric := *detail.Metric
+		cloned.Metric = &metric
+	}
+	return &cloned
+}
+
 func (e *evaluationMemoryStorage) register(params *types.EvaluationDetail) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	logger.Infof(context.Background(), "Registering evaluation task: %s", params.Task.ID)
-	e.store[params.Task.ID] = params
+	e.store[params.Task.ID] = cloneEvaluationSnapshot(params)
 }
 
 func (e *evaluationMemoryStorage) get(taskID string) (*types.EvaluationDetail, error) {
@@ -85,7 +124,7 @@ func (e *evaluationMemoryStorage) get(taskID string) (*types.EvaluationDetail, e
 	if !ok {
 		return nil, errors.New("task not found")
 	}
-	return res, nil
+	return cloneEvaluationSnapshot(res), nil
 }
 
 func (e *evaluationMemoryStorage) update(taskID string, fn func(params *types.EvaluationDetail)) error {
@@ -296,33 +335,51 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 		},
 	}
 
+	runDetail := cloneEvaluationSnapshot(detail)
+
 	// Store evaluation task in memory storage
 	logger.Info(ctx, "Registering evaluation task")
 	e.evaluationMemoryStorage.register(detail)
 
 	// Start evaluation in background goroutine
 	logger.Info(ctx, "Starting evaluation in background")
-	go func() {
+	go func(detail *types.EvaluationDetail) {
 		// Create new context with logger for background task
 		newCtx := logger.CloneContext(ctx)
 		logger.Infof(newCtx, "Background evaluation started for task ID: %s", taskID)
 
 		// Update task status to running
-		detail.Task.Status = types.EvaluationStatueRunning
+		if err := e.evaluationMemoryStorage.update(taskID, func(params *types.EvaluationDetail) {
+			params.Task.Status = types.EvaluationStatueRunning
+			params.Task.ErrMsg = ""
+		}); err != nil {
+			logger.Errorf(newCtx, "Failed to mark evaluation task as running: %v, task ID: %s", err, taskID)
+			return
+		}
 		logger.Info(newCtx, "Evaluation task status set to running")
 
 		// Execute actual evaluation
 		if err := e.EvalDataset(newCtx, detail, knowledgeBaseID); err != nil {
-			detail.Task.Status = types.EvaluationStatueFailed
-			detail.Task.ErrMsg = err.Error()
+			if updateErr := e.evaluationMemoryStorage.update(taskID, func(params *types.EvaluationDetail) {
+				params.Task.Status = types.EvaluationStatueFailed
+				params.Task.ErrMsg = err.Error()
+			}); updateErr != nil {
+				logger.Errorf(newCtx, "Failed to mark evaluation task as failed: %v, task ID: %s", updateErr, taskID)
+			}
 			logger.Errorf(newCtx, "Evaluation task failed: %v, task ID: %s", err, taskID)
 			return
 		}
 
 		// Mark task as completed successfully
+		if err := e.evaluationMemoryStorage.update(taskID, func(params *types.EvaluationDetail) {
+			params.Task.Status = types.EvaluationStatueSuccess
+			params.Task.ErrMsg = ""
+		}); err != nil {
+			logger.Errorf(newCtx, "Failed to mark evaluation task as successful: %v, task ID: %s", err, taskID)
+			return
+		}
 		logger.Infof(newCtx, "Evaluation task completed successfully, task ID: %s", taskID)
-		detail.Task.Status = types.EvaluationStatueSuccess
-	}()
+	}(runDetail)
 
 	logger.Infof(ctx, "Evaluation task created successfully, task ID: %s", taskID)
 	return detail, nil
