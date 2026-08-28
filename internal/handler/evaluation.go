@@ -3,7 +3,9 @@ package handler
 import (
 	stderrors "errors"
 	"net/http"
+	"strconv"
 
+	"github.com/Tencent/WeKnora/internal/application/service"
 	"github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -91,6 +93,73 @@ func (e *EvaluationHandler) Evaluation(c *gin.Context) {
 // GetEvaluationRequest contains parameters for getting evaluation result
 type GetEvaluationRequest struct {
 	TaskID string `form:"task_id" binding:"required"` // ID of evaluation task
+}
+
+// ListEvaluationTasks godoc
+// @Summary      列出评估任务
+// @Description  按 (start_time DESC, id DESC) keyset 分页列出当前租户的评估任务
+// @Tags         评估
+// @Accept       json
+// @Produce      json
+// @Param        status     query     int     false  "数值状态筛选"
+// @Param        page_size  query     int     false  "每页条数（默认 20，最大 100）"
+// @Param        cursor     query     string  false  "上一页返回的 next_cursor"
+// @Success      200        {object}  map[string]interface{}  "任务页"
+// @Failure      400        {object}  errors.AppError         "非法游标或筛选"
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /evaluation/tasks [get]
+func (e *EvaluationHandler) ListEvaluationTasks(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var input types.EvaluationTaskListInput
+	if raw := c.Query("status"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			_ = c.Error(errors.NewBadRequestError("status must be a numeric evaluation status"))
+			return
+		}
+		status := types.EvaluationStatue(value)
+		input.Status = &status
+	}
+	if raw := c.Query("page_size"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			_ = c.Error(errors.NewBadRequestError("page_size must be numeric"))
+			return
+		}
+		input.PageSize = value
+	}
+	input.Cursor = c.Query("cursor")
+
+	page, err := e.evaluationService.ListEvaluations(ctx, input)
+	if err != nil {
+		if stderrors.Is(err, service.ErrEvaluationTaskListInvalidCursor) {
+			_ = c.Error(errors.NewBadRequestError(err.Error()))
+			return
+		}
+		logger.ErrorWithFields(ctx, err, nil)
+		_ = c.Error(errors.NewInternalServerError(err.Error()))
+		return
+	}
+
+	items := make([]*types.EvaluationTask, 0, len(page.Items))
+	for _, entity := range page.Items {
+		task, err := service.EvaluationTaskEntityToAPITask(entity)
+		if err != nil {
+			logger.ErrorWithFields(ctx, err, nil)
+			_ = c.Error(errors.NewInternalServerError(err.Error()))
+			return
+		}
+		items = append(items, task)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"items":       items,
+			"next_cursor": page.NextCursor,
+		},
+	})
 }
 
 // CancelEvaluation godoc

@@ -41,7 +41,7 @@ var versionedSQLiteColumns = map[string][]string{
 	},
 }
 
-const expectedSQLiteMigrationVersion = 14
+const expectedSQLiteMigrationVersion = 15
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -254,7 +254,7 @@ func assertSQLiteEvaluationTaskSchema(t *testing.T, db *sql.DB) {
 	t.Helper()
 
 	assertSQLitePartialIndex(t, db, "idx_evaluation_tasks_tenant_started", "WHERE deleted_at IS NULL")
-	assertSQLitePartialIndex(t, db, "idx_evaluation_tasks_tenant_status", "WHERE deleted_at IS NULL")
+	assertSQLitePartialIndex(t, db, "idx_evaluation_tasks_tenant_status_started", "WHERE deleted_at IS NULL")
 	assertSQLitePartialIndex(
 		t,
 		db,

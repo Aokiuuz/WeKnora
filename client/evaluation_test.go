@@ -105,6 +105,66 @@ func TestCancelEvaluationRequiresTaskID(t *testing.T) {
 	}
 }
 
+func TestListEvaluationsSendsFiltersAndDecodesNestedPage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/evaluation/tasks" {
+			t.Errorf("path = %s, want /api/v1/evaluation/tasks", r.URL.Path)
+		}
+		query := r.URL.Query()
+		if query.Get("status") != "2" || query.Get("page_size") != "5" || query.Get("cursor") != "cur-1" {
+			t.Errorf("query = %s, want status=2&page_size=5&cursor=cur-1", r.URL.RawQuery)
+		}
+		writeEvaluationResponse(t, w, map[string]any{
+			"items":       []any{evaluationTaskFixture(2)},
+			"next_cursor": "cursor-next",
+		})
+	}))
+	defer srv.Close()
+
+	status := EvaluationStatusSuccess
+	page, err := NewClient(srv.URL).ListEvaluations(context.Background(), &EvaluationListOptions{
+		Status:   &status,
+		PageSize: 5,
+		Cursor:   "cur-1",
+	})
+	if err != nil {
+		t.Fatalf("ListEvaluations() error = %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Status != EvaluationStatusSuccess {
+		t.Fatalf("items = %+v, want one success task", page.Items)
+	}
+	if page.NextCursor != "cursor-next" {
+		t.Fatalf("next cursor = %q, want cursor-next", page.NextCursor)
+	}
+}
+
+func TestListEvaluationsRejectsMissingNestedData(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true})
+	}))
+	defer srv.Close()
+
+	if _, err := NewClient(srv.URL).ListEvaluations(context.Background(), nil); err == nil {
+		t.Fatal("ListEvaluations() must fail when the nested data object is missing")
+	}
+}
+
+func TestListEvaluationsRejectsUnsuccessfulEnvelope(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": false,
+			"data":    map[string]any{"items": []any{}, "next_cursor": ""},
+		})
+	}))
+	defer srv.Close()
+
+	if _, err := NewClient(srv.URL).ListEvaluations(context.Background(), nil); err == nil {
+		t.Fatal("ListEvaluations() must fail when success is false")
+	}
+}
+
 func TestStartEvaluationUsesServerRequestAndNestedTaskContract(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

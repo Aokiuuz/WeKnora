@@ -51,4 +51,9 @@ type EvaluationTaskRepository interface {
 		ctx context.Context,
 		command types.EvaluationTaskCancelCommand,
 	) (*types.EvaluationTaskEntity, error)
+	ListTasks(
+		ctx context.Context,
+		tenantID uint64,
+		query types.EvaluationTaskListQuery,
+	) ([]*types.EvaluationTaskEntity, error)
 }

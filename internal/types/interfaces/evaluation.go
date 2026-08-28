@@ -17,6 +17,12 @@ type EvaluationService interface {
 	// CancelEvaluation persists a user cancel request and returns the current
 	// task state. The first request time wins; terminal tasks are unchanged.
 	CancelEvaluation(ctx context.Context, taskID string) (*types.EvaluationDetail, error)
+	// ListEvaluations returns one keyset page of tenant tasks ordered by
+	// (start_time DESC, id DESC).
+	ListEvaluations(
+		ctx context.Context,
+		input types.EvaluationTaskListInput,
+	) (*types.EvaluationTaskListPage, error)
 }
 
 // Metrics defines interface for computing evaluation metrics

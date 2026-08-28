@@ -235,3 +235,41 @@ func encodeEvaluationCleanupErrors(cleanupErrors []string) (types.JSON, error) {
 func isKnownEvaluationStatus(status types.EvaluationStatue) bool {
 	return status >= types.EvaluationStatuePending && status <= types.EvaluationStatueCanceled
 }
+
+// EvaluationTaskEntityToAPITask projects one entity into the public task
+// shape without decoding params or metrics, keeping list responses lean.
+func EvaluationTaskEntityToAPITask(entity *types.EvaluationTaskEntity) (*types.EvaluationTask, error) {
+	if entity == nil {
+		return nil, errors.New("project evaluation task: entity is required")
+	}
+	if !isKnownEvaluationStatus(entity.Status) {
+		return nil, fmt.Errorf("project evaluation task: unsupported status %d", entity.Status)
+	}
+	cleanupErrors, err := decodeEvaluationCleanupErrors(entity.CleanupErrors)
+	if err != nil {
+		return nil, err
+	}
+	var endTime *time.Time
+	if entity.EndTime != nil {
+		normalizedEndTime := entity.EndTime.UTC()
+		endTime = &normalizedEndTime
+	}
+	var cancelRequestedAt *time.Time
+	if entity.CancelRequestedAt != nil {
+		normalizedCancelRequestedAt := entity.CancelRequestedAt.UTC()
+		cancelRequestedAt = &normalizedCancelRequestedAt
+	}
+	return &types.EvaluationTask{
+		ID:                entity.ID,
+		TenantID:          entity.TenantID,
+		DatasetID:         entity.DatasetID,
+		StartTime:         entity.StartTime.UTC(),
+		EndTime:           endTime,
+		Status:            entity.Status,
+		ErrMsg:            entity.ErrMsg,
+		CancelRequestedAt: cancelRequestedAt,
+		CleanupErrors:     cleanupErrors,
+		Total:             entity.Total,
+		Finished:          entity.Finished,
+	}, nil
+}

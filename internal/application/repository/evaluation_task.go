@@ -508,6 +508,59 @@ func (r *evaluationTaskRepository) PublishTerminal(
 	)
 }
 
+// ListTasks returns up to query.Limit tenant tasks ordered by
+// (start_time DESC, id DESC) after the exclusive keyset boundary. Soft-deleted
+// rows are hidden by the entity's DeletedAt scope.
+func (r *evaluationTaskRepository) ListTasks(
+	ctx context.Context,
+	tenantID uint64,
+	query types.EvaluationTaskListQuery,
+) ([]*types.EvaluationTaskEntity, error) {
+	if tenantID == 0 {
+		return nil, errors.New("list evaluation tasks: tenant_id is required")
+	}
+	if query.Limit <= 0 {
+		return nil, errors.New("list evaluation tasks: limit must be positive")
+	}
+	if query.Status != nil && !isKnownEvaluationTaskStatus(*query.Status) {
+		return nil, errors.New("list evaluation tasks: unsupported status filter")
+	}
+	if (query.StartBefore == nil) != (query.IDBefore == "") {
+		return nil, errors.New("list evaluation tasks: keyset boundary requires both start_time and id")
+	}
+
+	dbQuery := r.db.WithContext(ctx).
+		Model(&types.EvaluationTaskEntity{}).
+		Where("tenant_id = ?", tenantID)
+	if query.Status != nil {
+		dbQuery = dbQuery.Where("status = ?", *query.Status)
+	}
+	if query.StartBefore != nil {
+		startBefore := query.StartBefore.UTC()
+		dbQuery = dbQuery.Where(
+			"(start_time < ? OR (start_time = ? AND id < ?))",
+			startBefore, startBefore, query.IDBefore,
+		)
+	}
+
+	var tasks []*types.EvaluationTaskEntity
+	if err := dbQuery.
+		Order("start_time DESC").
+		Order("id DESC").
+		Limit(query.Limit).
+		Find(&tasks).Error; err != nil {
+		return nil, fmt.Errorf("list evaluation tasks: %w", err)
+	}
+	for _, task := range tasks {
+		normalizeEvaluationTaskTimes(task)
+	}
+	return tasks, nil
+}
+
+func isKnownEvaluationTaskStatus(status types.EvaluationStatue) bool {
+	return status >= types.EvaluationStatuePending && status <= types.EvaluationStatueCanceled
+}
+
 // RequestCancel records the first persistent cancel request for one active
 // task. The first request time wins, the execution version is unchanged, and
 // terminal tasks are returned unchanged.

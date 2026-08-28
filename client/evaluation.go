@@ -226,6 +226,73 @@ func (c *Client) GetEvaluationResult(ctx context.Context, taskID string) (*Evalu
 	return response.Data, nil
 }
 
+// EvaluationListOptions carries the optional list filters: a numeric status,
+// a bounded page size, and the opaque keyset cursor from the previous page.
+type EvaluationListOptions struct {
+	Status   *EvaluationStatus
+	PageSize int
+	Cursor   string
+}
+
+// EvaluationTaskPage contains one keyset page and the next cursor.
+type EvaluationTaskPage struct {
+	Items      []*EvaluationTask
+	NextCursor string
+}
+
+type evaluationListData struct {
+	Items      []*EvaluationTask `json:"items"`
+	NextCursor string            `json:"next_cursor"`
+}
+
+// EvaluationListResponse is the API envelope returned when listing tasks.
+type EvaluationListResponse struct {
+	Success bool                `json:"success"`
+	Data    *evaluationListData `json:"data"`
+}
+
+// ListEvaluations returns one keyset page of evaluation tasks ordered by
+// (start_time DESC, id DESC). The response must contain the nested data
+// object; a missing one is an error instead of a silent empty page.
+func (c *Client) ListEvaluations(ctx context.Context, options *EvaluationListOptions) (*EvaluationTaskPage, error) {
+	queryParams := url.Values{}
+	if options != nil {
+		if options.Status != nil {
+			queryParams.Add("status", fmt.Sprintf("%d", *options.Status))
+		}
+		if options.PageSize > 0 {
+			queryParams.Add("page_size", fmt.Sprintf("%d", options.PageSize))
+		}
+		if options.Cursor != "" {
+			queryParams.Add("cursor", options.Cursor)
+		}
+	}
+
+	resp, err := c.doRequest(ctx, http.MethodGet, "/api/v1/evaluation/tasks", nil, queryParams)
+	if err != nil {
+		return nil, err
+	}
+
+	var response EvaluationListResponse
+	if err := parseResponse(resp, &response); err != nil {
+		return nil, err
+	}
+	if !response.Success {
+		return nil, errors.New("evaluation list response is not successful")
+	}
+	if response.Data == nil {
+		return nil, errors.New("evaluation list response is missing data")
+	}
+	items := response.Data.Items
+	if items == nil {
+		items = []*EvaluationTask{}
+	}
+	return &EvaluationTaskPage{
+		Items:      items,
+		NextCursor: response.Data.NextCursor,
+	}, nil
+}
+
 // CancelEvaluation requests cancellation of an evaluation task and returns
 // its nested state. Requesting cancel twice or on a terminal task returns the
 // current task unchanged.

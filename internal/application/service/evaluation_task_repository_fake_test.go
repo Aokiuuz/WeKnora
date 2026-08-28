@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 	"time"
 
@@ -128,6 +129,7 @@ type fakeEvaluationTaskRepository struct {
 	heartbeatBlockCount int
 	claimErr            error
 	cancelErr           error
+	lastListLimit       int
 
 	startEntered chan<- struct{}
 	startRelease <-chan struct{}
@@ -510,6 +512,52 @@ func (r *fakeEvaluationTaskRepository) ClaimExpiredTasks(
 		claimed = append(claimed, cloneEvaluationTaskEntity(task))
 	}
 	return claimed, nil
+}
+
+func (r *fakeEvaluationTaskRepository) ListTasks(
+	_ context.Context,
+	tenantID uint64,
+	query types.EvaluationTaskListQuery,
+) ([]*types.EvaluationTaskEntity, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.recordLocked("ListTasks", tenantID, "")
+	r.lastListLimit = query.Limit
+	if query.Limit <= 0 {
+		return nil, errors.New("list evaluation tasks: limit must be positive")
+	}
+	tasks := make([]*types.EvaluationTaskEntity, 0)
+	for _, task := range r.tasks {
+		if task.TenantID != tenantID || task.DeletedAt.Valid {
+			continue
+		}
+		if query.Status != nil && task.Status != *query.Status {
+			continue
+		}
+		if query.StartBefore != nil {
+			startBefore := query.StartBefore.UTC()
+			startTime := task.StartTime.UTC()
+			if startTime.After(startBefore) {
+				continue
+			}
+			if startTime.Equal(startBefore) && task.ID >= query.IDBefore {
+				continue
+			}
+		}
+		tasks = append(tasks, cloneEvaluationTaskEntity(task))
+	}
+	sort.Slice(tasks, func(i, j int) bool {
+		left, right := tasks[i].StartTime.UTC(), tasks[j].StartTime.UTC()
+		if !left.Equal(right) {
+			return left.After(right)
+		}
+		return tasks[i].ID > tasks[j].ID
+	})
+	if len(tasks) > query.Limit {
+		tasks = tasks[:query.Limit]
+	}
+	return tasks, nil
 }
 
 func (r *fakeEvaluationTaskRepository) register(task *types.EvaluationTaskEntity) {
