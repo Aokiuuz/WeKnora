@@ -453,7 +453,7 @@ func (e *EvaluationService) EvalDataset(
 	// Initialize parallel evaluation metrics
 	var finished int
 	var publishMu sync.Mutex
-	var g errgroup.Group
+	g, workerCtx := errgroup.WithContext(ctx)
 	metricHook := NewHookMetric(len(dataset))
 
 	// Set worker limit based on available CPUs
@@ -465,6 +465,10 @@ func (e *EvaluationService) EvalDataset(
 		qaPair := qaPair
 		i := i
 		g.Go(func() error {
+			if err := workerCtx.Err(); err != nil {
+				return err
+			}
+
 			logger.Infof(ctx, "Processing QA pair %d, question: %s", i, qaPair.Question)
 
 			// Prepare chat management parameters for this QA pair
@@ -482,7 +486,7 @@ func (e *EvaluationService) EvalDataset(
 
 			// Execute knowledge QA pipeline
 			logger.Infof(ctx, "Running knowledge QA for question: %s", qaPair.Question)
-			qaErr := e.sessionService.KnowledgeQAByEvent(ctx, chatManage, types.Pipline["rag"])
+			qaErr := e.sessionService.KnowledgeQAByEvent(workerCtx, chatManage, types.Pipline["rag"])
 			if qaErr != nil {
 				logger.Errorf(ctx, "Failed to process question %d: %v", i, qaErr)
 				return qaErr
