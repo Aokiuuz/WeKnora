@@ -39,3 +39,53 @@ type EvaluationTaskEntity struct {
 func (EvaluationTaskEntity) TableName() string {
 	return "evaluation_tasks"
 }
+
+// EvaluationTaskStartCommand conditionally moves a pending task into the
+// running state for its current owner.
+type EvaluationTaskStartCommand struct {
+	TenantID        uint64
+	TaskID          string
+	OwnerID         string
+	ExpectedVersion uint64
+	Now             time.Time
+	LeaseExpiresAt  time.Time
+}
+
+// EvaluationTaskProgressCommand conditionally publishes one complete progress
+// snapshot and renews the running task lease.
+type EvaluationTaskProgressCommand struct {
+	TenantID        uint64
+	TaskID          string
+	OwnerID         string
+	ExpectedVersion uint64
+	Total           int
+	Finished        int
+	Metric          JSON
+	Now             time.Time
+	LeaseExpiresAt  time.Time
+}
+
+// EvaluationTaskKnowledgeCommand conditionally records the temporary
+// Knowledge resource created by a running task.
+type EvaluationTaskKnowledgeCommand struct {
+	TenantID             uint64
+	TaskID               string
+	OwnerID              string
+	ExpectedVersion      uint64
+	TemporaryKnowledgeID string
+	UpdatedAt            time.Time
+}
+
+// EvaluationTaskTerminalCommand conditionally publishes the complete terminal
+// snapshot and releases the task lease.
+type EvaluationTaskTerminalCommand struct {
+	TenantID        uint64
+	TaskID          string
+	OwnerID         string
+	ExpectedVersion uint64
+	Status          EvaluationStatue
+	EndTime         time.Time
+	ErrMsg          string
+	CleanupErrors   JSON
+	Metric          JSON
+}

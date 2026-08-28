@@ -1,0 +1,480 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"time"
+
+	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/Tencent/WeKnora/internal/types/interfaces"
+)
+
+const (
+	evaluationMemoryStorageTenantID                 uint64 = 1
+	evaluationMemoryStorageOwnerID                         = "evaluation-test-owner"
+	evaluationMemoryStorageTemporaryKnowledgeBaseID        = "evaluation-kb"
+)
+
+// evaluationMemoryStorage keeps the M1 lifecycle tests focused on service
+// semantics while exercising the same entity/detail boundary as persistence.
+// Production code never constructs this test-only adapter.
+type evaluationMemoryStorage struct {
+	*fakeEvaluationTaskRepository
+	tenantID uint64
+	ownerID  string
+}
+
+func newEvaluationMemoryStorage() *evaluationMemoryStorage {
+	return &evaluationMemoryStorage{
+		fakeEvaluationTaskRepository: newFakeEvaluationTaskRepository(),
+		tenantID:                     evaluationMemoryStorageTenantID,
+		ownerID:                      evaluationMemoryStorageOwnerID,
+	}
+}
+
+func (s *evaluationMemoryStorage) register(detail *types.EvaluationDetail) {
+	if detail == nil || detail.Task == nil {
+		return
+	}
+	if detail.Task.TenantID == 0 {
+		detail.Task.TenantID = s.tenantID
+	}
+	if detail.Task.StartTime.IsZero() {
+		detail.Task.StartTime = time.Now().UTC()
+	}
+	entity, err := evaluationDetailToEntity(
+		detail,
+		evaluationMemoryStorageTemporaryKnowledgeBaseID,
+		s.ownerID,
+		time.Now().UTC().Add(time.Hour),
+	)
+	if err != nil {
+		panic(err)
+	}
+	entity.Version = 1
+	entity.HeartbeatAt = entity.StartTime
+	entity.CreatedAt = entity.StartTime
+	entity.UpdatedAt = entity.StartTime
+	s.fakeEvaluationTaskRepository.register(entity)
+}
+
+func (s *evaluationMemoryStorage) get(taskID string) (*types.EvaluationDetail, error) {
+	entity, err := s.fakeEvaluationTaskRepository.get(s.tenantID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	return evaluationEntityToDetail(entity)
+}
+
+func (s *evaluationMemoryStorage) update(
+	taskID string,
+	update func(*types.EvaluationDetail),
+) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := evaluationTaskRepositoryKey{tenantID: s.tenantID, taskID: taskID}
+	current, ok := s.tasks[key]
+	if !ok {
+		return interfaces.ErrEvaluationTaskNotFound
+	}
+	detail, err := evaluationEntityToDetail(current)
+	if err != nil {
+		return err
+	}
+	update(detail)
+	leaseExpiresAt := time.Now().UTC().Add(time.Hour)
+	updated, err := evaluationDetailToEntity(
+		detail,
+		current.TemporaryKnowledgeBaseID,
+		current.OwnerID,
+		leaseExpiresAt,
+	)
+	if err != nil {
+		return err
+	}
+	updated.TemporaryKnowledgeID = current.TemporaryKnowledgeID
+	updated.Version = current.Version
+	updated.HeartbeatAt = current.HeartbeatAt
+	updated.CreatedAt = current.CreatedAt
+	updated.UpdatedAt = current.UpdatedAt
+	if current.LeaseExpiresAt == nil {
+		updated.LeaseExpiresAt = nil
+	}
+	s.tasks[key] = cloneEvaluationTaskEntity(updated)
+	return nil
+}
+
+type evaluationTaskRepositoryCall struct {
+	Method   string
+	TenantID uint64
+	TaskID   string
+}
+
+type fakeEvaluationTaskRepository struct {
+	mu    sync.Mutex
+	tasks map[evaluationTaskRepositoryKey]*types.EvaluationTaskEntity
+	calls []evaluationTaskRepositoryCall
+
+	createErr    error
+	getErr       error
+	startErr     error
+	progressErr  error
+	knowledgeErr error
+	terminalErr  error
+
+	startEntered chan<- struct{}
+	startRelease <-chan struct{}
+}
+
+type evaluationTaskRepositoryKey struct {
+	tenantID uint64
+	taskID   string
+}
+
+func newFakeEvaluationTaskRepository() *fakeEvaluationTaskRepository {
+	return &fakeEvaluationTaskRepository{
+		tasks: make(map[evaluationTaskRepositoryKey]*types.EvaluationTaskEntity),
+	}
+}
+
+func (r *fakeEvaluationTaskRepository) CreateTask(
+	_ context.Context,
+	tenantID uint64,
+	task *types.EvaluationTaskEntity,
+) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	taskID := ""
+	if task != nil {
+		taskID = task.ID
+	}
+	r.recordLocked("CreateTask", tenantID, taskID)
+	if r.createErr != nil {
+		return r.createErr
+	}
+	if task == nil {
+		return errors.New("create evaluation task: task is required")
+	}
+	if task.TenantID != tenantID {
+		return interfaces.ErrEvaluationTaskTenantMismatch
+	}
+	key := evaluationTaskRepositoryKey{tenantID: tenantID, taskID: task.ID}
+	if _, exists := r.tasks[key]; exists {
+		return interfaces.ErrEvaluationTaskAlreadyExists
+	}
+
+	if task.Version == 0 {
+		task.Version = 1
+	}
+	task.StartTime = task.StartTime.UTC()
+	if task.LeaseExpiresAt != nil {
+		leaseExpiresAt := task.LeaseExpiresAt.UTC()
+		task.LeaseExpiresAt = &leaseExpiresAt
+	}
+	if !task.HeartbeatAt.IsZero() {
+		task.HeartbeatAt = task.HeartbeatAt.UTC()
+	}
+	if task.CreatedAt.IsZero() {
+		task.CreatedAt = task.StartTime
+	}
+	if task.UpdatedAt.IsZero() {
+		task.UpdatedAt = task.StartTime
+	}
+	r.tasks[key] = cloneEvaluationTaskEntity(task)
+	return nil
+}
+
+func (r *fakeEvaluationTaskRepository) GetTask(
+	_ context.Context,
+	tenantID uint64,
+	taskID string,
+) (*types.EvaluationTaskEntity, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.recordLocked("GetTask", tenantID, taskID)
+	if r.getErr != nil {
+		return nil, r.getErr
+	}
+	task, ok := r.tasks[evaluationTaskRepositoryKey{tenantID: tenantID, taskID: taskID}]
+	if !ok {
+		return nil, interfaces.ErrEvaluationTaskNotFound
+	}
+	return cloneEvaluationTaskEntity(task), nil
+}
+
+func (r *fakeEvaluationTaskRepository) TryStartTask(
+	_ context.Context,
+	command types.EvaluationTaskStartCommand,
+) (*types.EvaluationTaskEntity, error) {
+	r.mu.Lock()
+	r.recordLocked("TryStartTask", command.TenantID, command.TaskID)
+	startErr := r.startErr
+	startEntered := r.startEntered
+	startRelease := r.startRelease
+	r.mu.Unlock()
+
+	if startEntered != nil {
+		select {
+		case startEntered <- struct{}{}:
+		default:
+		}
+	}
+	if startRelease != nil {
+		<-startRelease
+	}
+	if startErr != nil {
+		return nil, startErr
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	task, err := r.mutableTaskLocked(
+		command.TenantID,
+		command.TaskID,
+		command.OwnerID,
+		command.ExpectedVersion,
+		types.EvaluationStatuePending,
+	)
+	if err != nil {
+		return nil, err
+	}
+	now := command.Now.UTC()
+	leaseExpiresAt := command.LeaseExpiresAt.UTC()
+	task.Status = types.EvaluationStatueRunning
+	task.ErrMsg = ""
+	task.EndTime = nil
+	task.CleanupErrors = types.JSON(`[]`)
+	task.HeartbeatAt = now
+	task.LeaseExpiresAt = &leaseExpiresAt
+	task.UpdatedAt = now
+	task.Version++
+	return cloneEvaluationTaskEntity(task), nil
+}
+
+func (r *fakeEvaluationTaskRepository) PublishProgress(
+	_ context.Context,
+	command types.EvaluationTaskProgressCommand,
+) (*types.EvaluationTaskEntity, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.recordLocked("PublishProgress", command.TenantID, command.TaskID)
+	if r.progressErr != nil {
+		return nil, r.progressErr
+	}
+	task, err := r.mutableTaskLocked(
+		command.TenantID,
+		command.TaskID,
+		command.OwnerID,
+		command.ExpectedVersion,
+		types.EvaluationStatueRunning,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if (task.Total != 0 && task.Total != command.Total) || task.Finished > command.Finished {
+		return nil, interfaces.ErrEvaluationTaskStateConflict
+	}
+	now := command.Now.UTC()
+	leaseExpiresAt := command.LeaseExpiresAt.UTC()
+	task.Total = command.Total
+	task.Finished = command.Finished
+	task.Metric = append(types.JSON(nil), command.Metric...)
+	if task.HeartbeatAt.Before(now) {
+		task.HeartbeatAt = now
+	}
+	if task.LeaseExpiresAt == nil || task.LeaseExpiresAt.Before(leaseExpiresAt) {
+		task.LeaseExpiresAt = &leaseExpiresAt
+	}
+	if task.UpdatedAt.Before(now) {
+		task.UpdatedAt = now
+	}
+	task.Version++
+	return cloneEvaluationTaskEntity(task), nil
+}
+
+func (r *fakeEvaluationTaskRepository) RecordTemporaryKnowledge(
+	_ context.Context,
+	command types.EvaluationTaskKnowledgeCommand,
+) (*types.EvaluationTaskEntity, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.recordLocked("RecordTemporaryKnowledge", command.TenantID, command.TaskID)
+	if r.knowledgeErr != nil {
+		return nil, r.knowledgeErr
+	}
+	task, err := r.mutableTaskLocked(
+		command.TenantID,
+		command.TaskID,
+		command.OwnerID,
+		command.ExpectedVersion,
+		types.EvaluationStatueRunning,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if task.TemporaryKnowledgeID != "" {
+		return nil, interfaces.ErrEvaluationTaskStateConflict
+	}
+	task.TemporaryKnowledgeID = command.TemporaryKnowledgeID
+	if updatedAt := command.UpdatedAt.UTC(); task.UpdatedAt.Before(updatedAt) {
+		task.UpdatedAt = updatedAt
+	}
+	task.Version++
+	return cloneEvaluationTaskEntity(task), nil
+}
+
+func (r *fakeEvaluationTaskRepository) PublishTerminal(
+	_ context.Context,
+	command types.EvaluationTaskTerminalCommand,
+) (*types.EvaluationTaskEntity, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.recordLocked("PublishTerminal", command.TenantID, command.TaskID)
+	if r.terminalErr != nil {
+		return nil, r.terminalErr
+	}
+	task, err := r.mutableTaskInStatesLocked(
+		command.TenantID,
+		command.TaskID,
+		command.OwnerID,
+		command.ExpectedVersion,
+		types.EvaluationStatuePending,
+		types.EvaluationStatueRunning,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if command.Status != types.EvaluationStatueSuccess &&
+		command.Status != types.EvaluationStatueFailed &&
+		command.Status != types.EvaluationStatueTimedOut {
+		return nil, interfaces.ErrEvaluationTaskStateConflict
+	}
+	endTime := command.EndTime.UTC()
+	task.Status = command.Status
+	task.EndTime = &endTime
+	task.ErrMsg = command.ErrMsg
+	task.CleanupErrors = append(types.JSON(nil), command.CleanupErrors...)
+	task.Metric = append(types.JSON(nil), command.Metric...)
+	task.LeaseExpiresAt = nil
+	if task.UpdatedAt.Before(endTime) {
+		task.UpdatedAt = endTime
+	}
+	task.Version++
+	return cloneEvaluationTaskEntity(task), nil
+}
+
+func (r *fakeEvaluationTaskRepository) register(task *types.EvaluationTaskEntity) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if task == nil {
+		return
+	}
+	r.tasks[evaluationTaskRepositoryKey{tenantID: task.TenantID, taskID: task.ID}] = cloneEvaluationTaskEntity(task)
+}
+
+func (r *fakeEvaluationTaskRepository) get(
+	tenantID uint64,
+	taskID string,
+) (*types.EvaluationTaskEntity, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	task, ok := r.tasks[evaluationTaskRepositoryKey{tenantID: tenantID, taskID: taskID}]
+	if !ok {
+		return nil, interfaces.ErrEvaluationTaskNotFound
+	}
+	return cloneEvaluationTaskEntity(task), nil
+}
+
+func (r *fakeEvaluationTaskRepository) callsSnapshot() []evaluationTaskRepositoryCall {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]evaluationTaskRepositoryCall(nil), r.calls...)
+}
+
+func (r *fakeEvaluationTaskRepository) countCalls(method string) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	count := 0
+	for _, call := range r.calls {
+		if call.Method == method {
+			count++
+		}
+	}
+	return count
+}
+
+func (r *fakeEvaluationTaskRepository) recordLocked(method string, tenantID uint64, taskID string) {
+	r.calls = append(r.calls, evaluationTaskRepositoryCall{
+		Method:   method,
+		TenantID: tenantID,
+		TaskID:   taskID,
+	})
+}
+
+func (r *fakeEvaluationTaskRepository) mutableTaskLocked(
+	tenantID uint64,
+	taskID string,
+	ownerID string,
+	expectedVersion uint64,
+	expectedStatus types.EvaluationStatue,
+) (*types.EvaluationTaskEntity, error) {
+	return r.mutableTaskInStatesLocked(tenantID, taskID, ownerID, expectedVersion, expectedStatus)
+}
+
+func (r *fakeEvaluationTaskRepository) mutableTaskInStatesLocked(
+	tenantID uint64,
+	taskID string,
+	ownerID string,
+	expectedVersion uint64,
+	expectedStatuses ...types.EvaluationStatue,
+) (*types.EvaluationTaskEntity, error) {
+	task, ok := r.tasks[evaluationTaskRepositoryKey{tenantID: tenantID, taskID: taskID}]
+	if !ok {
+		return nil, interfaces.ErrEvaluationTaskNotFound
+	}
+	if task.OwnerID != ownerID {
+		return nil, interfaces.ErrEvaluationTaskOwnerConflict
+	}
+	statusMatches := false
+	for _, expectedStatus := range expectedStatuses {
+		if task.Status == expectedStatus {
+			statusMatches = true
+			break
+		}
+	}
+	if !statusMatches {
+		return nil, interfaces.ErrEvaluationTaskStateConflict
+	}
+	if task.Version != expectedVersion {
+		return nil, interfaces.ErrEvaluationTaskVersionConflict
+	}
+	return task, nil
+}
+
+func cloneEvaluationTaskEntity(task *types.EvaluationTaskEntity) *types.EvaluationTaskEntity {
+	if task == nil {
+		return nil
+	}
+	cloned := *task
+	cloned.Params = append(types.JSON(nil), task.Params...)
+	cloned.Metric = append(types.JSON(nil), task.Metric...)
+	cloned.CleanupErrors = append(types.JSON(nil), task.CleanupErrors...)
+	if task.EndTime != nil {
+		endTime := *task.EndTime
+		cloned.EndTime = &endTime
+	}
+	if task.LeaseExpiresAt != nil {
+		leaseExpiresAt := *task.LeaseExpiresAt
+		cloned.LeaseExpiresAt = &leaseExpiresAt
+	}
+	return &cloned
+}
+
+var _ interfaces.EvaluationTaskRepository = (*fakeEvaluationTaskRepository)(nil)

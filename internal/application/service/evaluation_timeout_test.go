@@ -124,7 +124,9 @@ func newEvaluationTimeoutDetail(storage *evaluationMemoryStorage) *types.Evaluat
 			DatasetID: "dataset",
 			Status:    types.EvaluationStatuePending,
 		},
-		Params: &types.ChatManage{},
+		Params: &types.ChatManage{PipelineRequest: types.PipelineRequest{
+			ChatModelID: "test-chat-model",
+		}},
 	}
 	storage.register(detail)
 	return detail
@@ -288,7 +290,8 @@ func TestEvaluationServiceMarksTaskTimedOutAfterIndependentCleanup(t *testing.T)
 			contextObserved: taskContextObserved,
 			deadlineError:   workerDeadlineError,
 		},
-		evaluationMemoryStorage: storage,
+		evaluationTaskRepository: storage,
+		ownerID:                  storage.ownerID,
 	}
 
 	result := make(chan error, 1)
@@ -363,7 +366,8 @@ func TestEvaluationServiceKeepsBusinessErrorWhenCleanupCrossesTaskDeadline(t *te
 			err:             workerErr,
 			contextObserved: taskContextObserved,
 		},
-		evaluationMemoryStorage: storage,
+		evaluationTaskRepository: storage,
+		ownerID:                  storage.ownerID,
 	}
 
 	result := make(chan error, 1)
@@ -418,7 +422,8 @@ func TestEvaluationServiceKeepsSuccessWhenCleanupCrossesTaskDeadline(t *testing.
 			contextObserved: taskContextObserved,
 			safetyRelease:   qaCompleted,
 		},
-		evaluationMemoryStorage: storage,
+		evaluationTaskRepository: storage,
+		ownerID:                  storage.ownerID,
 	}
 
 	result := make(chan error, 1)
@@ -451,11 +456,12 @@ func TestEvaluationServiceKeepsDownstreamDeadlineFailureFailed(t *testing.T) {
 		config: &config.Config{
 			Evaluation: &config.EvaluationConfig{TaskTimeout: time.Hour},
 		},
-		dataset:                 &evaluationTimeoutDatasetStub{},
-		knowledgeService:        &evaluationTimeoutKnowledgeStub{},
-		knowledgeBaseService:    &evaluationTimeoutKnowledgeBaseStub{},
-		sessionService:          &evaluationTimeoutSessionStub{err: context.DeadlineExceeded},
-		evaluationMemoryStorage: storage,
+		dataset:                  &evaluationTimeoutDatasetStub{},
+		knowledgeService:         &evaluationTimeoutKnowledgeStub{},
+		knowledgeBaseService:     &evaluationTimeoutKnowledgeBaseStub{},
+		sessionService:           &evaluationTimeoutSessionStub{err: context.DeadlineExceeded},
+		evaluationTaskRepository: storage,
+		ownerID:                  storage.ownerID,
 	}
 
 	runErr := service.runEvaluation(context.Background(), detail, "evaluation-kb")

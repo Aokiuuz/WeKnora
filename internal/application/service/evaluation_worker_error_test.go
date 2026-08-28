@@ -135,16 +135,19 @@ func TestEvaluationServiceEvalDatasetPreservesWorkerError(t *testing.T) {
 			ID:        "evaluation-task",
 			DatasetID: "dataset",
 		},
-		Params: &types.ChatManage{},
+		Params: &types.ChatManage{PipelineRequest: types.PipelineRequest{
+			ChatModelID: "test-chat-model",
+		}},
 	}
 	storage.register(detail)
 
 	service := &EvaluationService{
-		dataset:                 &evaluationDatasetStub{dataset: dataset},
-		knowledgeService:        &evaluationKnowledgeStub{},
-		knowledgeBaseService:    &evaluationKnowledgeBaseStub{},
-		sessionService:          session,
-		evaluationMemoryStorage: storage,
+		dataset:                  &evaluationDatasetStub{dataset: dataset},
+		knowledgeService:         &evaluationKnowledgeStub{},
+		knowledgeBaseService:     &evaluationKnowledgeBaseStub{},
+		sessionService:           session,
+		evaluationTaskRepository: storage,
+		ownerID:                  storage.ownerID,
 	}
 
 	// Hold the failing worker in log formatting until the successful worker has
@@ -165,9 +168,13 @@ func TestEvaluationServiceEvalDatasetPreservesWorkerError(t *testing.T) {
 		timeout := time.NewTimer(5 * time.Second)
 		defer timeout.Stop()
 		for {
-			storage.mu.RLock()
-			finished := storage.store[detail.Task.ID].Task.Finished
-			storage.mu.RUnlock()
+			current, getErr := storage.get(detail.Task.ID)
+			if getErr != nil {
+				close(workerErr.release)
+				watchResult <- fmt.Errorf("load evaluation progress: %w", getErr)
+				return
+			}
+			finished := current.Task.Finished
 			if finished == 1 {
 				close(workerErr.release)
 				watchResult <- nil
@@ -238,7 +245,9 @@ func TestEvaluationServiceEvalDatasetConcurrentWorkerError(t *testing.T) {
 			ID:        "evaluation-task",
 			DatasetID: "dataset",
 		},
-		Params: &types.ChatManage{},
+		Params: &types.ChatManage{PipelineRequest: types.PipelineRequest{
+			ChatModelID: "test-chat-model",
+		}},
 	}
 	storage.register(detail)
 
@@ -251,7 +260,8 @@ func TestEvaluationServiceEvalDatasetConcurrentWorkerError(t *testing.T) {
 			release: release,
 			err:     workerErr,
 		},
-		evaluationMemoryStorage: storage,
+		evaluationTaskRepository: storage,
+		ownerID:                  storage.ownerID,
 	}
 
 	err := service.EvalDataset(context.Background(), detail, "knowledge-base")

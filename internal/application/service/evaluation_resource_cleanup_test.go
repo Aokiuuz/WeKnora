@@ -145,9 +145,10 @@ func TestEvaluationServiceCleansTemporaryKnowledgeBaseOnPreparationFailure(t *te
 		t.Run(test.name, func(t *testing.T) {
 			recorder := newEvaluationCleanupRecorder()
 			service := &EvaluationService{
-				knowledgeBaseService:    &evaluationCleanupKnowledgeBaseStub{recorder: recorder},
-				modelService:            &evaluationCleanupModelStub{},
-				evaluationMemoryStorage: newEvaluationMemoryStorage(),
+				knowledgeBaseService:     &evaluationCleanupKnowledgeBaseStub{recorder: recorder},
+				modelService:             &evaluationCleanupModelStub{},
+				evaluationTaskRepository: newEvaluationMemoryStorage(),
+				ownerID:                  evaluationMemoryStorageOwnerID,
 			}
 			ctx := context.WithValue(
 				context.Background(),
@@ -252,8 +253,9 @@ func TestEvaluationServiceCleansTemporaryResourcesAfterBackgroundRun(t *testing.
 					recorder:  recorder,
 					createErr: test.knowledge,
 				},
-				sessionService:          &evaluationCleanupSessionStub{err: test.worker},
-				evaluationMemoryStorage: newEvaluationMemoryStorage(),
+				sessionService:           &evaluationCleanupSessionStub{err: test.worker},
+				evaluationTaskRepository: newEvaluationMemoryStorage(),
+				ownerID:                  evaluationMemoryStorageOwnerID,
 			}
 			ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
 

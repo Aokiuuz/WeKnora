@@ -27,6 +27,7 @@ func newEvaluationStorageFixture() *types.EvaluationDetail {
 		},
 		Params: &types.ChatManage{
 			PipelineRequest: types.PipelineRequest{
+				ChatModelID:      "test-chat-model",
 				Query:            "original query",
 				KnowledgeBaseIDs: nil,
 				KnowledgeIDs:     []string{"knowledge-1"},
@@ -309,8 +310,9 @@ func TestEvaluationServiceSeparatesResponseFromBackgroundRun(t *testing.T) {
 			entered: knowledgeEntered,
 			release: knowledgeRelease,
 		},
-		sessionService:          &evaluationLifecycleSessionStub{modelIDs: modelIDs},
-		evaluationMemoryStorage: newEvaluationMemoryStorage(),
+		sessionService:           &evaluationLifecycleSessionStub{modelIDs: modelIDs},
+		evaluationTaskRepository: newEvaluationMemoryStorage(),
+		ownerID:                  evaluationMemoryStorageOwnerID,
 	}
 
 	created, err := service.Evaluation(ctx, "dataset", "source-kb", "chat-model", "rerank-model")
