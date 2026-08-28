@@ -409,10 +409,10 @@ func (e *EvaluationService) EvalDataset(ctx context.Context, detail *types.Evalu
 
 			// Execute knowledge QA pipeline
 			logger.Infof(ctx, "Running knowledge QA for question: %s", qaPair.Question)
-			err = e.sessionService.KnowledgeQAByEvent(ctx, chatManage, types.Pipline["rag"])
-			if err != nil {
-				logger.Errorf(ctx, "Failed to process question %d: %v", i, err)
-				return err
+			qaErr := e.sessionService.KnowledgeQAByEvent(ctx, chatManage, types.Pipline["rag"])
+			if qaErr != nil {
+				logger.Errorf(ctx, "Failed to process question %d: %v", i, qaErr)
+				return qaErr
 			}
 
 			// Record evaluation metrics
