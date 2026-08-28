@@ -387,7 +387,11 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 
 // EvalDataset performs the actual evaluation of a dataset
 // Processes each QA pair in parallel and records metrics
-func (e *EvaluationService) EvalDataset(ctx context.Context, detail *types.EvaluationDetail, knowledgeBaseID string) error {
+func (e *EvaluationService) EvalDataset(
+	ctx context.Context,
+	detail *types.EvaluationDetail,
+	knowledgeBaseID string,
+) error {
 	logger.Info(ctx, "Start evaluating dataset")
 	logger.Infof(ctx, "Task ID: %s, Dataset ID: %s", detail.Task.ID, detail.Task.DatasetID)
 
@@ -436,7 +440,7 @@ func (e *EvaluationService) EvalDataset(ctx context.Context, detail *types.Evalu
 
 	// Initialize parallel evaluation metrics
 	var finished int
-	var mu sync.Mutex
+	var publishMu sync.Mutex
 	var g errgroup.Group
 	metricHook := NewHookMetric(len(dataset))
 
@@ -479,18 +483,22 @@ func (e *EvaluationService) EvalDataset(ctx context.Context, detail *types.Evalu
 			metricHook.recordSearchResult(i, chatManage.SearchResult)
 			metricHook.recordRerankResult(i, chatManage.RerankResult)
 			metricHook.recordChatResponse(i, chatManage.ChatResponse)
-			metricHook.recordFinish(i)
 
-			// Update progress metrics
-			mu.Lock()
+			// Publish each completed QA pair and its aggregate metric as one ordered snapshot.
+			publishMu.Lock()
+			metricHook.recordFinish(i)
 			finished += 1
+			finishedSnapshot := finished
 			metricResult := metricHook.MetricResult()
-			mu.Unlock()
-			e.evaluationMemoryStorage.update(detail.Task.ID, func(params *types.EvaluationDetail) {
+			updateErr := e.evaluationMemoryStorage.update(detail.Task.ID, func(params *types.EvaluationDetail) {
 				params.Metric = metricResult
-				params.Task.Finished = finished
-				logger.Infof(ctx, "Updated task progress: %d/%d completed", finished, params.Task.Total)
+				params.Task.Finished = finishedSnapshot
 			})
+			publishMu.Unlock()
+			if updateErr != nil {
+				return fmt.Errorf("publish progress for QA pair %d: %w", i, updateErr)
+			}
+			logger.Infof(ctx, "Updated task progress: %d/%d completed", finishedSnapshot, len(dataset))
 			return nil
 		})
 	}
@@ -503,10 +511,13 @@ func (e *EvaluationService) EvalDataset(ctx context.Context, detail *types.Evalu
 	}
 
 	// Final update of evaluation metrics
-	e.evaluationMemoryStorage.update(detail.Task.ID, func(params *types.EvaluationDetail) {
-		params.Metric = metricHook.MetricResult()
+	finalMetric := metricHook.MetricResult()
+	if err := e.evaluationMemoryStorage.update(detail.Task.ID, func(params *types.EvaluationDetail) {
+		params.Metric = finalMetric
 		params.Task.Finished = finished
-	})
+	}); err != nil {
+		return fmt.Errorf("publish final evaluation progress: %w", err)
+	}
 
 	logger.Infof(ctx, "Dataset evaluation completed successfully, task ID: %s", detail.Task.ID)
 	return nil
