@@ -130,6 +130,7 @@ type fakeEvaluationTaskRepository struct {
 	heartbeatBlockCount int
 	claimErr            error
 	cancelErr           error
+	retentionErr        error
 	lastListLimit       int
 
 	startEntered chan<- struct{}
@@ -589,6 +590,54 @@ func (r *fakeEvaluationTaskRepository) DeleteTask(
 	default:
 		return interfaces.ErrEvaluationTaskStateConflict
 	}
+}
+
+func (r *fakeEvaluationTaskRepository) DeleteExpiredTerminalTasks(
+	_ context.Context,
+	cutoff time.Time,
+	limit int,
+) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.recordLocked("DeleteExpiredTerminalTasks", 0, "")
+	if r.retentionErr != nil {
+		return 0, r.retentionErr
+	}
+	if limit <= 0 {
+		return 0, errors.New("delete expired evaluation tasks: limit must be positive")
+	}
+	cutoff = cutoff.UTC()
+	expired := make([]*types.EvaluationTaskEntity, 0)
+	for _, task := range r.tasks {
+		switch task.Status {
+		case types.EvaluationStatueSuccess,
+			types.EvaluationStatueFailed,
+			types.EvaluationStatueTimedOut,
+			types.EvaluationStatueInterrupted,
+			types.EvaluationStatueCanceled:
+		default:
+			continue
+		}
+		if task.EndTime == nil || !task.EndTime.UTC().Before(cutoff) {
+			continue
+		}
+		expired = append(expired, task)
+	}
+	sort.Slice(expired, func(i, j int) bool {
+		left, right := expired[i].EndTime.UTC(), expired[j].EndTime.UTC()
+		if !left.Equal(right) {
+			return left.Before(right)
+		}
+		return expired[i].ID < expired[j].ID
+	})
+	if len(expired) > limit {
+		expired = expired[:limit]
+	}
+	for _, task := range expired {
+		delete(r.tasks, evaluationTaskRepositoryKey{tenantID: task.TenantID, taskID: task.ID})
+	}
+	return int64(len(expired)), nil
 }
 
 func (r *fakeEvaluationTaskRepository) register(task *types.EvaluationTaskEntity) {

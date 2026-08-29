@@ -63,4 +63,9 @@ type EvaluationTaskRepository interface {
 		taskID string,
 		now time.Time,
 	) error
+	DeleteExpiredTerminalTasks(
+		ctx context.Context,
+		cutoff time.Time,
+		limit int,
+	) (int64, error)
 }

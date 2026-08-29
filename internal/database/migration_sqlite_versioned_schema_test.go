@@ -41,7 +41,7 @@ var versionedSQLiteColumns = map[string][]string{
 	},
 }
 
-const expectedSQLiteMigrationVersion = 15
+const expectedSQLiteMigrationVersion = 16
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -260,6 +260,12 @@ func assertSQLiteEvaluationTaskSchema(t *testing.T, db *sql.DB) {
 		db,
 		"idx_evaluation_tasks_active_lease",
 		"WHERE deleted_at IS NULL AND status IN (0, 1)",
+	)
+	assertSQLitePartialIndex(
+		t,
+		db,
+		"idx_evaluation_tasks_retention",
+		"WHERE status IN (2, 3, 4, 5, 6) AND end_time IS NOT NULL",
 	)
 
 	insert := `INSERT INTO evaluation_tasks (

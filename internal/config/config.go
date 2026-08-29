@@ -45,6 +45,10 @@ type Config struct {
 // EvaluationConfig configures evaluation task execution.
 type EvaluationConfig struct {
 	TaskTimeout time.Duration `yaml:"task_timeout" json:"task_timeout"`
+	// RetentionDays keeps terminal evaluation tasks for this many days before
+	// physical cleanup. Nil means the default, zero disables the cleanup, and
+	// a negative value fails startup.
+	RetentionDays *int `yaml:"retention_days" json:"retention_days"`
 }
 
 // DefaultEvaluationTaskTimeout bounds the execution phase of one background evaluation task.
@@ -56,6 +60,26 @@ func EvaluationTaskTimeout(cfg *Config) time.Duration {
 		return cfg.Evaluation.TaskTimeout
 	}
 	return DefaultEvaluationTaskTimeout
+}
+
+// DefaultEvaluationRetentionDays keeps terminal evaluation tasks for 90 days
+// when retention_days is not configured.
+const DefaultEvaluationRetentionDays = 90
+
+// EvaluationRetentionDays resolves the retention configuration: nil means the
+// default, zero disables the cleanup, and a negative value is a startup error.
+func EvaluationRetentionDays(cfg *Config) (days int, enabled bool, err error) {
+	if cfg == nil || cfg.Evaluation == nil || cfg.Evaluation.RetentionDays == nil {
+		return DefaultEvaluationRetentionDays, true, nil
+	}
+	days = *cfg.Evaluation.RetentionDays
+	if days < 0 {
+		return 0, false, fmt.Errorf("evaluation retention_days must be >= 0, got %d", days)
+	}
+	if days == 0 {
+		return 0, false, nil
+	}
+	return days, true, nil
 }
 
 // AgentConfig represents the global agent settings.
@@ -795,6 +819,11 @@ func applyEvaluationEnvOverrides(cfg *Config) {
 	if value := strings.TrimSpace(os.Getenv("WEKNORA_EVALUATION_TASK_TIMEOUT")); value != "" {
 		if timeout, err := time.ParseDuration(value); err == nil && timeout > 0 {
 			cfg.Evaluation.TaskTimeout = timeout
+		}
+	}
+	if value := strings.TrimSpace(os.Getenv("WEKNORA_EVALUATION_RETENTION_DAYS")); value != "" {
+		if days, err := strconv.Atoi(value); err == nil {
+			cfg.Evaluation.RetentionDays = &days
 		}
 	}
 }

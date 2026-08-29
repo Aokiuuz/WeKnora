@@ -361,6 +361,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] Data source sync framework registered")
 	must(container.Invoke(startAuditLogRetention))
 	must(container.Invoke(startEvaluationTaskRecovery))
+	must(container.Invoke(startEvaluationTaskRetention))
 	logger.Debugf(ctx, "[Container] Audit log retention runner registered")
 	must(container.Provide(service.NewHousekeepingService))
 	must(container.Invoke(startHousekeepingService))
@@ -1810,4 +1811,28 @@ func startEvaluationTaskRecovery(
 		runner.Stop()
 		return nil
 	})
+}
+
+// startEvaluationTaskRetention validates the retention configuration and
+// starts the bounded cleanup schedule. A negative retention_days fails
+// container startup; zero disables the runner.
+func startEvaluationTaskRetention(
+	cfg *config.Config,
+	evaluationTaskRepository interfaces.EvaluationTaskRepository,
+	cleaner interfaces.ResourceCleaner,
+) error {
+	days, enabled, err := config.EvaluationRetentionDays(cfg)
+	if err != nil {
+		return err
+	}
+	if !enabled {
+		return nil
+	}
+	runner := service.NewEvaluationTaskRetentionRunner(evaluationTaskRepository, days)
+	runner.Start(context.Background())
+	cleaner.RegisterWithName("EvaluationTaskRetentionRunner", func() error {
+		runner.Stop()
+		return nil
+	})
+	return nil
 }

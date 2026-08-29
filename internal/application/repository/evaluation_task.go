@@ -561,6 +561,51 @@ func isKnownEvaluationTaskStatus(status types.EvaluationStatue) bool {
 	return status >= types.EvaluationStatuePending && status <= types.EvaluationStatueCanceled
 }
 
+// DeleteExpiredTerminalTasks physically removes up to limit terminal tasks
+// whose end_time is older than cutoff, including already soft-deleted rows.
+// Pending and Running tasks are never touched. Deletion happens oldest first
+// so repeated bounded batches converge. Child tables owned by later
+// milestones must cascade through foreign keys or explicit same-transaction
+// deletion; M2 has no evaluation child tables.
+func (r *evaluationTaskRepository) DeleteExpiredTerminalTasks(
+	ctx context.Context,
+	cutoff time.Time,
+	limit int,
+) (int64, error) {
+	if cutoff.IsZero() {
+		return 0, errors.New("delete expired evaluation tasks: cutoff is required")
+	}
+	if limit <= 0 {
+		return 0, errors.New("delete expired evaluation tasks: limit must be positive")
+	}
+	cutoff = cutoff.UTC()
+
+	terminalStatuses := []types.EvaluationStatue{
+		types.EvaluationStatueSuccess,
+		types.EvaluationStatueFailed,
+		types.EvaluationStatueTimedOut,
+		types.EvaluationStatueInterrupted,
+		types.EvaluationStatueCanceled,
+	}
+	batch := r.db.WithContext(ctx).
+		Model(&types.EvaluationTaskEntity{}).
+		Unscoped().
+		Select("id").
+		Where("status IN ? AND end_time IS NOT NULL AND end_time < ?", terminalStatuses, cutoff).
+		Order("end_time ASC").
+		Order("id ASC").
+		Limit(limit)
+
+	result := r.db.WithContext(ctx).
+		Unscoped().
+		Where("id IN (?)", batch).
+		Delete(&types.EvaluationTaskEntity{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("delete expired evaluation tasks: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
 // DeleteTask soft-deletes one terminal task. Missing, cross-tenant, and
 // already deleted tasks are idempotent successes; active tasks are rejected
 // with a state conflict.
