@@ -48,6 +48,22 @@ func (s *stubEvaluationService) EvaluationResult(
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (s *stubEvaluationService) CancelEvaluation(
+	context.Context, string,
+) (*types.EvaluationDetail, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *stubEvaluationService) ListEvaluations(
+	context.Context, types.EvaluationTaskListInput,
+) (*types.EvaluationTaskListPage, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *stubEvaluationService) DeleteEvaluation(context.Context, string) error {
+	return fmt.Errorf("not implemented")
+}
+
 func setupEvaluationHandlerRouter(svc *stubEvaluationService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()

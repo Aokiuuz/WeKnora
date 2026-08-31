@@ -63,6 +63,19 @@ func (s *stubEvaluationDatasetRegistry) CreateVersion(
 	}, nil
 }
 
+func (s *stubEvaluationDatasetRegistry) GetDataset(
+	_ context.Context, tenantID uint64, datasetID string,
+) (*types.EvaluationDataset, error) {
+	s.lastTenant = tenantID
+	s.lastDatasetID = datasetID
+	for _, dataset := range s.datasets {
+		if dataset.ID == datasetID {
+			return dataset, nil
+		}
+	}
+	return nil, interfaces.ErrEvaluationDatasetNotFound
+}
+
 func (s *stubEvaluationDatasetRegistry) ListDatasets(
 	_ context.Context, tenantID uint64,
 ) ([]*types.EvaluationDataset, error) {
