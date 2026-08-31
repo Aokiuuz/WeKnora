@@ -18,6 +18,7 @@ type observedChat struct {
 	inner    chat.Chat
 }
 
+// WrapChat records unary and streaming chat calls.
 func (r *Recorder) WrapChat(model *types.Model, inner chat.Chat) chat.Chat {
 	if r == nil || r.store == nil || inner == nil {
 		return inner
@@ -25,7 +26,11 @@ func (r *Recorder) WrapChat(model *types.Model, inner chat.Chat) chat.Chat {
 	return &observedChat{recorder: r, model: model, inner: inner}
 }
 
-func (o *observedChat) Chat(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (*types.ChatResponse, error) {
+func (o *observedChat) Chat(
+	ctx context.Context,
+	messages []chat.Message,
+	opts *chat.ChatOptions,
+) (*types.ChatResponse, error) {
 	call, strict, err := o.recorder.start(ctx, o.model, "chat")
 	if err != nil && strict {
 		return nil, err
@@ -39,7 +44,11 @@ func (o *observedChat) Chat(ctx context.Context, messages []chat.Message, opts *
 	return response, providerErr
 }
 
-func (o *observedChat) ChatStream(ctx context.Context, messages []chat.Message, opts *chat.ChatOptions) (<-chan types.StreamResponse, error) {
+func (o *observedChat) ChatStream(
+	ctx context.Context,
+	messages []chat.Message,
+	opts *chat.ChatOptions,
+) (<-chan types.StreamResponse, error) {
 	call, strict, err := o.recorder.start(ctx, o.model, "chat_stream")
 	if err != nil && strict {
 		return nil, err
@@ -67,8 +76,8 @@ func (o *observedChat) ChatStream(ctx context.Context, messages []chat.Message, 
 					return
 				}
 				if response.Usage != nil {
-					copy := *response.Usage
-					usage = &copy
+					cloned := *response.Usage
+					usage = &cloned
 				}
 				if response.ResponseType == types.ResponseTypeError {
 					status = types.ModelCallStatusError
@@ -96,6 +105,7 @@ type observedEmbedder struct {
 	inner    embedding.Embedder
 }
 
+// WrapEmbedder records provider embedding calls.
 func (r *Recorder) WrapEmbedder(model *types.Model, inner embedding.Embedder) embedding.Embedder {
 	if r == nil || r.store == nil || inner == nil {
 		return inner
@@ -112,6 +122,7 @@ func (o *observedEmbedder) Embed(ctx context.Context, text string) ([]float32, e
 	call.finish(ctx, statusForError(providerErr), providerErr, nil)
 	return result, providerErr
 }
+
 func (o *observedEmbedder) BatchEmbed(ctx context.Context, texts []string) ([][]float32, error) {
 	call, strict, err := o.recorder.start(ctx, o.model, "embedding_batch")
 	if err != nil && strict {
@@ -121,7 +132,12 @@ func (o *observedEmbedder) BatchEmbed(ctx context.Context, texts []string) ([][]
 	call.finish(ctx, statusForError(providerErr), providerErr, nil)
 	return result, providerErr
 }
-func (o *observedEmbedder) BatchEmbedWithPool(ctx context.Context, _ embedding.Embedder, texts []string) ([][]float32, error) {
+
+func (o *observedEmbedder) BatchEmbedWithPool(
+	ctx context.Context,
+	_ embedding.Embedder,
+	texts []string,
+) ([][]float32, error) {
 	call, strict, err := o.recorder.start(ctx, o.model, "embedding_batch")
 	if err != nil && strict {
 		return nil, err
@@ -140,12 +156,14 @@ type observedReranker struct {
 	inner    rerank.Reranker
 }
 
+// WrapReranker records provider rerank calls.
 func (r *Recorder) WrapReranker(model *types.Model, inner rerank.Reranker) rerank.Reranker {
 	if r == nil || r.store == nil || inner == nil {
 		return inner
 	}
 	return &observedReranker{recorder: r, model: model, inner: inner}
 }
+
 func (o *observedReranker) Rerank(ctx context.Context, query string, documents []string) ([]rerank.RankResult, error) {
 	call, strict, err := o.recorder.start(ctx, o.model, "rerank")
 	if err != nil && strict {
@@ -164,12 +182,14 @@ type observedVLM struct {
 	inner    vlm.VLM
 }
 
+// WrapVLM records vision-language model calls.
 func (r *Recorder) WrapVLM(model *types.Model, inner vlm.VLM) vlm.VLM {
 	if r == nil || r.store == nil || inner == nil {
 		return inner
 	}
 	return &observedVLM{recorder: r, model: model, inner: inner}
 }
+
 func (o *observedVLM) Predict(ctx context.Context, images [][]byte, prompt string) (string, error) {
 	call, strict, err := o.recorder.start(ctx, o.model, "vlm")
 	if err != nil && strict {
@@ -188,12 +208,14 @@ type observedASR struct {
 	inner    asr.ASR
 }
 
+// WrapASR records automatic speech recognition calls.
 func (r *Recorder) WrapASR(model *types.Model, inner asr.ASR) asr.ASR {
 	if r == nil || r.store == nil || inner == nil {
 		return inner
 	}
 	return &observedASR{recorder: r, model: model, inner: inner}
 }
+
 func (o *observedASR) Transcribe(ctx context.Context, audio []byte, fileName string) (*asr.TranscriptionResult, error) {
 	call, strict, err := o.recorder.start(ctx, o.model, "asr")
 	if err != nil && strict {

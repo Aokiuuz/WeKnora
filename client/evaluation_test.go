@@ -329,7 +329,10 @@ func TestGetEvaluationResultParsesNestedDetail(t *testing.T) {
 				"durations":      map[string]any{"total_ms": 125},
 				"samples":        map[string]any{"total": 1, "started": 1, "success": 1},
 				"failure":        map[string]any{"numerator": 0, "denominator": 1},
-				"tokens":         map[string]any{"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14, "reported_samples": 1, "unreported_samples": 0},
+				"tokens": map[string]any{
+					"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14,
+					"reported_samples": 1, "unreported_samples": 0,
+				},
 			},
 		})
 	}))

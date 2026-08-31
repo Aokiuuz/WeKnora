@@ -17,8 +17,10 @@ import (
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
+// ReportSchemaVersion identifies the machine-readable regression report contract.
 const ReportSchemaVersion = 1
 
+// Dataset is the checked-in deterministic evaluation fixture.
 type Dataset struct {
 	SchemaVersion int    `json:"schema_version"`
 	DatasetID     string `json:"dataset_id"`
@@ -53,6 +55,7 @@ type Dataset struct {
 	} `json:"samples"`
 }
 
+// Report is the authoritative regression artifact.
 type Report struct {
 	SchemaVersion int                                 `json:"schema_version"`
 	Dataset       DatasetIdentity                     `json:"dataset"`
@@ -64,6 +67,7 @@ type Report struct {
 	Regression    RegressionResult                    `json:"regression"`
 }
 
+// DatasetIdentity pins the logical dataset and its canonical content hash.
 type DatasetIdentity struct {
 	ID            string `json:"id"`
 	Version       int    `json:"version"`
@@ -71,6 +75,7 @@ type DatasetIdentity struct {
 	Fixture       string `json:"fixture"`
 }
 
+// Configuration records the resolved deterministic runner settings.
 type Configuration struct {
 	Pipeline     string `json:"pipeline"`
 	Seed         int64  `json:"seed"`
@@ -80,6 +85,7 @@ type Configuration struct {
 	ExternalKeys string `json:"external_keys"`
 }
 
+// Environment records the Go runtime facts relevant to reproduction.
 type Environment struct {
 	GoVersion string `json:"go_version"`
 	GOOS      string `json:"goos"`
@@ -87,6 +93,7 @@ type Environment struct {
 	CPUs      int    `json:"cpus"`
 }
 
+// MetricResult records one resolved metric instance and its sample counts.
 type MetricResult struct {
 	Name         string   `json:"name"`
 	InstanceID   string   `json:"instance_id"`
@@ -100,23 +107,27 @@ type MetricResult struct {
 	NMissing     int      `json:"n_missing"`
 }
 
+// ThresholdConfig binds versioned regression limits to one dataset hash.
 type ThresholdConfig struct {
 	SchemaVersion int                  `json:"schema_version"`
 	DatasetSHA256 string               `json:"dataset_content_sha256"`
 	Metrics       map[string]Threshold `json:"metrics"`
 }
 
+// Threshold defines the baseline and permitted degradation for one metric.
 type Threshold struct {
 	Baseline               float64 `json:"baseline"`
 	MaxAbsoluteDegradation float64 `json:"max_absolute_degradation"`
 	Direction              string  `json:"direction"`
 }
 
+// RegressionResult contains the aggregate gate decision and per-metric checks.
 type RegressionResult struct {
 	Passed bool              `json:"passed"`
 	Checks []RegressionCheck `json:"checks"`
 }
 
+// RegressionCheck is one diagnostic comparison against a frozen baseline.
 type RegressionCheck struct {
 	Metric        string  `json:"metric"`
 	Baseline      float64 `json:"baseline"`
@@ -127,6 +138,7 @@ type RegressionCheck struct {
 	Passed        bool    `json:"passed"`
 }
 
+// BuildOptions selects the fixtures and immutable report identity.
 type BuildOptions struct {
 	DatasetPath   string
 	ThresholdPath string
@@ -135,10 +147,12 @@ type BuildOptions struct {
 	Environment   Environment
 }
 
+// RuntimeEnvironment returns the current Go runtime facts.
 func RuntimeEnvironment() Environment {
 	return Environment{GoVersion: runtime.Version(), GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, CPUs: runtime.NumCPU()}
 }
 
+// Build executes the deterministic fixture through the resolved metric plan.
 func Build(ctx context.Context, options BuildOptions) (*Report, error) {
 	datasetRaw, err := os.ReadFile(options.DatasetPath)
 	if err != nil {
@@ -194,10 +208,16 @@ func Build(ctx context.Context, options BuildOptions) (*Report, error) {
 	}
 	report := &Report{
 		SchemaVersion: ReportSchemaVersion,
-		Dataset:       DatasetIdentity{ID: dataset.DatasetID, Version: dataset.SchemaVersion, ContentSHA256: contentHash, Fixture: "dataset/golden/v1/dataset.json"},
-		Commit:        options.Commit,
-		Configuration: Configuration{Pipeline: "deterministic_fixture", Seed: 42, Concurrency: 1, SampleCount: len(dataset.Samples), Network: "disabled", ExternalKeys: "unused"},
-		MetricPlan:    plan.Snapshot.Clone(), Metrics: metrics, Environment: environment,
+		Dataset: DatasetIdentity{
+			ID: dataset.DatasetID, Version: dataset.SchemaVersion,
+			ContentSHA256: contentHash, Fixture: "dataset/golden/v1/dataset.json",
+		},
+		Commit: options.Commit,
+		Configuration: Configuration{
+			Pipeline: "deterministic_fixture", Seed: 42, Concurrency: 1,
+			SampleCount: len(dataset.Samples), Network: "disabled", ExternalKeys: "unused",
+		},
+		MetricPlan: plan.Snapshot.Clone(), Metrics: metrics, Environment: environment,
 	}
 	report.Regression = CheckThresholds(metrics, thresholds)
 	return report, nil
@@ -205,7 +225,10 @@ func Build(ctx context.Context, options BuildOptions) (*Report, error) {
 
 func validateThresholds(metrics []MetricResult, config ThresholdConfig) error {
 	if len(config.Metrics) != len(metrics) {
-		return fmt.Errorf("regression thresholds contain %d metrics; resolved plan contains %d", len(config.Metrics), len(metrics))
+		return fmt.Errorf(
+			"regression thresholds contain %d metrics; resolved plan contains %d",
+			len(config.Metrics), len(metrics),
+		)
 	}
 	for _, metric := range metrics {
 		threshold, exists := config.Metrics[metric.Name]
@@ -213,7 +236,10 @@ func validateThresholds(metrics []MetricResult, config ThresholdConfig) error {
 			return fmt.Errorf("regression threshold for metric %s is required", metric.Name)
 		}
 		if threshold.Direction != "higher_is_better" {
-			return fmt.Errorf("regression threshold for metric %s has unsupported direction %q", metric.Name, threshold.Direction)
+			return fmt.Errorf(
+				"regression threshold for metric %s has unsupported direction %q",
+				metric.Name, threshold.Direction,
+			)
 		}
 		if threshold.MaxAbsoluteDegradation < 0 {
 			return fmt.Errorf("regression threshold for metric %s must be non-negative", metric.Name)
@@ -225,18 +251,28 @@ func validateThresholds(metrics []MetricResult, config ThresholdConfig) error {
 func datasetContent(dataset *Dataset) *types.EvaluationDatasetVersionInput {
 	input := &types.EvaluationDatasetVersionInput{}
 	for _, passage := range dataset.Passages {
-		input.Passages = append(input.Passages, types.EvaluationDatasetPassageInput{PID: passage.PID, Content: passage.Content})
+		input.Passages = append(input.Passages, types.EvaluationDatasetPassageInput{
+			PID: passage.PID, Content: passage.Content,
+		})
 	}
 	for _, question := range dataset.Questions {
-		input.Questions = append(input.Questions, types.EvaluationDatasetQuestionInput{QID: question.QID, Question: question.Question, Answer: question.Answer})
+		input.Questions = append(input.Questions, types.EvaluationDatasetQuestionInput{
+			QID: question.QID, Question: question.Question, Answer: question.Answer,
+		})
 	}
 	for _, edge := range dataset.Relevance {
-		input.Relevance = append(input.Relevance, types.EvaluationDatasetRelevanceInput{QID: edge.QID, PID: edge.PID, Grade: edge.Grade})
+		input.Relevance = append(input.Relevance, types.EvaluationDatasetRelevanceInput{
+			QID: edge.QID, PID: edge.PID, Grade: edge.Grade,
+		})
 	}
 	return input
 }
 
-func computeSamples(ctx context.Context, dataset *Dataset, plan *metricregistry.ResolvedPlan) ([]*types.MetricResult, error) {
+func computeSamples(
+	ctx context.Context,
+	dataset *Dataset,
+	plan *metricregistry.ResolvedPlan,
+) ([]*types.MetricResult, error) {
 	questions := make(map[string]struct{ answer string })
 	for _, question := range dataset.Questions {
 		questions[question.QID] = struct{ answer string }{answer: question.Answer}
@@ -346,6 +382,7 @@ func applyOverrides(metrics []MetricResult, path string) error {
 	return nil
 }
 
+// CheckThresholds compares metric values with the versioned baseline limits.
 func CheckThresholds(metrics []MetricResult, config ThresholdConfig) RegressionResult {
 	byName := make(map[string]MetricResult, len(metrics))
 	for _, metric := range metrics {
@@ -360,7 +397,10 @@ func CheckThresholds(metrics []MetricResult, config ThresholdConfig) RegressionR
 	for _, name := range names {
 		threshold := config.Metrics[name]
 		metric, exists := byName[name]
-		check := RegressionCheck{Metric: name, Baseline: threshold.Baseline, Threshold: threshold.MaxAbsoluteDegradation, Direction: threshold.Direction}
+		check := RegressionCheck{
+			Metric: name, Baseline: threshold.Baseline,
+			Threshold: threshold.MaxAbsoluteDegradation, Direction: threshold.Direction,
+		}
 		if exists && metric.Value != nil && threshold.Direction == "higher_is_better" {
 			check.Current = *metric.Value
 			check.AbsoluteDelta = threshold.Baseline - check.Current
@@ -374,6 +414,7 @@ func CheckThresholds(metrics []MetricResult, config ThresholdConfig) RegressionR
 	return result
 }
 
+// JSON encodes the authoritative report with stable indentation.
 func JSON(report *Report) ([]byte, error) {
 	encoded, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
@@ -382,12 +423,27 @@ func JSON(report *Report) ([]byte, error) {
 	return append(encoded, '\n'), nil
 }
 
+// Markdown renders a human-readable view from an in-memory authoritative report.
 func Markdown(report *Report) []byte {
 	var output bytes.Buffer
 	fmt.Fprintf(&output, "# Evaluation regression report\n\n")
-	fmt.Fprintf(&output, "Dataset `%s` version %d has content SHA-256 `%s`. The deterministic fixture pipeline ran at commit `%s` without network access or external keys.\n\n", report.Dataset.ID, report.Dataset.Version, report.Dataset.ContentSHA256, report.Commit)
-	fmt.Fprintf(&output, "The resolved plan contains %d metric instances. The table shows the current value, valid sample count, frozen baseline, permitted absolute degradation, and gate result.\n\n", len(report.MetricPlan.Metrics))
-	fmt.Fprintf(&output, "| Metric | Current | Samples | Baseline | Threshold | Gate |\n| --- | ---: | ---: | ---: | ---: | --- |\n")
+	fmt.Fprintf(
+		&output,
+		"Dataset `%s` version %d has content SHA-256 `%s`. The deterministic fixture pipeline "+
+			"ran at commit `%s` without network access or external keys.\n\n",
+		report.Dataset.ID, report.Dataset.Version, report.Dataset.ContentSHA256, report.Commit,
+	)
+	fmt.Fprintf(
+		&output,
+		"The resolved plan contains %d metric instances. The table shows the current value, "+
+			"valid sample count, frozen baseline, permitted absolute degradation, and gate result.\n\n",
+		len(report.MetricPlan.Metrics),
+	)
+	fmt.Fprintf(
+		&output,
+		"| Metric | Current | Samples | Baseline | Threshold | Gate |\n"+
+			"| --- | ---: | ---: | ---: | ---: | --- |\n",
+	)
 	current := make(map[string]MetricResult, len(report.Metrics))
 	for _, metric := range report.Metrics {
 		current[metric.Name] = metric
@@ -402,17 +458,31 @@ func Markdown(report *Report) []byte {
 		if !check.Passed {
 			gate = "FAIL"
 		}
-		fmt.Fprintf(&output, "| `%s` | %s | %d/%d | %.12g | %.12g | %s |\n", check.Metric, value, metric.NValid, metric.NTotal, check.Baseline, check.Threshold, gate)
+		fmt.Fprintf(
+			&output, "| `%s` | %s | %d/%d | %.12g | %.12g | %s |\n",
+			check.Metric, value, metric.NValid, metric.NTotal, check.Baseline, check.Threshold, gate,
+		)
 	}
-	fmt.Fprintf(&output, "\nThe gate result is **%s**. Runtime: %s on %s/%s with %d logical CPUs.\n", map[bool]string{true: "PASS", false: "FAIL"}[report.Regression.Passed], report.Environment.GoVersion, report.Environment.GOOS, report.Environment.GOARCH, report.Environment.CPUs)
+	fmt.Fprintf(
+		&output, "\nThe gate result is **%s**. Runtime: %s on %s/%s with %d logical CPUs.\n",
+		map[bool]string{true: "PASS", false: "FAIL"}[report.Regression.Passed],
+		report.Environment.GoVersion, report.Environment.GOOS,
+		report.Environment.GOARCH, report.Environment.CPUs,
+	)
 	return output.Bytes()
 }
 
 type exactMatchMetric struct{}
 
 func (exactMatchMetric) Definition() metricregistry.Definition {
-	return metricregistry.Definition{Key: "generation.exact_match", Version: "1.0.0", Kind: metricregistry.KindGeneration, Description: "Exact equality of generated and reference text.", DefaultConfig: json.RawMessage(`{}`), ConfigSchema: json.RawMessage(`{"type":"object","additionalProperties":false}`)}
+	return metricregistry.Definition{
+		Key: "generation.exact_match", Version: "1.0.0", Kind: metricregistry.KindGeneration,
+		Description:   "Exact equality of generated and reference text.",
+		DefaultConfig: json.RawMessage(`{}`),
+		ConfigSchema:  json.RawMessage(`{"type":"object","additionalProperties":false}`),
+	}
 }
+
 func (exactMatchMetric) Validate(config json.RawMessage) error {
 	var object map[string]json.RawMessage
 	if err := json.Unmarshal(config, &object); err != nil {
@@ -423,7 +493,12 @@ func (exactMatchMetric) Validate(config json.RawMessage) error {
 	}
 	return nil
 }
-func (exactMatchMetric) Compute(_ context.Context, input *types.MetricInput, _ json.RawMessage) (metricregistry.Observation, error) {
+
+func (exactMatchMetric) Compute(
+	_ context.Context,
+	input *types.MetricInput,
+	_ json.RawMessage,
+) (metricregistry.Observation, error) {
 	value := 0.0
 	if input != nil && input.GeneratedTexts == input.GeneratedGT {
 		value = 1

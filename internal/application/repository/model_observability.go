@@ -15,7 +15,8 @@ import (
 
 type modelObservabilityRepository struct{ db *gorm.DB }
 
-func NewModelObservabilityRepository(db *gorm.DB) *modelObservabilityRepository {
+// NewModelObservabilityRepository creates the model call ledger and pricing store.
+func NewModelObservabilityRepository(db *gorm.DB) modelobs.Store {
 	return &modelObservabilityRepository{db: db}
 }
 

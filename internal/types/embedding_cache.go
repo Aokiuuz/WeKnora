@@ -18,4 +18,5 @@ type EmbeddingCacheEntry struct {
 	UpdatedAt            time.Time `json:"updated_at" gorm:"not null"`
 }
 
+// TableName returns the persistent embedding cache table name.
 func (EmbeddingCacheEntry) TableName() string { return "embedding_cache_entries" }

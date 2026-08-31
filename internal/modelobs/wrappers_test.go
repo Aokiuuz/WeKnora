@@ -18,6 +18,7 @@ func (wrapperEmbedder) Embed(context.Context, string) ([]float32, error) { retur
 func (wrapperEmbedder) BatchEmbed(context.Context, []string) ([][]float32, error) {
 	return [][]float32{{1}}, nil
 }
+
 func (wrapperEmbedder) BatchEmbedWithPool(context.Context, embedding.Embedder, []string) ([][]float32, error) {
 	return [][]float32{{1}}, nil
 }
@@ -75,8 +76,10 @@ func TestProviderWrappersCreateOneLedgerRowPerCall(t *testing.T) {
 	require.Len(t, store.starts, 6)
 	require.Len(t, store.completions, 6)
 	assert.Equal(t, []string{"embedding", "embedding_batch", "embedding_batch", "rerank", "vlm", "asr"},
-		[]string{store.starts[0].Operation, store.starts[1].Operation, store.starts[2].Operation,
-			store.starts[3].Operation, store.starts[4].Operation, store.starts[5].Operation})
+		[]string{
+			store.starts[0].Operation, store.starts[1].Operation, store.starts[2].Operation,
+			store.starts[3].Operation, store.starts[4].Operation, store.starts[5].Operation,
+		})
 	for _, completion := range store.completions {
 		assert.Equal(t, types.ModelCallStatusSuccess, completion.Status)
 		assert.False(t, completion.AccountingComplete)

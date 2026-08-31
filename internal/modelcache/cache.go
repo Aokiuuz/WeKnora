@@ -1,3 +1,4 @@
+// Package modelcache provides tenant-isolated persistent embedding caching.
 package modelcache
 
 import (
@@ -22,9 +23,13 @@ import (
 )
 
 const (
-	DefaultTTL          = 30 * 24 * time.Hour
-	CleanupInterval     = 24 * time.Hour
-	CleanupBatchSize    = 500
+	// DefaultTTL is the lifetime of one validated embedding cache entry.
+	DefaultTTL = 30 * 24 * time.Hour
+	// CleanupInterval is the period between background expiration sweeps.
+	CleanupInterval = 24 * time.Hour
+	// CleanupBatchSize bounds one expiration delete statement.
+	CleanupBatchSize = 500
+	// CleanupRoundTimeout bounds one complete expiration sweep.
 	CleanupRoundTimeout = 30 * time.Second
 	cacheWriteTimeout   = 2 * time.Second
 )
@@ -61,6 +66,7 @@ type Coordinator struct {
 	done      chan struct{}
 }
 
+// NewCoordinator creates a cache coordinator for one persistent store.
 func NewCoordinator(store Store) *Coordinator {
 	return &Coordinator{
 		store: store, ttl: DefaultTTL,
@@ -124,6 +130,7 @@ func (c *Coordinator) StopCleaner() {
 	<-c.done
 }
 
+// Wrap installs content-addressed caching around an embedding provider.
 func (c *Coordinator) Wrap(model *types.Model, inner embedding.Embedder) embedding.Embedder {
 	if c == nil || c.store == nil || model == nil || inner == nil {
 		return inner
@@ -138,7 +145,10 @@ type cachedEmbedder struct {
 }
 
 func (e *cachedEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
-	result, err := e.cachedBatch(ctx, []string{text}, func(callCtx context.Context, missing []string) ([][]float32, error) {
+	result, err := e.cachedBatch(ctx, []string{text}, func(
+		callCtx context.Context,
+		missing []string,
+	) ([][]float32, error) {
 		vector, err := e.inner.Embed(callCtx, missing[0])
 		if err != nil {
 			return nil, err
@@ -155,7 +165,11 @@ func (e *cachedEmbedder) BatchEmbed(ctx context.Context, texts []string) ([][]fl
 	return e.cachedBatch(ctx, texts, e.inner.BatchEmbed)
 }
 
-func (e *cachedEmbedder) BatchEmbedWithPool(ctx context.Context, _ embedding.Embedder, texts []string) ([][]float32, error) {
+func (e *cachedEmbedder) BatchEmbedWithPool(
+	ctx context.Context,
+	_ embedding.Embedder,
+	texts []string,
+) ([][]float32, error) {
 	return e.cachedBatch(ctx, texts, func(callCtx context.Context, missing []string) ([][]float32, error) {
 		return e.inner.BatchEmbedWithPool(callCtx, e.inner, missing)
 	})
@@ -232,7 +246,9 @@ func (e *cachedEmbedder) cachedBatch(
 			if err != nil {
 				return nil, err
 			}
-			entries, err := buildCacheEntries(prefix, missingHashes, vectors, e.inner.GetDimensions(), e.coordinator.ttl)
+			entries, err := buildCacheEntries(
+				prefix, missingHashes, vectors, e.inner.GetDimensions(), e.coordinator.ttl,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -280,6 +296,7 @@ func (c *Coordinator) recordEvent(
 	})
 }
 
+// EmbeddingModelFingerprint hashes behavior-affecting model configuration without secrets.
 func EmbeddingModelFingerprint(model *types.Model) string {
 	if model == nil {
 		return sha256Hex(nil)
@@ -319,7 +336,13 @@ func singleflightBatchKey(prefix CachePrefix, hashes []string) string {
 		prefix.ModelFingerprint, prefix.RequestOptionsSHA256, strings.Join(hashes, ","))
 }
 
-func buildCacheEntries(prefix CachePrefix, hashes []string, vectors [][]float32, expectedDimension int, ttl time.Duration) ([]*types.EmbeddingCacheEntry, error) {
+func buildCacheEntries(
+	prefix CachePrefix,
+	hashes []string,
+	vectors [][]float32,
+	expectedDimension int,
+	ttl time.Duration,
+) ([]*types.EmbeddingCacheEntry, error) {
 	if len(vectors) != len(hashes) {
 		return nil, errors.New("embedding cache: provider result count mismatch")
 	}
@@ -365,7 +388,8 @@ func encodeVector(vector []float32) []byte {
 
 func decodeCacheVector(entry *types.EmbeddingCacheEntry, expectedDimension int) ([]float32, error) {
 	if entry == nil || entry.Dimension <= 0 || len(entry.Embedding) != entry.Dimension*4 ||
-		(expectedDimension > 0 && entry.Dimension != expectedDimension) || sha256Hex(entry.Embedding) != entry.ChecksumSHA256 {
+		(expectedDimension > 0 && entry.Dimension != expectedDimension) ||
+		sha256Hex(entry.Embedding) != entry.ChecksumSHA256 {
 		return nil, errors.New("embedding cache: invalid cached vector")
 	}
 	vector := make([]float32, entry.Dimension)

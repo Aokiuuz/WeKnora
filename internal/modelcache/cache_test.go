@@ -23,10 +23,17 @@ type cacheStore struct {
 }
 
 func cacheStoreKey(prefix CachePrefix, hash string) string {
-	return fmt.Sprintf("%d/%s/%s/%s/%s", prefix.TenantID, prefix.ModelID, prefix.ModelFingerprint, prefix.RequestOptionsSHA256, hash)
+	return fmt.Sprintf(
+		"%d/%s/%s/%s/%s", prefix.TenantID, prefix.ModelID,
+		prefix.ModelFingerprint, prefix.RequestOptionsSHA256, hash,
+	)
 }
 
-func (s *cacheStore) GetEmbeddingCache(_ context.Context, prefix CachePrefix, hashes []string) (map[string]*types.EmbeddingCacheEntry, error) {
+func (s *cacheStore) GetEmbeddingCache(
+	_ context.Context,
+	prefix CachePrefix,
+	hashes []string,
+) (map[string]*types.EmbeddingCacheEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.getErr != nil {
@@ -35,12 +42,13 @@ func (s *cacheStore) GetEmbeddingCache(_ context.Context, prefix CachePrefix, ha
 	result := map[string]*types.EmbeddingCacheEntry{}
 	for _, hash := range hashes {
 		if entry := s.entries[cacheStoreKey(prefix, hash)]; entry != nil {
-			copy := *entry
-			result[hash] = &copy
+			cloned := *entry
+			result[hash] = &cloned
 		}
 	}
 	return result, nil
 }
+
 func (s *cacheStore) PutEmbeddingCache(_ context.Context, entries []*types.EmbeddingCacheEntry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -51,10 +59,13 @@ func (s *cacheStore) PutEmbeddingCache(_ context.Context, entries []*types.Embed
 		s.entries = map[string]*types.EmbeddingCacheEntry{}
 	}
 	for _, entry := range entries {
-		copy := *entry
-		copy.Embedding = append([]byte(nil), entry.Embedding...)
-		prefix := CachePrefix{TenantID: entry.TenantID, ModelID: entry.ModelID, ModelFingerprint: entry.ModelFingerprint, RequestOptionsSHA256: entry.RequestOptionsSHA256}
-		s.entries[cacheStoreKey(prefix, entry.TextSHA256)] = &copy
+		cloned := *entry
+		cloned.Embedding = append([]byte(nil), entry.Embedding...)
+		prefix := CachePrefix{
+			TenantID: entry.TenantID, ModelID: entry.ModelID,
+			ModelFingerprint: entry.ModelFingerprint, RequestOptionsSHA256: entry.RequestOptionsSHA256,
+		}
+		s.entries[cacheStoreKey(prefix, entry.TextSHA256)] = &cloned
 	}
 	return nil
 }
@@ -62,8 +73,8 @@ func (s *cacheStore) PutEmbeddingCache(_ context.Context, entries []*types.Embed
 func (s *cacheStore) RecordEmbeddingCacheEvent(_ context.Context, event *types.EmbeddingCacheEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	copy := *event
-	s.events = append(s.events, &copy)
+	cloned := *event
+	s.events = append(s.events, &cloned)
 	return nil
 }
 
@@ -116,6 +127,7 @@ type countingEmbedder struct {
 func (e *countingEmbedder) Embed(_ context.Context, text string) ([]float32, error) {
 	return []float32{float32(len(text)), 1}, nil
 }
+
 func (e *countingEmbedder) BatchEmbed(_ context.Context, texts []string) ([][]float32, error) {
 	e.mu.Lock()
 	e.batchInputs = append(e.batchInputs, append([]string(nil), texts...))
@@ -126,7 +138,12 @@ func (e *countingEmbedder) BatchEmbed(_ context.Context, texts []string) ([][]fl
 	}
 	return result, nil
 }
-func (e *countingEmbedder) BatchEmbedWithPool(ctx context.Context, _ embedding.Embedder, texts []string) ([][]float32, error) {
+
+func (e *countingEmbedder) BatchEmbedWithPool(
+	ctx context.Context,
+	_ embedding.Embedder,
+	texts []string,
+) ([][]float32, error) {
 	return e.BatchEmbed(ctx, texts)
 }
 func (*countingEmbedder) GetModelName() string { return "embedding" }
@@ -137,7 +154,9 @@ func TestBatchEmbeddingCacheDeduplicatesMissesAndRestoresOrder(t *testing.T) {
 	store := &cacheStore{}
 	coordinator := NewCoordinator(store)
 	provider := &countingEmbedder{}
-	model := &types.Model{ID: "embedding-1", TenantID: 7, Name: "embedding", Type: types.ModelTypeEmbedding}
+	model := &types.Model{
+		ID: "embedding-1", TenantID: 7, Name: "embedding", Type: types.ModelTypeEmbedding,
+	}
 	wrapped := coordinator.Wrap(model, provider)
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
 

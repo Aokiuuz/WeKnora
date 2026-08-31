@@ -20,6 +20,7 @@ func (e *persistentCacheEmbedder) Embed(context.Context, string) ([]float32, err
 	e.calls++
 	return []float32{1, 2}, nil
 }
+
 func (e *persistentCacheEmbedder) BatchEmbed(_ context.Context, texts []string) ([][]float32, error) {
 	e.calls++
 	result := make([][]float32, len(texts))
@@ -28,7 +29,12 @@ func (e *persistentCacheEmbedder) BatchEmbed(_ context.Context, texts []string) 
 	}
 	return result, nil
 }
-func (e *persistentCacheEmbedder) BatchEmbedWithPool(ctx context.Context, _ embedding.Embedder, texts []string) ([][]float32, error) {
+
+func (e *persistentCacheEmbedder) BatchEmbedWithPool(
+	ctx context.Context,
+	_ embedding.Embedder,
+	texts []string,
+) ([][]float32, error) {
 	return e.BatchEmbed(ctx, texts)
 }
 func (*persistentCacheEmbedder) GetModelName() string { return "embedding" }
@@ -43,7 +49,9 @@ func TestEmbeddingCacheRepositoryPersistsAcrossSQLiteReopen(t *testing.T) {
 		require.NoError(t, db.AutoMigrate(&types.EmbeddingCacheEntry{}))
 		return db
 	}
-	prefix := modelcache.CachePrefix{TenantID: 7, ModelID: "model-1", ModelFingerprint: "fingerprint", RequestOptionsSHA256: "options"}
+	prefix := modelcache.CachePrefix{
+		TenantID: 7, ModelID: "model-1", ModelFingerprint: "fingerprint", RequestOptionsSHA256: "options",
+	}
 	now := time.Now().UTC()
 	firstDB := open()
 	first := NewEmbeddingCacheRepository(firstDB)

@@ -49,15 +49,19 @@ func (c *evaluationRuntimeCollector) setTotal(total int) {
 func (c *evaluationRuntimeCollector) addDatasetLoad(d time.Duration) {
 	c.addDuration(&c.datasetLoad, &c.datasetLoadSeen, d)
 }
+
 func (c *evaluationRuntimeCollector) addIndexing(d time.Duration) {
 	c.addDuration(&c.indexing, &c.indexingSeen, d)
 }
+
 func (c *evaluationRuntimeCollector) addExecution(d time.Duration) {
 	c.addDuration(&c.execution, &c.executionSeen, d)
 }
+
 func (c *evaluationRuntimeCollector) addPersistence(d time.Duration) {
 	c.addDuration(&c.persistence, &c.persistenceSeen, d)
 }
+
 func (c *evaluationRuntimeCollector) addCleanup(d time.Duration) {
 	c.addDuration(&c.cleanup, &c.cleanupSeen, d)
 }
@@ -164,7 +168,9 @@ func (c *evaluationRuntimeCollector) buildSnapshot(now time.Time, terminal bool)
 			Total: c.total, Started: c.started, Success: c.success, Failed: c.failed,
 			Canceled: c.canceled, Interrupted: c.interrupted, NotStarted: notStarted,
 		},
-		Failure: types.EvaluationRuntimeFailure{Numerator: c.failed + c.canceled + c.interrupted, Denominator: completed},
+		Failure: types.EvaluationRuntimeFailure{
+			Numerator: c.failed + c.canceled + c.interrupted, Denominator: completed,
+		},
 		Tokens: types.EvaluationRuntimeTokens{
 			PromptTokens: c.promptTokens, CompletionTokens: c.completionTokens, TotalTokens: c.totalTokens,
 			ReportedSamples: c.reportedSamples, UnreportedSamples: c.unreportedSamples,

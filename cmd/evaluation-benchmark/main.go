@@ -1,3 +1,4 @@
+// Command evaluation-benchmark measures the isolated evaluation pipeline matrix.
 package main
 
 import (
@@ -16,7 +17,10 @@ func main() {
 	flags := flag.NewFlagSet("evaluation-benchmark", flag.ExitOnError)
 	outputDir := flags.String("output-dir", "artifacts/evaluation-performance", "report output directory")
 	datasetPath := flags.String("dataset", "dataset/golden/v1/dataset.json", "golden dataset fixture")
-	flags.Parse(os.Args[1:])
+	if err := flags.Parse(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 	if err := run(context.Background(), *datasetPath, *outputDir); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

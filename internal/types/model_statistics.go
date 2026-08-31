@@ -13,6 +13,7 @@ type EmbeddingCacheEvent struct {
 	OccurredAt  time.Time `json:"occurred_at" gorm:"not null;index"`
 }
 
+// TableName returns the embedding cache accounting event table name.
 func (EmbeddingCacheEvent) TableName() string { return "embedding_cache_events" }
 
 // ModelUsageQuery selects tenant-scoped call and cache aggregates.

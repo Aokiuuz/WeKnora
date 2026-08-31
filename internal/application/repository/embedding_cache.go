@@ -14,6 +14,7 @@ import (
 
 type embeddingCacheRepository struct{ db *gorm.DB }
 
+// NewEmbeddingCacheRepository creates the persistent embedding cache store.
 func NewEmbeddingCacheRepository(db *gorm.DB) modelcache.Store {
 	return &embeddingCacheRepository{db: db}
 }
@@ -27,7 +28,8 @@ func (r *embeddingCacheRepository) GetEmbeddingCache(
 	if len(hashes) == 0 {
 		return result, nil
 	}
-	if prefix.TenantID == 0 || prefix.ModelID == "" || prefix.ModelFingerprint == "" || prefix.RequestOptionsSHA256 == "" {
+	if prefix.TenantID == 0 || prefix.ModelID == "" || prefix.ModelFingerprint == "" ||
+		prefix.RequestOptionsSHA256 == "" {
 		return nil, errors.New("get embedding cache: complete prefix is required")
 	}
 	now := time.Now().UTC()
@@ -45,7 +47,9 @@ func (r *embeddingCacheRepository) GetEmbeddingCache(
 	}
 	if len(entries) > 0 {
 		_ = r.db.WithContext(ctx).Model(&types.EmbeddingCacheEntry{}).
-			Where("tenant_id = ? AND model_id = ? AND model_fingerprint = ? AND request_options_sha256 = ? AND text_sha256 IN ?",
+			Where(
+				"tenant_id = ? AND model_id = ? AND model_fingerprint = ? "+
+					"AND request_options_sha256 = ? AND text_sha256 IN ?",
 				prefix.TenantID, prefix.ModelID, prefix.ModelFingerprint, prefix.RequestOptionsSHA256, hashes).
 			Updates(map[string]any{"accessed_at": now, "updated_at": now}).Error
 	}
@@ -64,8 +68,13 @@ func (r *embeddingCacheRepository) PutEmbeddingCache(ctx context.Context, entrie
 		}
 	}
 	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "tenant_id"}, {Name: "model_id"}, {Name: "model_fingerprint"},
-			{Name: "request_options_sha256"}, {Name: "text_sha256"}},
+		Columns: []clause.Column{
+			{Name: "tenant_id"},
+			{Name: "model_id"},
+			{Name: "model_fingerprint"},
+			{Name: "request_options_sha256"},
+			{Name: "text_sha256"},
+		},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"embedding", "dimension", "checksum_sha256", "expires_at", "accessed_at", "updated_at",
 		}),
@@ -110,5 +119,7 @@ func (r *embeddingCacheRepository) RecordEmbeddingCacheEvent(
 	return nil
 }
 
-var _ modelcache.Store = (*embeddingCacheRepository)(nil)
-var _ modelcache.EventStore = (*embeddingCacheRepository)(nil)
+var (
+	_ modelcache.Store      = (*embeddingCacheRepository)(nil)
+	_ modelcache.EventStore = (*embeddingCacheRepository)(nil)
+)

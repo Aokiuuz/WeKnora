@@ -17,6 +17,7 @@ import (
 
 type evaluationHumanRatingRepository struct{ db *gorm.DB }
 
+// NewEvaluationHumanRatingRepository creates the append-only human-rating store.
 func NewEvaluationHumanRatingRepository(db *gorm.DB) interfaces.EvaluationHumanRatingRepository {
 	return &evaluationHumanRatingRepository{db: db}
 }
@@ -32,7 +33,9 @@ func (r *evaluationHumanRatingRepository) AppendHumanRating(
 	if err := validateHumanRating(tenantID, taskID, sampleIndex, raterID, input); err != nil {
 		return nil, err
 	}
-	if err := (&evaluationQuestionResultRepository{db: r.db}).authorizeQuestionResultRead(ctx, tenantID, taskID); err != nil {
+	if err := (&evaluationQuestionResultRepository{db: r.db}).authorizeQuestionResultRead(
+		ctx, tenantID, taskID,
+	); err != nil {
 		return nil, err
 	}
 	var created types.EvaluationHumanRatingRevision
@@ -56,8 +59,11 @@ func (r *evaluationHumanRatingRepository) AppendHumanRating(
 		var superseded types.EvaluationHumanRatingRevision
 		var supersedesID *string
 		if err := tx.Select("id").
-			Where("tenant_id = ? AND task_id = ? AND sample_index = ? AND rubric_key = ? AND rubric_version = ?",
-				tenantID, taskID, sampleIndex, strings.TrimSpace(input.RubricKey), strings.TrimSpace(input.RubricVersion)).
+			Where(
+				"tenant_id = ? AND task_id = ? AND sample_index = ? AND rubric_key = ? AND rubric_version = ?",
+				tenantID, taskID, sampleIndex,
+				strings.TrimSpace(input.RubricKey), strings.TrimSpace(input.RubricVersion),
+			).
 			Order("revision DESC").First(&superseded).Error; err == nil {
 			supersedesID = &superseded.ID
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -90,7 +96,9 @@ func (r *evaluationHumanRatingRepository) ListHumanRatings(
 	if tenantID == 0 || strings.TrimSpace(taskID) == "" || sampleIndex < 0 {
 		return nil, errors.New("list human ratings: tenant, task, and non-negative sample index are required")
 	}
-	if err := (&evaluationQuestionResultRepository{db: r.db}).authorizeQuestionResultRead(ctx, tenantID, taskID); err != nil {
+	if err := (&evaluationQuestionResultRepository{db: r.db}).authorizeQuestionResultRead(
+		ctx, tenantID, taskID,
+	); err != nil {
 		return nil, err
 	}
 	var question types.EvaluationQuestionResultEntity

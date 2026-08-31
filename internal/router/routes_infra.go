@@ -104,8 +104,12 @@ func RegisterEvaluationRoutes(
 		evaluationRoutes.GET("/tasks/:task_id/export", g.Viewer(), handler.ExportEvaluationTask)
 		evaluationRoutes.POST("/:task_id/cancel", g.Admin(), handler.CancelEvaluation)
 		evaluationRoutes.GET("/tasks/:task_id/questions", g.Viewer(), questionHandler.ListQuestionResults)
-		evaluationRoutes.GET("/tasks/:task_id/questions/:sample_index/ratings", g.Viewer(), questionHandler.ListHumanRatings)
-		evaluationRoutes.POST("/tasks/:task_id/questions/:sample_index/ratings", g.Admin(), questionHandler.AppendHumanRating)
+		evaluationRoutes.GET(
+			"/tasks/:task_id/questions/:sample_index/ratings", g.Viewer(), questionHandler.ListHumanRatings,
+		)
+		evaluationRoutes.POST(
+			"/tasks/:task_id/questions/:sample_index/ratings", g.Admin(), questionHandler.AppendHumanRating,
+		)
 
 		datasets := evaluationRoutes.Group("/datasets")
 		{

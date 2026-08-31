@@ -100,16 +100,24 @@ func TestCompareEvaluationsIncludesDeterministicMetricAndSuccessIntervals(t *tes
 	taskRepo.register(comparisonTaskFixture(t, "task-a", 5, 0.5))
 	taskRepo.register(comparisonTaskFixture(t, "task-b", 5, 0.6))
 	questionRepo := &fakeEvaluationExportQuestionRepository{rows: []*types.EvaluationQuestionResultEntity{
-		{TenantID: 7, TaskID: "task-a", SampleIndex: 0, Status: types.EvaluationQuestionStatusSuccess,
+		{
+			TenantID: 7, TaskID: "task-a", SampleIndex: 0, Status: types.EvaluationQuestionStatusSuccess,
 			PerSampleMetrics: types.JSON(`{"retrieval_metrics":{"precision":0.25}}`), TotalMs: &total20,
-			TotalTokens: &tokens10, PromptTokens: &prompt4, CompletionTokens: &completion6},
-		{TenantID: 7, TaskID: "task-a", SampleIndex: 1, Status: types.EvaluationQuestionStatusSuccess,
+			TotalTokens: &tokens10, PromptTokens: &prompt4, CompletionTokens: &completion6,
+		},
+		{
+			TenantID: 7, TaskID: "task-a", SampleIndex: 1, Status: types.EvaluationQuestionStatusSuccess,
 			PerSampleMetrics: types.JSON(`{"retrieval_metrics":{"precision":0.75}}`), TotalMs: &total40,
-			TotalTokens: &tokens30, PromptTokens: &prompt12, CompletionTokens: &completion18},
-		{TenantID: 7, TaskID: "task-a", SampleIndex: 2, Status: types.EvaluationQuestionStatusFailed,
-			PerSampleMetrics: types.JSON(`{}`)},
-		{TenantID: 7, TaskID: "task-b", SampleIndex: 0, Status: types.EvaluationQuestionStatusSuccess,
-			PerSampleMetrics: types.JSON(`{"retrieval_metrics":{"precision":0.6}}`)},
+			TotalTokens: &tokens30, PromptTokens: &prompt12, CompletionTokens: &completion18,
+		},
+		{
+			TenantID: 7, TaskID: "task-a", SampleIndex: 2, Status: types.EvaluationQuestionStatusFailed,
+			PerSampleMetrics: types.JSON(`{}`),
+		},
+		{
+			TenantID: 7, TaskID: "task-b", SampleIndex: 0, Status: types.EvaluationQuestionStatusSuccess,
+			PerSampleMetrics: types.JSON(`{"retrieval_metrics":{"precision":0.6}}`),
+		},
 	}}
 	svc := &EvaluationService{evaluationTaskRepository: taskRepo, questionResultRepository: questionRepo}
 

@@ -15,7 +15,12 @@ func TestEvaluationHumanRatingsListAndAppend(t *testing.T) {
 		}
 		response.Header().Set("Content-Type", "application/json")
 		if request.Method == http.MethodGet {
-			_, _ = response.Write([]byte(`{"success":true,"data":{"items":[{"id":"rating-1","task_id":"task-a","sample_index":7,"revision":1,"score":4}]}}`))
+			_, _ = response.Write([]byte(`{
+				"success": true,
+				"data": {"items": [
+					{"id":"rating-1","task_id":"task-a","sample_index":7,"revision":1,"score":4}
+				]}
+			}`))
 			return
 		}
 		if request.Method != http.MethodPost {
@@ -29,7 +34,10 @@ func TestEvaluationHumanRatingsListAndAppend(t *testing.T) {
 			t.Errorf("request = %+v", body)
 		}
 		response.WriteHeader(http.StatusCreated)
-		_, _ = response.Write([]byte(`{"success":true,"data":{"id":"rating-2","task_id":"task-a","sample_index":7,"revision":2,"score":5}}`))
+		_, _ = response.Write([]byte(`{
+			"success": true,
+			"data": {"id":"rating-2","task_id":"task-a","sample_index":7,"revision":2,"score":5}
+		}`))
 	}))
 	defer server.Close()
 
@@ -38,9 +46,12 @@ func TestEvaluationHumanRatingsListAndAppend(t *testing.T) {
 	if err != nil || len(items) != 1 || items[0].Revision != 1 {
 		t.Fatalf("ListEvaluationHumanRatings() items=%+v error=%v", items, err)
 	}
-	created, err := client.AppendEvaluationHumanRating(context.Background(), "task-a", 7, AppendEvaluationHumanRatingRequest{
-		RubricKey: "answer-quality", RubricVersion: "1.0.0", RubricSnapshot: json.RawMessage(`{"title":"Answer quality"}`), Score: 5,
-	})
+	created, err := client.AppendEvaluationHumanRating(
+		context.Background(), "task-a", 7, AppendEvaluationHumanRatingRequest{
+			RubricKey: "answer-quality", RubricVersion: "1.0.0",
+			RubricSnapshot: json.RawMessage(`{"title":"Answer quality"}`), Score: 5,
+		},
+	)
 	if err != nil || created.Revision != 2 {
 		t.Fatalf("AppendEvaluationHumanRating() created=%+v error=%v", created, err)
 	}

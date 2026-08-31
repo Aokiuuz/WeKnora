@@ -79,7 +79,10 @@ func TestResolvedPlanPreservesOptionalFailureAndRejectsRequiredFailure(t *testin
 	require.NoError(t, err)
 	result, observations, err := optional.Compute(context.Background(), &types.MetricInput{})
 	require.NoError(t, err)
-	require.Equal(t, types.EvaluationMetricObservationFailed, result.Scores[optional.Snapshot.Metrics[0].InstanceID].Status)
+	require.Equal(
+		t, types.EvaluationMetricObservationFailed,
+		result.Scores[optional.Snapshot.Metrics[0].InstanceID].Status,
+	)
 	require.Equal(t, "test_failed", observations[0].ErrorCode)
 
 	required, err := registry.Resolve([]Spec{{Key: "custom.failed", Version: "1.0.0", Required: true}})

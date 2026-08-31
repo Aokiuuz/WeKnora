@@ -30,7 +30,12 @@ func TestSemanticJudgeIsOptInAndComputesThroughRegistry(t *testing.T) {
 	require.NoError(t, err)
 	plan, err := registry.Resolve([]Spec{{
 		Key: "generation.semantic_judge", Version: "1.0.0", Required: true,
-		Config: json.RawMessage(`{"rubric":"Check meaning","prompt_version":"2.1.0","prompt_sha256":"2cc96f8253c179826836047ef9e0757b8bd2e585b1f414776e8c01784541beee","judge_model_snapshot":{"id":"judge-1","fingerprint":"frozen"},"temperature":0,"seed":17,"retry_limit":2}`),
+		Config: json.RawMessage(
+			`{"rubric":"Check meaning","prompt_version":"2.1.0",` +
+				`"prompt_sha256":"2cc96f8253c179826836047ef9e0757b8bd2e585b1f414776e8c01784541beee",` +
+				`"judge_model_snapshot":{"id":"judge-1","fingerprint":"frozen"},` +
+				`"temperature":0,"seed":17,"retry_limit":2}`,
+		),
 	}})
 	require.NoError(t, err)
 	result, observations, err := plan.Compute(context.Background(), &types.MetricInput{
@@ -50,6 +55,10 @@ func TestSemanticJudgeIsOptInAndComputesThroughRegistry(t *testing.T) {
 func TestSemanticJudgeRejectsPromptHashMismatch(t *testing.T) {
 	plugin, err := NewSemanticJudgeMetric(&semanticJudgeStub{})
 	require.NoError(t, err)
-	err = plugin.Validate(json.RawMessage(`{"rubric":"Check meaning","prompt_version":"2.1.0","prompt_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","judge_model_snapshot":{"id":"judge-1"},"temperature":0,"seed":17,"retry_limit":2}`))
+	err = plugin.Validate(json.RawMessage(
+		`{"rubric":"Check meaning","prompt_version":"2.1.0",` +
+			`"prompt_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
+			`"judge_model_snapshot":{"id":"judge-1"},"temperature":0,"seed":17,"retry_limit":2}`,
+	))
 	require.ErrorContains(t, err, "does not match")
 }

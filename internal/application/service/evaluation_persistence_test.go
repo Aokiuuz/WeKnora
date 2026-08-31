@@ -48,7 +48,20 @@ func TestEvaluationDetailEntityRoundTrip(t *testing.T) {
 	assert.Equal(t, detail.Task.Total, entity.Total)
 	assert.Equal(t, detail.Task.Finished, entity.Finished)
 	assert.Equal(t, detail.Task.ErrMsg, entity.ErrMsg)
-	require.JSONEq(t, `{"schema_version":1,"started_at":"2026-08-28T11:00:00Z","durations":{},"samples":{"total":2,"started":2,"success":2,"failed":0,"canceled":0,"interrupted":0,"not_started":0},"failure":{"numerator":0,"denominator":0},"tokens":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0,"reported_samples":0,"unreported_samples":0}}`, entity.RuntimeMetrics.ToString())
+	require.JSONEq(t, `{
+		"schema_version": 1,
+		"started_at": "2026-08-28T11:00:00Z",
+		"durations": {},
+		"samples": {
+			"total": 2, "started": 2, "success": 2, "failed": 0,
+			"canceled": 0, "interrupted": 0, "not_started": 0
+		},
+		"failure": {"numerator": 0, "denominator": 0},
+		"tokens": {
+			"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
+			"reported_samples": 0, "unreported_samples": 0
+		}
+	}`, entity.RuntimeMetrics.ToString())
 	assert.Equal(t, "temporary-kb-1", entity.TemporaryKnowledgeBaseID)
 	assert.Equal(t, "owner-1", entity.OwnerID)
 	require.NotNil(t, entity.LeaseExpiresAt)

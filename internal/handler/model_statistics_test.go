@@ -26,9 +26,11 @@ func (s *modelStatisticsServiceStub) Usage(
 	s.tenantID, s.modelIDs = tenantID, modelIDs
 	return &types.ModelUsageResponse{From: time.Now(), To: time.Now(), Items: []types.ModelUsageStatistics{}}, nil
 }
+
 func (*modelStatisticsServiceStub) Prices(context.Context, uint64, string) ([]*types.ModelPriceVersion, error) {
 	return []*types.ModelPriceVersion{}, nil
 }
+
 func (s *modelStatisticsServiceStub) PutPrice(
 	_ context.Context, tenantID uint64, modelID string, price *types.ModelPriceVersion,
 ) error {

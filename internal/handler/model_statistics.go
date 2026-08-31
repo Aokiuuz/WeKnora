@@ -21,18 +21,21 @@ type modelStatisticsService interface {
 // ModelStatisticsHandler serves usage aggregates and immutable price versions.
 type ModelStatisticsHandler struct{ service modelStatisticsService }
 
+// NewModelStatisticsHandler creates the HTTP handler for model usage and prices.
 func NewModelStatisticsHandler(service *modelstats.Service) *ModelStatisticsHandler {
 	return &ModelStatisticsHandler{service: service}
 }
 
+// ListUsage returns tenant-scoped usage for an optional set of model identifiers.
 func (h *ModelStatisticsHandler) ListUsage(c *gin.Context) {
 	h.usage(c, splitModelIDs(c.Query("model_ids")))
 }
 
+// GetUsage returns tenant-scoped usage for one model identifier.
 func (h *ModelStatisticsHandler) GetUsage(c *gin.Context) {
 	modelID := strings.TrimSpace(c.Param("id"))
 	if modelID == "" {
-		c.Error(errors.NewBadRequestError("Model ID cannot be empty"))
+		_ = c.Error(errors.NewBadRequestError("Model ID cannot be empty"))
 		return
 	}
 	h.usage(c, []string{modelID})
@@ -41,26 +44,27 @@ func (h *ModelStatisticsHandler) GetUsage(c *gin.Context) {
 func (h *ModelStatisticsHandler) usage(c *gin.Context, modelIDs []string) {
 	from, err := optionalRFC3339(c.Query("from"))
 	if err != nil {
-		c.Error(errors.NewBadRequestError("from must use RFC3339 format"))
+		_ = c.Error(errors.NewBadRequestError("from must use RFC3339 format"))
 		return
 	}
 	to, err := optionalRFC3339(c.Query("to"))
 	if err != nil {
-		c.Error(errors.NewBadRequestError("to must use RFC3339 format"))
+		_ = c.Error(errors.NewBadRequestError("to must use RFC3339 format"))
 		return
 	}
 	result, err := h.service.Usage(c.Request.Context(), tenantID(c), modelIDs, from, to)
 	if err != nil {
-		c.Error(errors.NewBadRequestError(err.Error()))
+		_ = c.Error(errors.NewBadRequestError(err.Error()))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
 }
 
+// ListPrices returns immutable price versions for one model identifier.
 func (h *ModelStatisticsHandler) ListPrices(c *gin.Context) {
 	prices, err := h.service.Prices(c.Request.Context(), tenantID(c), c.Param("id"))
 	if err != nil {
-		c.Error(errors.NewBadRequestError(err.Error()))
+		_ = c.Error(errors.NewBadRequestError(err.Error()))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": prices})
@@ -74,10 +78,11 @@ type putModelPriceRequest struct {
 	Currency                   string     `json:"currency" binding:"required,len=3"`
 }
 
+// PutPrice appends one effective-dated price version for a model identifier.
 func (h *ModelStatisticsHandler) PutPrice(c *gin.Context) {
 	var request putModelPriceRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.Error(errors.NewBadRequestError(err.Error()))
+		_ = c.Error(errors.NewBadRequestError(err.Error()))
 		return
 	}
 	price := &types.ModelPriceVersion{
@@ -87,7 +92,7 @@ func (h *ModelStatisticsHandler) PutPrice(c *gin.Context) {
 		Currency:                   request.Currency,
 	}
 	if err := h.service.PutPrice(c.Request.Context(), tenantID(c), c.Param("id"), price); err != nil {
-		c.Error(errors.NewBadRequestError(err.Error()))
+		_ = c.Error(errors.NewBadRequestError(err.Error()))
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"success": true, "data": price})

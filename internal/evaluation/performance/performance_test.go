@@ -13,7 +13,8 @@ import (
 
 func TestBuildCoversMatrixAndCacheProof(t *testing.T) {
 	report, err := Build(context.Background(), Options{
-		DatasetPath: "../../../dataset/golden/v1/dataset.json", Commit: "commit-a", OutputRoot: t.TempDir(),
+		DatasetPath: "../../../dataset/golden/v1/dataset.json",
+		Commit:      "commit-a", OutputRoot: t.TempDir(),
 		Sizes: []int{3}, Concurrencies: []int{1, 2}, Repetitions: 1, Seed: 42,
 	})
 	require.NoError(t, err)
@@ -32,7 +33,11 @@ func TestBuildCoversMatrixAndCacheProof(t *testing.T) {
 }
 
 func TestJSONSchemaAndMarkdownDerivation(t *testing.T) {
-	report := &Report{SchemaVersion: 1, Commit: "abc", Dataset: DatasetIdentity{ID: "golden-v1", Version: 1}, Runtime: Runtime{GoVersion: "go1.26", GOOS: "linux", GOARCH: "amd64"}, Database: Database{Version: "3"}, Configuration: Configuration{Repetitions: 5}}
+	report := &Report{
+		SchemaVersion: 1, Commit: "abc", Dataset: DatasetIdentity{ID: "golden-v1", Version: 1},
+		Runtime:  Runtime{GoVersion: "go1.26", GOOS: "linux", GOARCH: "amd64"},
+		Database: Database{Version: "3"}, Configuration: Configuration{Repetitions: 5},
+	}
 	encoded, err := JSON(report)
 	require.NoError(t, err)
 	var decoded map[string]any
@@ -43,7 +48,10 @@ func TestJSONSchemaAndMarkdownDerivation(t *testing.T) {
 
 func BenchmarkMetricCalculation(b *testing.B) {
 	plan := benchmarkMetricPlan(b)
-	input := &types.MetricInput{RetrievalGT: [][]int{{1}}, RetrievalIDs: []int{1, 2, 3}, GeneratedTexts: "answer", GeneratedGT: "answer"}
+	input := &types.MetricInput{
+		RetrievalGT: [][]int{{1}}, RetrievalIDs: []int{1, 2, 3},
+		GeneratedTexts: "answer", GeneratedGT: "answer",
+	}
 	b.ResetTimer()
 	for index := 0; index < b.N; index++ {
 		_, _, err := plan.Compute(context.Background(), input)
@@ -57,7 +65,10 @@ func BenchmarkMetricAggregation(b *testing.B) {
 	plan := benchmarkMetricPlan(b)
 	rows := make([]*types.MetricResult, 100)
 	for index := range rows {
-		rows[index], _, _ = plan.Compute(context.Background(), &types.MetricInput{RetrievalGT: [][]int{{1}}, RetrievalIDs: []int{1, 2, 3}, GeneratedTexts: "answer", GeneratedGT: "answer"})
+		rows[index], _, _ = plan.Compute(context.Background(), &types.MetricInput{
+			RetrievalGT: [][]int{{1}}, RetrievalIDs: []int{1, 2, 3},
+			GeneratedTexts: "answer", GeneratedGT: "answer",
+		})
 	}
 	b.ResetTimer()
 	for index := 0; index < b.N; index++ {
@@ -85,7 +96,8 @@ func BenchmarkQuestionList(b *testing.B) {
 		b.Fatal(err)
 	}
 	for index := 0; index < 500; index++ {
-		if err := db.Create(questionRow(index, "question", "answer", &types.MetricResult{}, 1, 2, 1)).Error; err != nil {
+		row := questionRow(index, "question", "answer", &types.MetricResult{}, 1, 2, 1)
+		if err := db.Create(row).Error; err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -100,7 +112,10 @@ func BenchmarkQuestionList(b *testing.B) {
 
 func BenchmarkComparison(b *testing.B) {
 	plan := benchmarkMetricPlan(b)
-	row, _, _ := plan.Compute(context.Background(), &types.MetricInput{RetrievalGT: [][]int{{1}}, RetrievalIDs: []int{1, 2, 3}, GeneratedTexts: "answer", GeneratedGT: "answer"})
+	row, _, _ := plan.Compute(context.Background(), &types.MetricInput{
+		RetrievalGT: [][]int{{1}}, RetrievalIDs: []int{1, 2, 3},
+		GeneratedTexts: "answer", GeneratedGT: "answer",
+	})
 	b.ResetTimer()
 	for index := 0; index < b.N; index++ {
 		_ = compareMetricRows(row, row)

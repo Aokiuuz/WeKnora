@@ -19,7 +19,14 @@ func TestListModelUsageEncodesIntervalAndModels(t *testing.T) {
 		if r.URL.Query().Get("from") != from.Format(time.RFC3339) || r.URL.Query().Get("to") != to.Format(time.RFC3339) {
 			t.Fatalf("interval query = %s", r.URL.RawQuery)
 		}
-		_, _ = w.Write([]byte(`{"success":true,"data":{"from":"2026-08-01T00:00:00Z","to":"2026-09-01T00:00:00Z","items":[{"model_id":"a","call_count":2,"costs":[],"provider_cache":{"hit_rate":null},"application_cache":{"hit_rate":0.5}}]}}`))
+		_, _ = w.Write([]byte(`{
+			"success": true,
+			"data": {
+				"from":"2026-08-01T00:00:00Z","to":"2026-09-01T00:00:00Z",
+				"items":[{"model_id":"a","call_count":2,"costs":[],
+				"provider_cache":{"hit_rate":null},"application_cache":{"hit_rate":0.5}}]
+			}
+		}`))
 	}))
 	defer server.Close()
 
@@ -46,7 +53,14 @@ func TestPutModelPriceUsesImmutablePriceEndpoint(t *testing.T) {
 		if request.Currency != "USD" || request.InputMicrounitsPerMillion != 1_000_000 {
 			t.Fatalf("request = %#v", request)
 		}
-		_, _ = w.Write([]byte(`{"success":true,"data":{"id":"price-1","model_id":"model-1","currency":"USD","valid_from":"2026-09-01T00:00:00Z","created_at":"2026-09-01T00:00:00Z","input_microunits_per_million":1000000,"output_microunits_per_million":2000000}}`))
+		_, _ = w.Write([]byte(`{
+			"success": true,
+			"data": {
+				"id":"price-1","model_id":"model-1","currency":"USD",
+				"valid_from":"2026-09-01T00:00:00Z","created_at":"2026-09-01T00:00:00Z",
+				"input_microunits_per_million":1000000,"output_microunits_per_million":2000000
+			}
+		}`))
 	}))
 	defer server.Close()
 

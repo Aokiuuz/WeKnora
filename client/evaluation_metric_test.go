@@ -12,7 +12,13 @@ func TestListEvaluationMetricsDecodesRegistryCatalog(t *testing.T) {
 		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/evaluation/metrics" {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
 		}
-		_, _ = w.Write([]byte(`{"success":true,"data":{"items":[{"key":"retrieval.ndcg","version":"1.0.0","kind":"retrieval","description":"NDCG","default_config":{"k":3},"config_schema":{"type":"object"}}]}}`))
+		_, _ = w.Write([]byte(`{
+			"success": true,
+			"data": {"items": [{
+				"key":"retrieval.ndcg","version":"1.0.0","kind":"retrieval",
+				"description":"NDCG","default_config":{"k":3},"config_schema":{"type":"object"}
+			}]}
+		}`))
 	}))
 	defer server.Close()
 

@@ -67,9 +67,11 @@ func TestMarkdownIsDerivedFromReport(t *testing.T) {
 	value := 0.75
 	report := &Report{
 		Dataset: DatasetIdentity{ID: "golden-v1", Version: 1, ContentSHA256: "abc"}, Commit: "commit-a",
-		MetricPlan:  &types.EvaluationMetricPlanSnapshot{Metrics: make([]types.EvaluationMetricSpecSnapshot, 1)},
-		Metrics:     []MetricResult{{Name: "retrieval.recall", Value: &value, NValid: 2, NTotal: 2}},
-		Regression:  RegressionResult{Passed: true, Checks: []RegressionCheck{{Metric: "retrieval.recall", Baseline: 0.75, Threshold: 0, Passed: true}}},
+		MetricPlan: &types.EvaluationMetricPlanSnapshot{Metrics: make([]types.EvaluationMetricSpecSnapshot, 1)},
+		Metrics:    []MetricResult{{Name: "retrieval.recall", Value: &value, NValid: 2, NTotal: 2}},
+		Regression: RegressionResult{Passed: true, Checks: []RegressionCheck{{
+			Metric: "retrieval.recall", Baseline: 0.75, Threshold: 0, Passed: true,
+		}}},
 		Environment: Environment{GoVersion: "go1.26", GOOS: "linux", GOARCH: "amd64", CPUs: 2},
 	}
 	output := string(Markdown(report))

@@ -27,6 +27,7 @@ type Store interface {
 // Recorder creates provider-call wrappers backed by one ledger store.
 type Recorder struct{ store Store }
 
+// NewRecorder creates a model call recorder backed by the supplied ledger store.
 func NewRecorder(store Store) *Recorder { return &Recorder{store: store} }
 
 type activeCall struct {

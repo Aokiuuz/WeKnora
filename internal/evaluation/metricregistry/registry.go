@@ -18,15 +18,22 @@ import (
 type Kind string
 
 const (
-	KindRetrieval  Kind = "retrieval"
+	// KindRetrieval identifies metrics computed from ranked retrieval results.
+	KindRetrieval Kind = "retrieval"
+	// KindGeneration identifies metrics computed from generated text.
 	KindGeneration Kind = "generation"
-	KindEndToEnd   Kind = "end_to_end"
+	// KindEndToEnd identifies metrics computed across the complete evaluation pipeline.
+	KindEndToEnd Kind = "end_to_end"
 )
 
 var (
-	ErrDuplicateMetric      = errors.New("duplicate evaluation metric registration")
-	ErrMetricNotFound       = errors.New("evaluation metric not registered")
-	ErrInvalidMetric        = errors.New("evaluation metric definition invalid")
+	// ErrDuplicateMetric reports a duplicate key and version registration.
+	ErrDuplicateMetric = errors.New("duplicate evaluation metric registration")
+	// ErrMetricNotFound reports an unresolved key and version.
+	ErrMetricNotFound = errors.New("evaluation metric not registered")
+	// ErrInvalidMetric reports an invalid definition, configuration, or instance.
+	ErrInvalidMetric = errors.New("evaluation metric definition invalid")
+	// ErrRequiredMetricFailed reports a required metric compute failure.
 	ErrRequiredMetricFailed = errors.New("required evaluation metric failed")
 )
 

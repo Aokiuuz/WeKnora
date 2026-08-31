@@ -1,15 +1,20 @@
+// Package modelobs records secret-free model call facts, usage, latency, and cost.
 package modelobs
 
 import "context"
 
 const (
-	PurposeGeneral    = "general"
+	// PurposeGeneral labels ordinary interactive model calls.
+	PurposeGeneral = "general"
+	// PurposeEvaluation labels strictly accounted evaluation model calls.
 	PurposeEvaluation = "evaluation"
 )
 
-type policyContextKey struct{}
-type taskContextKey struct{}
-type applicationCacheContextKey struct{}
+type (
+	policyContextKey           struct{}
+	taskContextKey             struct{}
+	applicationCacheContextKey struct{}
+)
 
 type callPolicy struct {
 	purpose string

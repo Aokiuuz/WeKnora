@@ -240,8 +240,9 @@ func buildEvaluationComparisonMetrics(
 			value, exists := input.metrics[pointer]
 			wire := types.EvaluationComparisonMetricValue{
 				TaskID: input.entity.ID, IsBaseline: input.entity.ID == baselineID,
-				Status: types.EvaluationComparisonValueMissing, ConfidenceStatus: types.EvaluationStatisticsInsufficientSample,
-				NTotal: input.questionTotal,
+				Status:           types.EvaluationComparisonValueMissing,
+				ConfidenceStatus: types.EvaluationStatisticsInsufficientSample,
+				NTotal:           input.questionTotal,
 			}
 			if exists {
 				wire.Value = &value

@@ -27,8 +27,8 @@ func (s *recorderStore) StartModelCall(_ context.Context, record *types.ModelCal
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	copy := *record
-	s.starts = append(s.starts, &copy)
+	cloned := *record
+	s.starts = append(s.starts, &cloned)
 	return nil
 }
 
@@ -39,7 +39,12 @@ func (s *recorderStore) CompleteModelCall(_ context.Context, completion types.Mo
 	return nil
 }
 
-func (s *recorderStore) EffectiveModelPrice(context.Context, uint64, string, time.Time) (*types.ModelPriceVersion, error) {
+func (s *recorderStore) EffectiveModelPrice(
+	context.Context,
+	uint64,
+	string,
+	time.Time,
+) (*types.ModelPriceVersion, error) {
 	return s.price, nil
 }
 func (s *recorderStore) CreateModelPrice(context.Context, *types.ModelPriceVersion) error { return nil }
@@ -56,7 +61,12 @@ func (c *recorderChat) Chat(context.Context, []chat.Message, *chat.ChatOptions) 
 	c.calls++
 	return &types.ChatResponse{Usage: types.TokenUsage{PromptTokens: 3, CompletionTokens: 2, TotalTokens: 5}}, nil
 }
-func (c *recorderChat) ChatStream(context.Context, []chat.Message, *chat.ChatOptions) (<-chan types.StreamResponse, error) {
+
+func (c *recorderChat) ChatStream(
+	context.Context,
+	[]chat.Message,
+	*chat.ChatOptions,
+) (<-chan types.StreamResponse, error) {
 	c.calls++
 	return c.stream, nil
 }
@@ -76,7 +86,10 @@ func TestStrictRecorderFailurePreventsProviderCall(t *testing.T) {
 	store := &recorderStore{startErr: errors.New("database unavailable")}
 	recorder := NewRecorder(store)
 	provider := &recorderChat{}
-	wrapped := recorder.WrapChat(&types.Model{ID: "model-1", TenantID: 7, Name: "safe", Type: types.ModelTypeKnowledgeQA}, provider)
+	wrapped := recorder.WrapChat(
+		&types.Model{ID: "model-1", TenantID: 7, Name: "safe", Type: types.ModelTypeKnowledgeQA},
+		provider,
+	)
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
 	ctx = WithPurpose(ctx, PurposeEvaluation, true)
 
@@ -94,13 +107,17 @@ func TestStreamingCallCompletesLedgerExactlyOnce(t *testing.T) {
 		Currency: "USD",
 	}}
 	recorder := NewRecorder(store)
-	wrapped := recorder.WrapChat(&types.Model{ID: "model-1", TenantID: 7, Name: "safe", Type: types.ModelTypeKnowledgeQA}, &recorderChat{stream: stream})
+	wrapped := recorder.WrapChat(
+		&types.Model{ID: "model-1", TenantID: 7, Name: "safe", Type: types.ModelTypeKnowledgeQA},
+		&recorderChat{stream: stream},
+	)
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
 	ctx = WithPurpose(ctx, PurposeEvaluation, true)
 
 	output, err := wrapped.ChatStream(ctx, nil, nil)
 	require.NoError(t, err)
-	for range output {
+	for response := range output {
+		_ = response
 	}
 	require.Eventually(t, func() bool {
 		store.mu.Lock()

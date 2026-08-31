@@ -1,3 +1,4 @@
+// Package modelstats validates model usage queries and immutable price operations.
 package modelstats
 
 import (
@@ -28,8 +29,10 @@ type Service struct {
 	now   func() time.Time
 }
 
+// NewService creates a tenant-scoped model statistics service.
 func NewService(store Store) *Service { return &Service{store: store, now: time.Now} }
 
+// Usage returns bounded model usage aggregates for a UTC interval.
 func (s *Service) Usage(
 	ctx context.Context,
 	tenantID uint64,
@@ -67,14 +70,25 @@ func (s *Service) Usage(
 	return &types.ModelUsageResponse{From: start, To: end, Items: items}, nil
 }
 
-func (s *Service) Prices(ctx context.Context, tenantID uint64, modelID string) ([]*types.ModelPriceVersion, error) {
+// Prices lists immutable price versions for one tenant model.
+func (s *Service) Prices(
+	ctx context.Context,
+	tenantID uint64,
+	modelID string,
+) ([]*types.ModelPriceVersion, error) {
 	if s == nil || s.store == nil || tenantID == 0 || strings.TrimSpace(modelID) == "" {
 		return nil, errors.New("model prices: tenant, model, and store are required")
 	}
 	return s.store.ListModelPrices(ctx, tenantID, strings.TrimSpace(modelID))
 }
 
-func (s *Service) PutPrice(ctx context.Context, tenantID uint64, modelID string, price *types.ModelPriceVersion) error {
+// PutPrice creates one immutable price version after assigning its tenant and model.
+func (s *Service) PutPrice(
+	ctx context.Context,
+	tenantID uint64,
+	modelID string,
+	price *types.ModelPriceVersion,
+) error {
 	if s == nil || s.store == nil || tenantID == 0 || strings.TrimSpace(modelID) == "" || price == nil {
 		return errors.New("put model price: tenant, model, price, and store are required")
 	}

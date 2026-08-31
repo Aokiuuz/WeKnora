@@ -738,7 +738,11 @@ func (e *EvaluationService) EvaluationWithOptions(
 
 // EvalDataset performs the actual evaluation of a dataset
 // Processes each QA pair in parallel and records metrics
-func (e *EvaluationService) EvalDataset(ctx context.Context, detail *types.EvaluationDetail, knowledgeBaseID string) error {
+func (e *EvaluationService) EvalDataset(
+	ctx context.Context,
+	detail *types.EvaluationDetail,
+	knowledgeBaseID string,
+) error {
 	if detail == nil || detail.Task == nil {
 		return errors.New("evaluate dataset: task detail is required")
 	}
@@ -959,7 +963,8 @@ func (e *EvaluationService) evalDataset(
 			metricHook.recordSearchResult(i, chatManage.SearchResult)
 			metricHook.recordRerankResult(i, chatManage.RerankResult)
 			metricHook.recordChatResponse(i, chatManage.ChatResponse)
-			promptTokens, completionTokens, totalTokens, usageReported := evaluationQuestionUsage(chatManage.ChatResponse)
+			response := chatManage.ChatResponse
+			promptTokens, completionTokens, totalTokens, usageReported := evaluationQuestionUsage(response)
 
 			// Publish each completed QA pair and its aggregate metric as one ordered snapshot.
 			publishMu.Lock()
@@ -985,7 +990,9 @@ func (e *EvaluationService) evalDataset(
 				// aggregate metric in one transaction.
 				input := metricHook.questionResultInput(i, detail.Experiment.MetricPlan, detail.Params.RerankTopK)
 				if input != nil {
-					applyEvaluationQuestionRuntime(input, chatManage.EvaluationTimings, time.Since(sampleStart), usageReported)
+					applyEvaluationQuestionRuntime(
+						input, chatManage.EvaluationTimings, time.Since(sampleStart), usageReported,
+					)
 					updateErr = e.publishQuestionResult(workerCtx, runState, len(dataset), finishedSnapshot,
 						metricResult, input, runtimeCollector)
 				} else {
@@ -1022,7 +1029,9 @@ func (e *EvaluationService) evalDataset(
 
 	// Final update of evaluation metrics
 	finalMetric := metricHook.MetricResult()
-	if err := e.publishEvaluationProgress(ctx, runState, len(dataset), finished, finalMetric, runtimeCollector); err != nil {
+	if err := e.publishEvaluationProgress(
+		ctx, runState, len(dataset), finished, finalMetric, runtimeCollector,
+	); err != nil {
 		return fmt.Errorf("publish final evaluation progress: %w", err)
 	}
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/Tencent/WeKnora/internal/modelobs"
 	"github.com/Tencent/WeKnora/internal/modelstats"
 	"github.com/Tencent/WeKnora/internal/types"
 	"gorm.io/gorm"
@@ -12,9 +13,10 @@ import (
 
 type modelStatisticsRepository struct {
 	db     *gorm.DB
-	prices *modelObservabilityRepository
+	prices modelobs.Store
 }
 
+// NewModelStatisticsRepository creates the model usage aggregation store.
 func NewModelStatisticsRepository(db *gorm.DB) modelstats.Store {
 	return &modelStatisticsRepository{db: db, prices: NewModelObservabilityRepository(db)}
 }
@@ -120,11 +122,16 @@ func (r *modelStatisticsRepository) QueryModelUsage(
 	}
 	for _, row := range costRows {
 		stat := ensureUsageStatistic(byModel, row.ModelID)
-		stat.Costs = append(stat.Costs, types.ModelCostTotal{Currency: row.Currency, CostMicrounits: row.CostMicrounits})
+		stat.Costs = append(stat.Costs, types.ModelCostTotal{
+			Currency: row.Currency, CostMicrounits: row.CostMicrounits,
+		})
 	}
 
 	cacheQuery := r.db.WithContext(ctx).Table("embedding_cache_events").
-		Where("tenant_id = ? AND occurred_at >= ? AND occurred_at < ?", query.TenantID, query.From.UTC(), query.To.UTC())
+		Where(
+			"tenant_id = ? AND occurred_at >= ? AND occurred_at < ?",
+			query.TenantID, query.From.UTC(), query.To.UTC(),
+		)
 	if len(query.ModelIDs) > 0 {
 		cacheQuery = cacheQuery.Where("model_id IN ?", query.ModelIDs)
 	}

@@ -14,14 +14,19 @@ type serviceStore struct {
 	price *types.ModelPriceVersion
 }
 
-func (s *serviceStore) QueryModelUsage(_ context.Context, query types.ModelUsageQuery) ([]types.ModelUsageStatistics, error) {
+func (s *serviceStore) QueryModelUsage(
+	_ context.Context,
+	query types.ModelUsageQuery,
+) ([]types.ModelUsageStatistics, error) {
 	s.query = query
 	return []types.ModelUsageStatistics{{ModelID: "b"}, {ModelID: "a"}}, nil
 }
+
 func (s *serviceStore) CreateModelPrice(_ context.Context, price *types.ModelPriceVersion) error {
 	s.price = price
 	return nil
 }
+
 func (*serviceStore) ListModelPrices(context.Context, uint64, string) ([]*types.ModelPriceVersion, error) {
 	return []*types.ModelPriceVersion{}, nil
 }
@@ -47,7 +52,10 @@ func TestUsageRejectsOversizedWindow(t *testing.T) {
 
 func TestPutPriceBindsTenantAndModel(t *testing.T) {
 	store := &serviceStore{}
-	price := &types.ModelPriceVersion{ID: "client-id", ModelID: "other", TenantID: 9, ValidFrom: time.Now(), Currency: "USD"}
+	price := &types.ModelPriceVersion{
+		ID: "client-id", ModelID: "other", TenantID: 9,
+		ValidFrom: time.Now(), Currency: "USD",
+	}
 	require.NoError(t, NewService(store).PutPrice(context.Background(), 7, "model-1", price))
 	require.Equal(t, uint64(7), store.price.TenantID)
 	require.Equal(t, "model-1", store.price.ModelID)

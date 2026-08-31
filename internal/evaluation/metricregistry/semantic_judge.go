@@ -53,9 +53,27 @@ func NewSemanticJudgeMetric(judge SemanticJudge) (Metric, error) {
 func (semanticJudgeMetric) Definition() Definition {
 	return Definition{
 		Key: "generation.semantic_judge", Version: "1.0.0", Kind: KindGeneration,
-		Description:   "External semantic judge score using a frozen rubric.",
-		DefaultConfig: json.RawMessage(`{"rubric":"Score factual agreement with the reference answer from 0 to 1.","prompt_version":"1.0.0","prompt_sha256":"93d91f65a4e4e60ca6b5e5884a53a0add8693d3f40cb5155f3d63d11683fbea9","judge_model_snapshot":{"id":"semantic-judge","fingerprint":"injected"},"temperature":0,"seed":0,"retry_limit":0}`),
-		ConfigSchema:  json.RawMessage(`{"type":"object","required":["rubric","prompt_version","prompt_sha256","judge_model_snapshot","temperature","seed","retry_limit"],"properties":{"rubric":{"type":"string","minLength":1,"maxLength":4000},"prompt_version":{"type":"string","minLength":1,"maxLength":64},"prompt_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},"judge_model_snapshot":{"type":"object"},"temperature":{"type":"number","minimum":0,"maximum":2},"seed":{"type":"integer"},"retry_limit":{"type":"integer","minimum":0,"maximum":10}},"additionalProperties":false}`),
+		Description: "External semantic judge score using a frozen rubric.",
+		DefaultConfig: json.RawMessage(
+			`{"rubric":"Score factual agreement with the reference answer from 0 to 1.",` +
+				`"prompt_version":"1.0.0",` +
+				`"prompt_sha256":"93d91f65a4e4e60ca6b5e5884a53a0add8693d3f40cb5155f3d63d11683fbea9",` +
+				`"judge_model_snapshot":{"id":"semantic-judge","fingerprint":"injected"},` +
+				`"temperature":0,"seed":0,"retry_limit":0}`,
+		),
+		ConfigSchema: json.RawMessage(
+			`{"type":"object",` +
+				`"required":["rubric","prompt_version","prompt_sha256","judge_model_snapshot",` +
+				`"temperature","seed","retry_limit"],` +
+				`"properties":{"rubric":{"type":"string","minLength":1,"maxLength":4000},` +
+				`"prompt_version":{"type":"string","minLength":1,"maxLength":64},` +
+				`"prompt_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},` +
+				`"judge_model_snapshot":{"type":"object"},` +
+				`"temperature":{"type":"number","minimum":0,"maximum":2},` +
+				`"seed":{"type":"integer"},` +
+				`"retry_limit":{"type":"integer","minimum":0,"maximum":10}},` +
+				`"additionalProperties":false}`,
+		),
 	}
 }
 
@@ -111,8 +129,9 @@ func (m semanticJudgeMetric) Compute(
 	value, err := m.judge.Judge(ctx, SemanticJudgeRequest{
 		GeneratedText: input.GeneratedTexts, ReferenceText: input.GeneratedGT,
 		Rubric: strings.TrimSpace(parsed.Rubric), PromptVersion: strings.TrimSpace(parsed.PromptVersion),
-		PromptSHA256: parsed.PromptSHA256, JudgeModelSnapshot: append(json.RawMessage(nil), parsed.JudgeModelSnapshot...),
-		Temperature: parsed.Temperature, Seed: parsed.Seed, RetryLimit: parsed.RetryLimit,
+		PromptSHA256:       parsed.PromptSHA256,
+		JudgeModelSnapshot: append(json.RawMessage(nil), parsed.JudgeModelSnapshot...),
+		Temperature:        parsed.Temperature, Seed: parsed.Seed, RetryLimit: parsed.RetryLimit,
 	})
 	if err != nil {
 		return Observation{Status: types.EvaluationMetricObservationFailed, ErrorCode: "semantic_judge_failed"}, err

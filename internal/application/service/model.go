@@ -71,7 +71,9 @@ func NewModelServiceWithObservabilityAndCache(repo interfaces.ModelRepository,
 	modelCallRecorder *modelobs.Recorder,
 	embeddingCache *modelcache.Coordinator,
 ) interfaces.ModelService {
-	return newModelService(repo, kbRepo, agentRepo, ollamaService, pooler, tenantService, modelCallRecorder, embeddingCache)
+	return newModelService(
+		repo, kbRepo, agentRepo, ollamaService, pooler, tenantService, modelCallRecorder, embeddingCache,
+	)
 }
 
 func newModelService(repo interfaces.ModelRepository,

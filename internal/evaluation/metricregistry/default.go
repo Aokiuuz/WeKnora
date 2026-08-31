@@ -90,7 +90,10 @@ func NewDefaultRegistryWithPlugins(plugins ...Metric) (*Registry, error) {
 				Key: "retrieval.ndcg", Version: "1.0.0", Kind: KindRetrieval,
 				Description:   "Normalized discounted cumulative gain at a configured cutoff.",
 				DefaultConfig: json.RawMessage(`{"k":3}`),
-				ConfigSchema:  json.RawMessage(`{"type":"object","required":["k"],"properties":{"k":{"type":"integer","minimum":1}},"additionalProperties":false}`),
+				ConfigSchema: json.RawMessage(
+					`{"type":"object","required":["k"],` +
+						`"properties":{"k":{"type":"integer","minimum":1}},"additionalProperties":false}`,
+				),
 			},
 			validatePositiveInt("k"),
 			func(config json.RawMessage) (interfaces.Metrics, error) {
@@ -122,7 +125,10 @@ func NewDefaultRegistryWithPlugins(plugins ...Metric) (*Registry, error) {
 				Key: "generation.bleu", Version: "1.0.0", Kind: KindGeneration,
 				Description:   "Bilingual Evaluation Understudy score at a configured n-gram order.",
 				DefaultConfig: json.RawMessage(`{"n":1}`),
-				ConfigSchema:  json.RawMessage(`{"type":"object","required":["n"],"properties":{"n":{"type":"integer","enum":[1,2,4]}},"additionalProperties":false}`),
+				ConfigSchema: json.RawMessage(
+					`{"type":"object","required":["n"],` +
+						`"properties":{"n":{"type":"integer","enum":[1,2,4]}},"additionalProperties":false}`,
+				),
 			},
 			validateEnumInt("n", 1, 2, 4),
 			func(config json.RawMessage) (interfaces.Metrics, error) {
@@ -131,9 +137,10 @@ func NewDefaultRegistryWithPlugins(plugins ...Metric) (*Registry, error) {
 					return nil, err
 				}
 				weights := metric.BLEU1Gram
-				if order == 2 {
+				switch order {
+				case 2:
 					weights = metric.BLEU2Gram
-				} else if order == 4 {
+				case 4:
 					weights = metric.BLEU4Gram
 				}
 				return metric.NewBLEUMetric(true, weights), nil
@@ -155,7 +162,11 @@ func NewDefaultRegistryWithPlugins(plugins ...Metric) (*Registry, error) {
 				Key: "generation.rouge", Version: "1.0.0", Kind: KindGeneration,
 				Description:   "Recall-Oriented Understudy for Gisting Evaluation F-score.",
 				DefaultConfig: json.RawMessage(`{"variant":"rouge-1"}`),
-				ConfigSchema:  json.RawMessage(`{"type":"object","required":["variant"],"properties":{"variant":{"type":"string","enum":["rouge-1","rouge-2","rouge-l"]}},"additionalProperties":false}`),
+				ConfigSchema: json.RawMessage(
+					`{"type":"object","required":["variant"],` +
+						`"properties":{"variant":{"type":"string",` +
+						`"enum":["rouge-1","rouge-2","rouge-l"]}},"additionalProperties":false}`,
+				),
 			},
 			validateEnumString("variant", "rouge-1", "rouge-2", "rouge-l"),
 			func(config json.RawMessage) (interfaces.Metrics, error) {
