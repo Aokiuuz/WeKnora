@@ -53,7 +53,7 @@ func (EvaluationDatasetVersion) TableName() string { return "evaluation_dataset_
 // EvaluationDatasetPassage is one corpus passage of an immutable version.
 type EvaluationDatasetPassage struct {
 	DatasetVersionID string `json:"dataset_version_id" gorm:"type:varchar(64);primaryKey"`
-	PID              string `json:"pid" gorm:"type:varchar(128);primaryKey"`
+	PID              string `json:"pid" gorm:"column:pid;type:varchar(128);primaryKey"`
 	Content          string `json:"content" gorm:"not null"`
 	Metadata         JSON   `json:"metadata" gorm:"not null"`
 }
@@ -65,7 +65,7 @@ func (EvaluationDatasetPassage) TableName() string { return "evaluation_dataset_
 // stable sample_index assigned at creation time.
 type EvaluationDatasetQuestion struct {
 	DatasetVersionID string `json:"dataset_version_id" gorm:"type:varchar(64);primaryKey"`
-	QID              string `json:"qid" gorm:"type:varchar(128);primaryKey"`
+	QID              string `json:"qid" gorm:"column:qid;type:varchar(128);primaryKey"`
 	SampleIndex      int    `json:"sample_index" gorm:"not null"`
 	Question         string `json:"question" gorm:"not null"`
 	Answer           string `json:"answer" gorm:"not null;default:''"`
@@ -77,8 +77,8 @@ func (EvaluationDatasetQuestion) TableName() string { return "evaluation_dataset
 // EvaluationDatasetRelevance is one graded question-passage relevance edge.
 type EvaluationDatasetRelevance struct {
 	DatasetVersionID string `json:"dataset_version_id" gorm:"type:varchar(64);primaryKey"`
-	QID              string `json:"qid" gorm:"type:varchar(128);primaryKey"`
-	PID              string `json:"pid" gorm:"type:varchar(128);primaryKey"`
+	QID              string `json:"qid" gorm:"column:qid;type:varchar(128);primaryKey"`
+	PID              string `json:"pid" gorm:"column:pid;type:varchar(128);primaryKey"`
 	Grade            int    `json:"grade" gorm:"not null;default:1"`
 }
 

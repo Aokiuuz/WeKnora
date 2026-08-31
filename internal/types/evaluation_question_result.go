@@ -49,7 +49,7 @@ type EvaluationQuestionResultEntity struct {
 	TenantID           uint64 `json:"tenant_id" gorm:"primaryKey"`
 	TaskID             string `json:"task_id" gorm:"type:varchar(128);primaryKey"`
 	SampleIndex        int    `json:"sample_index" gorm:"primaryKey"`
-	QID                string `json:"qid" gorm:"type:varchar(128);not null"`
+	QID                string `json:"qid" gorm:"column:qid;type:varchar(128);not null"`
 	Question           string `json:"question" gorm:"not null"`
 	ReferenceAnswer    string `json:"reference_answer" gorm:"not null;default:''"`
 	GroundTruthPIDs    JSON   `json:"ground_truth_pids" gorm:"not null"`
