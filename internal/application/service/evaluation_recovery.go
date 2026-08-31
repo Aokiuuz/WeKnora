@@ -187,33 +187,33 @@ func (r *EvaluationTaskRecoveryRunner) runOnce(ctx context.Context) error {
 func (r *EvaluationTaskRecoveryRunner) validateRecoveryOwnership(
 	ctx context.Context,
 	task *types.EvaluationTaskEntity,
-) error {
+) (*types.EvaluationTaskEntity, error) {
 	current, err := r.evaluationTaskRepository.GetTask(ctx, task.TenantID, task.ID)
 	if err != nil {
-		return fmt.Errorf("validate recovery ownership for evaluation task %s: %w", task.ID, err)
+		return nil, fmt.Errorf("validate recovery ownership for evaluation task %s: %w", task.ID, err)
 	}
 	if current.OwnerID != r.ownerID {
-		return fmt.Errorf(
+		return nil, fmt.Errorf(
 			"validate recovery ownership for evaluation task %s: %w",
 			task.ID,
 			interfaces.ErrEvaluationTaskOwnerConflict,
 		)
 	}
 	if current.Version != task.Version {
-		return fmt.Errorf(
+		return nil, fmt.Errorf(
 			"validate recovery ownership for evaluation task %s: %w",
 			task.ID,
 			interfaces.ErrEvaluationTaskVersionConflict,
 		)
 	}
 	if current.LeaseExpiresAt == nil || !current.LeaseExpiresAt.After(r.nowUTC()) {
-		return fmt.Errorf(
+		return nil, fmt.Errorf(
 			"validate recovery ownership for evaluation task %s: %w",
 			task.ID,
 			interfaces.ErrEvaluationTaskStateConflict,
 		)
 	}
-	return nil
+	return current, nil
 }
 
 func (r *EvaluationTaskRecoveryRunner) recoverTask(
@@ -235,7 +235,7 @@ func (r *EvaluationTaskRecoveryRunner) recoverTask(
 	cleanupBase = context.WithValue(cleanupBase, types.TenantInfoContextKey, tenant)
 
 	knowledgeCtx, knowledgeCancel := context.WithTimeout(cleanupBase, evaluationRecoveryOperationTimeout)
-	if err := r.validateRecoveryOwnership(knowledgeCtx, task); err != nil {
+	if _, err := r.validateRecoveryOwnership(knowledgeCtx, task); err != nil {
 		knowledgeCancel()
 		return err
 	}
@@ -256,7 +256,7 @@ func (r *EvaluationTaskRecoveryRunner) recoverTask(
 	}
 
 	knowledgeBaseCtx, knowledgeBaseCancel := context.WithTimeout(cleanupBase, evaluationRecoveryOperationTimeout)
-	if err := r.validateRecoveryOwnership(knowledgeBaseCtx, task); err != nil {
+	if _, err := r.validateRecoveryOwnership(knowledgeBaseCtx, task); err != nil {
 		knowledgeBaseCancel()
 		return err
 	}
@@ -284,22 +284,23 @@ func (r *EvaluationTaskRecoveryRunner) recoverTask(
 	if err != nil {
 		return fmt.Errorf("recover evaluation task %s: %w", task.ID, err)
 	}
-	// Expired tasks with a persistent cancel request finish as Canceled;
-	// all others finish as Interrupted.
-	terminalStatus := types.EvaluationStatueInterrupted
-	terminalMessage := evaluationTaskInterruptedMessage
-	if task.CancelRequestedAt != nil {
-		terminalStatus = types.EvaluationStatueCanceled
-		terminalMessage = evaluationTaskCanceledMessage
-	}
 	endTime := r.nowUTC()
 	publicationCtx, publicationCancel := context.WithTimeout(
 		cleanupBase,
 		evaluationRecoveryOperationTimeout,
 	)
 	defer publicationCancel()
-	if err := r.validateRecoveryOwnership(publicationCtx, task); err != nil {
+	current, err := r.validateRecoveryOwnership(publicationCtx, task)
+	if err != nil {
 		return err
+	}
+	// Select the terminal state from the publication-time database truth so a
+	// cancel request persisted during cleanup completes in this recovery pass.
+	terminalStatus := types.EvaluationStatueInterrupted
+	terminalMessage := evaluationTaskInterruptedMessage
+	if current.CancelRequestedAt != nil {
+		terminalStatus = types.EvaluationStatueCanceled
+		terminalMessage = evaluationTaskCanceledMessage
 	}
 	_, err = r.evaluationTaskRepository.PublishTerminal(
 		publicationCtx,

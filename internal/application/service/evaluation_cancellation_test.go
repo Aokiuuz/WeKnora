@@ -248,3 +248,55 @@ func TestEvaluationTaskRecoveryPublishesCanceledForExpiredTaskWithCancelRequest(
 	assert.Equal(t, evaluationTaskCanceledMessage, stored.ErrMsg)
 	assert.Equal(t, 2, len(recorder.snapshot()))
 }
+
+func TestEvaluationTaskRecoveryPublishesCanceledWhenRequestArrivesDuringCleanup(t *testing.T) {
+	now := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+	repository := newFakeEvaluationTaskRepository()
+	entity := newExpiredRecoveryTask(86, "cancel-during-recovery", now)
+	repository.register(entity)
+
+	cleanupEntered := make(chan struct{}, 1)
+	cleanupRelease := make(chan struct{})
+	runner := NewEvaluationTaskRecoveryRunner(
+		repository,
+		&evaluationRecoveryTenantStub{},
+		&evaluationHeartbeatCleanupKnowledgeBaseStub{
+			entered: cleanupEntered,
+			release: cleanupRelease,
+		},
+		nil,
+	)
+	runner.ownerID = "recovery-owner"
+	runner.now = func() time.Time { return now }
+	runner.recoveryLeaseDuration = 2 * time.Minute
+
+	runDone := make(chan error, 1)
+	go func() {
+		runDone <- runner.runOnce(context.Background())
+	}()
+	select {
+	case <-cleanupEntered:
+	case <-time.After(time.Second):
+		t.Fatal("recovery did not reach knowledge base cleanup")
+	}
+	_, err := repository.RequestCancel(context.Background(), types.EvaluationTaskCancelCommand{
+		TenantID: entity.TenantID,
+		TaskID:   entity.ID,
+		Now:      now.Add(time.Second),
+	})
+	require.NoError(t, err)
+	close(cleanupRelease)
+
+	select {
+	case runErr := <-runDone:
+		require.NoError(t, runErr)
+	case <-time.After(time.Second):
+		t.Fatal("recovery did not finish after cleanup was released")
+	}
+
+	stored, err := repository.get(entity.TenantID, entity.ID)
+	require.NoError(t, err)
+	assert.Equal(t, types.EvaluationStatueCanceled, stored.Status)
+	assert.Equal(t, evaluationTaskCanceledMessage, stored.ErrMsg)
+	require.NotNil(t, stored.CancelRequestedAt)
+}
