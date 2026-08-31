@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Tencent/WeKnora/internal/application/service"
+	"github.com/Tencent/WeKnora/internal/buildinfo"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/handler/dto"
@@ -860,7 +861,7 @@ func (h *AuthHandler) SwitchTenant(c *gin.Context) {
 func (h *AuthHandler) AutoSetup(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	if Edition != "lite" {
+	if buildinfo.Edition != "lite" {
 		appErr := errors.NewForbiddenError("auto-setup is only available in lite edition")
 		c.Error(appErr)
 		return
