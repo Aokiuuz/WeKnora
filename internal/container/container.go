@@ -183,8 +183,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewEvaluationTaskRepository))
 	must(container.Provide(repository.NewEvaluationDatasetRepository))
 	must(container.Provide(func(db *gorm.DB) interfaces.EvaluationQuestionResultRepository {
-		// The M2d cancellation predicate lands in its own slice; the narrow
-		// checker is wired then (see M3_INTEGRATION.md).
 		return repository.NewEvaluationQuestionResultRepository(db)
 	}))
 
@@ -367,6 +365,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Invoke(startDataSourceScheduler))
 	logger.Debugf(ctx, "[Container] Data source sync framework registered")
 	must(container.Invoke(startAuditLogRetention))
+	must(container.Invoke(registerBuiltinEvaluationDataset))
 	must(container.Invoke(startEvaluationTaskRecovery))
 	must(container.Invoke(startEvaluationTaskRetention))
 	logger.Debugf(ctx, "[Container] Audit log retention runner registered")
@@ -1820,6 +1819,19 @@ func startEvaluationTaskRecovery(
 		runner.Stop()
 		return nil
 	})
+}
+
+// registerBuiltinEvaluationDataset imports the embedded, artifact-pinned
+// Parquet samples before task recovery can resume evaluation workers.
+func registerBuiltinEvaluationDataset(
+	registry interfaces.EvaluationDatasetRegistryService,
+) error {
+	registration, err := service.BuiltinEvaluationDatasetRegistration()
+	if err != nil {
+		return err
+	}
+	_, err = registry.RegisterBuiltinDataset(context.Background(), registration)
+	return err
 }
 
 // startEvaluationTaskRetention validates the retention configuration and
