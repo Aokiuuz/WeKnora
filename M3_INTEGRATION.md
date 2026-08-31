@@ -1,81 +1,121 @@
-# M3_INTEGRATION：待主审接线的 M2 依赖点
+# M3 可复现实验集成契约
 
-本文件列出 M3 草稿（`draft/evaluation-m3-reproducibility`）中所有依赖 M2c–M2e 的窄接口、
-CAS 条件、迁移外键和测试接线点。本 checkout 不包含 M2c–M2e（`cancel_requested_at`、
-列表/删除/retention 迁移 000091–000093 / 000014–000016 未进入本分支），以下各项均未验证，
-不得在集成前描述为已通过。
+里程碑 3（Milestone 3，M3）在 `integration/evaluation-m3-reproducible-experiments` 分支提供可复现实验能力。
+M3 使用 M2 的 `evaluation_tasks` 作为任务状态权威来源，并增加不可变数据集版本、实验清单和逐问题结果。
 
-## 1. 连续迁移链
+## 1. 数据权威与标识
 
-- M3 使用预留号段：PostgreSQL 000094–000096、SQLite 000017–000019。本分支 SQLite 迁移从
-  000013 直接跳到 000017（golang-migrate 允许跳号），中间 000014–000016 由 M2 窗口负责。
-- 主审集成 M2d/M2e 后必须验证完整连续迁移（000013→000019 与 000090→000096）的 up/down。
-- PostgreSQL 000096 在 `evaluation_tasks` 上新增 `UNIQUE (tenant_id, id)` 约束供复合外键引用；
-  SQLite 000019 以唯一索引实现同等约束。若 M2d 迁移也修改 `evaluation_tasks`，主审需检查约束冲突。
-- `migration_sqlite_versioned_schema_test.go` 的 `expectedSQLiteMigrationVersion` 当前为 19；
-  M2 的 000014–000016 进入后保持 19 不变（19 已含 M2 区间之外的 M3 号段），但测试需覆盖 M2 新增表/列。
+评测执行从规范化数据库记录读取数据集。数据集由 `evaluation_datasets` 保存身份和可见范围，
+`evaluation_dataset_versions` 保存不可变版本，passage、question 和 relevance 三类子表保存版本内容。
+段落标识（Passage ID，PID）标识语料段落，问题标识（Question ID，QID）标识评测问题；公开接口使用全局唯一
+`dataset_version_id`，`version_number` 只表示同一数据集内的展示序号。
 
-## 2. 取消 CAS（M2d）
+数据集版本同时保存制品哈希和内容哈希。制品哈希校验导入字节，内容哈希使用安全哈希算法 256 位
+（Secure Hash Algorithm 256-bit，SHA-256）校验规范化逻辑内容。内容哈希算法按 PID、QID、QID/PID
+稳定排序，使用禁用超文本标记语言（HyperText Markup Language，HTML）转义的 JavaScript 对象表示法行
+（JavaScript Object Notation Lines，JSON Lines）序列化，并保留原始 8 位统一码转换格式
+（8-bit Unicode Transformation Format，UTF-8）文本。
 
-- 窄接口：`interfaces.EvaluationTaskCancellationChecker`
-  （`internal/types/interfaces/evaluation_question_result.go`）。
-- 当前接线：`internal/container/container.go` 中 `NewEvaluationQuestionResultRepository(db, nil)`，
-  nil 表示本 draft 的 schema 尚无 `cancel_requested_at` 列。
-- 集成动作：M2d 落地后用 `cancel_requested_at IS NULL` 谓词实现 checker 并替换 nil；
-  或在 `PublishQuestionResult` 的事务 UPDATE 中直接加列条件（二选一，主审决定）。
-- 测试接线：`TestEvaluationQuestionResultRejectsCanceledTask` 当前用 fake checker 证明取消拒绝路径；
-  集成后应增加基于真实 `cancel_requested_at` 列的用例。
-- 终态选择优先级（Canceled vs TimedOut vs Failed）与 `cancel_requested_at` 真值表由 M2d 拥有，M3 未实现。
+内置 `default` 数据集由 `dataset/samples` 下的五个 Parquet 文件嵌入服务端。启动序列在任务恢复器启动前完成注册，
+其制品 SHA-256 固定为 `d598d48018f1da0705920f4432b68a9309c391adbe1403bb1278771b22fe923f`。
 
-## 3. Retention 级联与软删除（M2e）
+## 2. 实验清单
 
-- `evaluation_question_results` 通过复合外键 `ON DELETE CASCADE` 绑定 `evaluation_tasks(tenant_id, id)`；
-  M2e 保留清理物理删除任务行时逐题行级联删除。SQLite 依赖生产 DSN 的 `_foreign_keys=on`
-  （container.go:705 已配置）；测试 DSN 已在 `openSQLiteDB` 与 `setupEvaluationTaskRepositoryTestDB` 补齐。
-- `evaluation_question_results.deleted_at` 已预留；`ListQuestionResults` 已过滤 `deleted_at IS NULL`，
-  分页索引为部分索引。M2e 任务软删除时是否同事务软删逐题行由主审决定（当前软删任务不影响逐题查询，
-  因为逐题 API 以 tenant+task 为边界且任务本身已被查询层过滤）。
-- 活动任务（Pending/Running）永不进入保留清理由 M2e 保证，M3 未实现。
+新任务进入 Pending 前生成 schema version 1 的实验清单。清单冻结以下信息：
 
-## 4. API Key KB allow-list 授权
+- 数据集 ID、版本 ID、版本号、制品 SHA-256 和内容 SHA-256。
+- 创建请求中的来源知识库（Knowledge Base，KB）ID。
+- embedding、chat、rerank 和 summary 四个模型角色及其去密行为配置指纹。
+- 检索、重排、生成、随机种子、分块、索引和指标计划。
+- 代码版本、提交、构建时间、Go 版本、操作系统、架构、版本形态和数据库驱动。
+- 可复现级别与告警。
 
-- 实验清单的 `source_knowledge_base_id` 已冻结进 `evaluation_tasks.experiment_snapshot`
-  （原始创建请求值，null 表示无来源 KB），并参与 `experiment_sha256`。
-- M3 未实现授权中间件变更。集成动作：M2d/M4 的 API Key 授权路径从实验清单读取
-  `source_knowledge_base_id` 作为 allow-list 唯一输入；带 KB allow-list 的 API Key 访问
-  provenance 不完整（`experiment_snapshot IS NULL`）或 source 为空的旧任务时默认拒绝并返回 404。
-  不得使用 `temporary_kb_id`。
+`evaluation_tasks` 使用 `dataset_version_id`、`dataset_content_sha256`、`experiment_snapshot` 和
+`experiment_sha256` 保存清单及其规范 SHA-256。运行阶段重新读取数据集版本并复算内容哈希，同时重新获取模型并校验行为配置指纹。
+任一校验不一致都会使任务明确失败。
 
-## 5. 容器与装配
+M3 定义指标计划与观测的唯一数据传输对象（Data Transfer Object，DTO）：
+`EvaluationMetricPlanSnapshot`、`EvaluationMetricSpecSnapshot` 和 `EvaluationMetricObservationSnapshot`。
+指标实例 ID 使用 `key@version#config_sha256`。里程碑 4（Milestone 4，M4）直接读取这些 DTO；
+里程碑 5（Milestone 5，M5）通过适配器生成这些 DTO。
 
-- `NewEvaluationService` 新增第 8、9 参数：`datasetRegistry`、`questionResultRepository`；
-  container 已 Provide `NewEvaluationDatasetRegistryService` 与
-  `NewEvaluationQuestionResultRepository`，dig 图完整。M2 若也修改构造函数，主审合并参数列表。
-- `RegisterEvaluationRoutes` 现接收 3 个 handler（evaluation、dataset、question）；
-  `router.go` RouterParams 与 `router_api_key_capabilities_test.go` 已同步。
+## 3. 执行与发布流程
 
-## 6. buildinfo 与版本注入
+下图展示任务从请求到可审计结果的当前数据流。图中的数据库事务同时写入逐问题事实和 M2 任务进度，确保两者保持一致。
 
-- 构建元数据移至中立包 `internal/buildinfo`（linker 变量 + `debug.ReadBuildInfo` 回退）。
-- `Makefile` 与 `scripts/get_version.sh` 的 `-X` 注入路径已从 `internal/handler.*` 改为
-  `internal/buildinfo.*`。主审需验证 Docker 构建路径（get_version.sh 的 docker/build-arg 模式）
-  与实际 Dockerfile 的 ldflags 引用一致。
-- `cmd/desktop/update.go`、`internal/router/router.go`、`internal/router/deployment_capabilities.go`
-  已改引用 `buildinfo.*`；handler 包不再持有版本变量。
+```mermaid
+flowchart LR
+    A[创建请求] --> B[解析数据集版本与模型]
+    B --> C[冻结实验清单与哈希]
+    C --> D[写入 Pending 任务]
+    D --> E[读取冻结数据集版本]
+    E --> F[导入完整 corpus]
+    F --> G[按 sample_index 执行]
+    G --> H[事务发布逐问题结果]
+    H --> I[更新 finished、metric 与 version]
+    I --> J[发布稳定终态]
+```
 
-## 7. 内置数据集注册
+执行器使用冻结的 `dataset_version_id` 读取完整 corpus，并按 `sample_index ASC` 处理问题。相关性边中的字符串 PID
+按照版本内 passage 的规范顺序映射为运行期整数 PID。检索与重排结果保存原始排名；未知来源和重复来源保留 `pid=-1`。
 
-- 受控注册流程 `EvaluationDatasetRegistryService.RegisterBuiltinDataset` 已实现
-  （artifact SHA-256 pin 校验、内容幂等、系统作用域）。
-- 未接线：`dataset/samples` 五个 Parquet → 结构化注册输入的转换器、pin 的
-  artifact SHA-256（需运行环境计算）、启动时自动注册流程。主审在有 Go 环境时生成
-  manifest 并接入启动序列；`GetDatasetByID` 当前仍读取固定 Parquet 文件，未切换到 registry 读取
-  （切换属于后续切片，需保持评测执行与 registry 版本绑定一致）。
+`PublishQuestionResult` 在单个事务中插入逐问题结果并更新 `finished`、聚合指标、心跳、租约和任务版本。条件包含租户、任务、
+所有者、Running 状态、预期版本、有效租约及 `cancel_requested_at IS NULL`。相同结果哈希的重试幂等；相同样本序号的不同结果哈希返回冲突。
+取消请求与问题结果发布在同一数据库真值上竞争，失败事务不会留下逐问题行或进度增量。
 
-## 8. 测试与门禁未验证项
+## 4. 随机种子与模型指纹
 
-- 全部 Go 门禁（gofumpt、gofmt、go test、race、go vet、golangci-lint、CGO build、Compose config）
-  因本机 WSL 被安全策略禁用且 Windows 无 Go 工具链而未执行。详见
-  `docs/reports/2026-08-28-m3-draft-acceptance.md` 的命令与未验证项清单。
-- `TestEvaluationQuestionResultPostgresContract`、`TestEvaluationDatasetRepositoryPostgresContract`
-  与 000095 的 PG 断言需要 `TEST_POSTGRES_DSN`；未运行。
+创建应用程序编程接口（Application Programming Interface，API）使用指针区分未提供 seed 与显式 `seed=0`。
+OpenAI-compatible 和 Ollama 请求实际携带 seed；Anthropic 对显式 seed 返回类型化不支持错误，
+超文本传输协议（Hypertext Transfer Protocol，HTTP）状态码映射为 422。
+实验清单记录 `seed`、`seed_provided` 和 `seed_support`。
+
+模型指纹覆盖影响输出的行为配置，并排除应用程序编程接口密钥（Application Programming Interface Key，API Key）、
+应用密钥（AppSecret）、应用标识（AppID）、自定义授权头、统一资源定位符（Uniform Resource Locator，URL）用户信息和敏感扩展配置。
+运行期间的模型指纹校验保证一个 Success 任务只使用同一组冻结配置。
+
+## 5. 权限、分页与保留
+
+数据集、版本、任务和逐问题结果均按租户边界读取。系统数据集对所有租户可见，租户数据集只对所有者可见；跨租户对象与缺失对象使用相同的 NotFound 语义。
+
+受知识库范围限制的 API Key 只使用实验清单中的 `source_knowledge_base_id` 判断访问范围。来源为空、来源不完整或超出允许范围时，
+详情、取消、列表和逐问题查询返回 NotFound 语义。临时评测 KB ID 不参与授权。
+
+逐问题分页按 `sample_index ASC` 使用不透明键集游标，默认页大小为 100，最大值为 500。`evaluation_question_results`
+通过 `(tenant_id, task_id)` 复合外键绑定任务并设置 `ON DELETE CASCADE`，M2 保留清理物理删除任务时同步删除逐问题事实。
+
+## 6. API 与 Go SDK
+
+Go 软件开发工具包（Software Development Kit，SDK）位于独立 `client` 模块。M3 增加以下接口：
+
+| 能力 | API | SDK |
+| --- | --- | --- |
+| 创建数据集 | `POST /api/v1/evaluation/datasets` | `CreateEvaluationDataset` |
+| 创建不可变版本 | `POST /api/v1/evaluation/datasets/:id/versions` | `CreateEvaluationDatasetVersion` |
+| 数据集列表 | `GET /api/v1/evaluation/datasets` | `ListEvaluationDatasets` |
+| 版本列表 | `GET /api/v1/evaluation/datasets/:id/versions` | `ListEvaluationDatasetVersions` |
+| 创建实验 | `POST /api/v1/evaluation` | `StartEvaluation` |
+| 逐问题分页 | `GET /api/v1/evaluation/tasks/:task_id/questions` | `ListEvaluationQuestionResults` |
+
+创建实验支持 `dataset_version_id`、`configuration` 和 seed。任务详情包含 `experiment` 与
+`provenance_complete`。现有 SDK 创建、详情、列表、取消和删除方法保持可用。
+
+## 7. 双数据库迁移
+
+PostgreSQL 使用 `000094` 至 `000096`，SQLite 使用 `000017` 至 `000019`：
+
+| 数据库能力 | PostgreSQL | SQLite |
+| --- | ---: | ---: |
+| 数据集注册表 | 000094 | 000017 |
+| 实验清单列 | 000095 | 000018 |
+| 逐问题结果 | 000096 | 000019 |
+
+连续迁移回归覆盖 PostgreSQL `0→96→93→89→93→96` 和 SQLite `0→19→16→12→16→19`。
+M3 down 迁移保留 M2 的取消列、活动租约约束、列表索引和保留索引。
+
+## 8. 确定性回归
+
+`dataset/golden/v1` 保存可审阅的固定输入和期望值。回归覆盖 12 项检索与生成指标、相关和无关 PID、未知来源、
+重复 PID、重排优先及搜索回退。内容 SHA-256 为
+`d8deca2c2ab7b77123130788c9082d0998ecbf76c1d8556952703045cc2556e1`，浮点容差为 `1e-9`。
+测试不调用真实模型或网络，并连续 100 次产生相同结果。
