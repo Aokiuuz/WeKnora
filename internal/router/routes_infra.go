@@ -93,6 +93,7 @@ func RegisterEvaluationRoutes(
 		evaluationRoutes.GET("/tasks", g.Viewer(), handler.ListEvaluationTasks)
 		evaluationRoutes.PUT("/tasks/:task_id/labels", g.Admin(), handler.ReplaceEvaluationTaskLabels)
 		evaluationRoutes.POST("/comparisons", g.Viewer(), handler.CompareEvaluationTasks)
+		evaluationRoutes.GET("/tasks/:task_id/export", g.Viewer(), handler.ExportEvaluationTask)
 		evaluationRoutes.POST("/:task_id/cancel", g.Admin(), handler.CancelEvaluation)
 		evaluationRoutes.GET("/tasks/:task_id/questions", g.Viewer(), questionHandler.ListQuestionResults)
 

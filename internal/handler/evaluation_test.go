@@ -20,6 +20,7 @@ type stubEvaluationService struct {
 	lastOptions       *types.EvaluationOptions
 	comparisonRequest *types.EvaluationComparisonRequest
 	comparisonResult  *types.EvaluationComparisonResponse
+	exportResult      *types.EvaluationPreparedExport
 	err               error
 }
 
@@ -73,6 +74,12 @@ func (s *stubEvaluationService) CompareEvaluations(
 ) (*types.EvaluationComparisonResponse, error) {
 	s.comparisonRequest = &request
 	return s.comparisonResult, s.err
+}
+
+func (s *stubEvaluationService) PrepareEvaluationExport(
+	context.Context, string, string,
+) (*types.EvaluationPreparedExport, error) {
+	return s.exportResult, s.err
 }
 
 func (s *stubEvaluationService) DeleteEvaluation(context.Context, string) error {

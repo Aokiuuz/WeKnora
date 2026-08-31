@@ -2,7 +2,9 @@ package handler
 
 import (
 	stderrors "errors"
+	"mime"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -344,6 +346,62 @@ func (e *EvaluationHandler) CompareEvaluationTasks(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": response})
+}
+
+// ExportEvaluationTask godoc
+// @Summary      导出评估运行
+// @Description  将终态任务与逐题事实导出为有界 JSON 或 CSV 文件
+// @Tags         评估
+// @Produce      application/json,text/csv
+// @Param        task_id  path   string true "评估任务ID"
+// @Param        format   query  string true "json 或 csv"
+// @Success      200      {file} binary "导出文件"
+// @Failure      400      {object} errors.AppError "格式错误"
+// @Failure      404      {object} errors.AppError "任务不存在"
+// @Failure      409      {object} errors.AppError "任务仍在运行"
+// @Failure      413      {object} errors.AppError "导出超过边界"
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /evaluation/tasks/{task_id}/export [get]
+func (e *EvaluationHandler) ExportEvaluationTask(c *gin.Context) {
+	prepared, err := e.evaluationService.PrepareEvaluationExport(
+		c.Request.Context(),
+		c.Param("task_id"),
+		c.Query("format"),
+	)
+	if err != nil {
+		switch {
+		case stderrors.Is(err, types.ErrEvaluationExportFormatInvalid):
+			_ = c.Error(errors.NewBadRequestError("Invalid evaluation export format").WithDetails(err.Error()))
+		case stderrors.Is(err, interfaces.ErrEvaluationTaskNotFound):
+			_ = c.Error(errors.NewNotFoundError("Evaluation task not found"))
+		case stderrors.Is(err, types.ErrEvaluationExportTaskConflict):
+			_ = c.Error(errors.NewConflictError("Evaluation task is not terminal").WithDetails(err.Error()))
+		case stderrors.Is(err, types.ErrEvaluationExportLimitExceeded):
+			_ = c.Error(errors.NewRequestEntityTooLargeError("Evaluation export exceeds the configured limits").WithDetails(err.Error()))
+		default:
+			logger.ErrorWithFields(c.Request.Context(), err, nil)
+			_ = c.Error(errors.NewInternalServerError(err.Error()))
+		}
+		return
+	}
+	if prepared == nil || prepared.Path == "" {
+		_ = c.Error(errors.NewInternalServerError("Evaluation export preparation returned no file"))
+		return
+	}
+	defer os.Remove(prepared.Path)
+	file, err := os.Open(prepared.Path)
+	if err != nil {
+		_ = c.Error(errors.NewInternalServerError("Failed to open prepared evaluation export"))
+		return
+	}
+	defer file.Close()
+	headers := map[string]string{
+		"Content-Disposition": mime.FormatMediaType("attachment", map[string]string{
+			"filename": prepared.Filename,
+		}),
+	}
+	c.DataFromReader(http.StatusOK, prepared.Size, prepared.ContentType, file, headers)
 }
 
 // CancelEvaluation godoc

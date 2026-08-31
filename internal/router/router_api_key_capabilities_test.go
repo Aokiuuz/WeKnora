@@ -365,6 +365,7 @@ func TestTenantInfrastructureRoutesDeclareSpecificCapabilities(t *testing.T) {
 		{http.MethodGet, "/api/v1/evaluation/tasks", types.APIKeyCapabilityRunEvaluations},
 		{http.MethodPut, "/api/v1/evaluation/tasks/:task_id/labels", types.APIKeyCapabilityRunEvaluations},
 		{http.MethodPost, "/api/v1/evaluation/comparisons", types.APIKeyCapabilityRunEvaluations},
+		{http.MethodGet, "/api/v1/evaluation/tasks/:task_id/export", types.APIKeyCapabilityRunEvaluations},
 		{http.MethodPost, "/api/v1/evaluation/:task_id/cancel", types.APIKeyCapabilityRunEvaluations},
 		{http.MethodGet, "/api/v1/evaluation/tasks/:task_id/questions", types.APIKeyCapabilityRunEvaluations},
 		{http.MethodGet, "/api/v1/evaluation/datasets", types.APIKeyCapabilityRunEvaluations},

@@ -34,6 +34,12 @@ type EvaluationService interface {
 		ctx context.Context,
 		request types.EvaluationComparisonRequest,
 	) (*types.EvaluationComparisonResponse, error)
+	// PrepareEvaluationExport writes a bounded, complete temporary artifact.
+	PrepareEvaluationExport(
+		ctx context.Context,
+		taskID string,
+		format string,
+	) (*types.EvaluationPreparedExport, error)
 	// DeleteEvaluation soft-deletes one terminal task. Missing and already
 	// deleted tasks are idempotent successes; active tasks are rejected.
 	DeleteEvaluation(ctx context.Context, taskID string) error
