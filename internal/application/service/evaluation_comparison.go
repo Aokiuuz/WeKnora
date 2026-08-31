@@ -20,6 +20,7 @@ type evaluationComparisonInput struct {
 	metrics    map[string]float64
 }
 
+// CompareEvaluations aligns stable parameters and compatible numeric metrics across frozen runs.
 func (e *EvaluationService) CompareEvaluations(
 	ctx context.Context,
 	request types.EvaluationComparisonRequest,
@@ -33,7 +34,10 @@ func (e *EvaluationService) CompareEvaluations(
 		baselineID = ids[0]
 	}
 	if !containsEvaluationTaskID(ids, baselineID) {
-		return nil, fmt.Errorf("%w: baseline_task_id must be included in task_ids", types.ErrEvaluationComparisonInvalid)
+		return nil, fmt.Errorf(
+			"%w: baseline_task_id must be included in task_ids",
+			types.ErrEvaluationComparisonInvalid,
+		)
 	}
 	tenantID := types.MustTenantIDFromContext(ctx)
 	tasksByID, err := e.evaluationTaskRepository.GetTasksByIDs(ctx, tenantID, ids)
@@ -58,10 +62,19 @@ func (e *EvaluationService) CompareEvaluations(
 			return nil, fmt.Errorf("%w: task %s experiment: %v", types.ErrEvaluationComparisonDataInvalid, taskID, err)
 		}
 		if entity.Status != types.EvaluationStatueSuccess {
-			return nil, fmt.Errorf("%w: task %s status is %d", types.ErrEvaluationComparisonConflict, taskID, entity.Status)
+			return nil, fmt.Errorf(
+				"%w: task %s status is %d",
+				types.ErrEvaluationComparisonConflict,
+				taskID,
+				entity.Status,
+			)
 		}
 		if !complete || experiment == nil {
-			return nil, fmt.Errorf("%w: task %s provenance is incomplete", types.ErrEvaluationComparisonConflict, taskID)
+			return nil, fmt.Errorf(
+				"%w: task %s provenance is incomplete",
+				types.ErrEvaluationComparisonConflict,
+				taskID,
+			)
 		}
 		parameters, err := types.FlattenEvaluationComparisonParameters(entity.ExperimentSnapshot)
 		if err != nil {
@@ -125,9 +138,12 @@ func validateEvaluationComparisonContent(inputs []evaluationComparisonInput) err
 }
 
 func buildEvaluationComparisonParameters(inputs []evaluationComparisonInput) []types.EvaluationComparisonParameter {
-	pointers := unionEvaluationComparisonPointers(inputs, func(input evaluationComparisonInput) map[string]json.RawMessage {
-		return input.parameters
-	})
+	pointers := unionEvaluationComparisonPointers(
+		inputs,
+		func(input evaluationComparisonInput) map[string]json.RawMessage {
+			return input.parameters
+		},
+	)
 	parameters := make([]types.EvaluationComparisonParameter, 0, len(pointers))
 	for _, pointer := range pointers {
 		parameter := types.EvaluationComparisonParameter{

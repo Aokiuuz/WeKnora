@@ -11,34 +11,50 @@ import (
 )
 
 const (
+	// EvaluationComparisonSchemaVersion identifies the comparison response schema.
 	EvaluationComparisonSchemaVersion = 1
-	EvaluationComparisonMinRuns       = 2
-	EvaluationComparisonMaxRuns       = 10
+	// EvaluationComparisonMinRuns is the minimum number of distinct runs in a comparison.
+	EvaluationComparisonMinRuns = 2
+	// EvaluationComparisonMaxRuns is the maximum number of distinct runs in a comparison.
+	EvaluationComparisonMaxRuns = 10
 )
 
 const (
-	EvaluationComparisonValueValid        = "valid"
-	EvaluationComparisonValueMissing      = "missing"
+	// EvaluationComparisonValueValid marks a metric value that can participate in a comparison.
+	EvaluationComparisonValueValid = "valid"
+	// EvaluationComparisonValueMissing marks a metric value absent from a run.
+	EvaluationComparisonValueMissing = "missing"
+	// EvaluationComparisonValueIncompatible marks a metric whose identity differs across runs.
 	EvaluationComparisonValueIncompatible = "incompatible"
 
+	// EvaluationComparisonReasonBaselineMissing records that no baseline value is available.
 	EvaluationComparisonReasonBaselineMissing = "baseline_value_missing"
-	EvaluationComparisonReasonBaselineZero    = "baseline_value_is_zero"
+	// EvaluationComparisonReasonBaselineZero records that relative change has a zero denominator.
+	EvaluationComparisonReasonBaselineZero = "baseline_value_is_zero"
+	// EvaluationComparisonReasonIdentityMissing records that a metric identity is unavailable.
 	EvaluationComparisonReasonIdentityMissing = "metric_identity_missing"
+	// EvaluationComparisonReasonIdentityDiffers records differing metric identities across runs.
 	EvaluationComparisonReasonIdentityDiffers = "metric_identity_differs"
 )
 
 var (
-	ErrEvaluationComparisonInvalid      = errors.New("evaluation comparison request invalid")
+	// ErrEvaluationComparisonInvalid indicates an invalid comparison request.
+	ErrEvaluationComparisonInvalid = errors.New("evaluation comparison request invalid")
+	// ErrEvaluationComparisonTaskNotFound indicates a missing or inaccessible comparison task.
 	ErrEvaluationComparisonTaskNotFound = errors.New("evaluation comparison task not found")
-	ErrEvaluationComparisonConflict     = errors.New("evaluation comparison conflict")
-	ErrEvaluationComparisonDataInvalid  = errors.New("evaluation comparison data invalid")
+	// ErrEvaluationComparisonConflict indicates that selected runs cannot be compared.
+	ErrEvaluationComparisonConflict = errors.New("evaluation comparison conflict")
+	// ErrEvaluationComparisonDataInvalid indicates malformed frozen comparison data.
+	ErrEvaluationComparisonDataInvalid = errors.New("evaluation comparison data invalid")
 )
 
+// EvaluationComparisonRequest selects runs and an optional baseline for comparison.
 type EvaluationComparisonRequest struct {
 	TaskIDs        []string `json:"task_ids"`
 	BaselineTaskID string   `json:"baseline_task_id,omitempty"`
 }
 
+// EvaluationComparisonRun describes one frozen run included in a comparison.
 type EvaluationComparisonRun struct {
 	TaskID               string           `json:"task_id"`
 	Status               EvaluationStatue `json:"status"`
@@ -50,18 +66,21 @@ type EvaluationComparisonRun struct {
 	ProvenanceComplete   bool             `json:"provenance_complete"`
 }
 
+// EvaluationComparisonParameterValue is one run's value for a stable parameter pointer.
 type EvaluationComparisonParameterValue struct {
 	TaskID  string          `json:"task_id"`
 	Missing bool            `json:"missing"`
 	Value   json.RawMessage `json:"value,omitempty"`
 }
 
+// EvaluationComparisonParameter contains aligned parameter values across selected runs.
 type EvaluationComparisonParameter struct {
 	Pointer string                               `json:"pointer"`
 	Differ  bool                                 `json:"differ"`
 	Values  []EvaluationComparisonParameterValue `json:"values"`
 }
 
+// EvaluationComparisonMetricValue contains one run's metric value and baseline deltas.
 type EvaluationComparisonMetricValue struct {
 	TaskID         string   `json:"task_id"`
 	IsBaseline     bool     `json:"is_baseline"`
@@ -73,6 +92,7 @@ type EvaluationComparisonMetricValue struct {
 	Reason         string   `json:"reason,omitempty"`
 }
 
+// EvaluationComparisonMetric contains aligned values for one numeric metric leaf.
 type EvaluationComparisonMetric struct {
 	Pointer        string                            `json:"pointer"`
 	Key            string                            `json:"key"`
@@ -83,6 +103,7 @@ type EvaluationComparisonMetric struct {
 	Values         []EvaluationComparisonMetricValue `json:"values"`
 }
 
+// EvaluationComparisonResponse is the stable wire representation of a run comparison.
 type EvaluationComparisonResponse struct {
 	SchemaVersion  int                             `json:"schema_version"`
 	BaselineTaskID string                          `json:"baseline_task_id"`
@@ -91,12 +112,14 @@ type EvaluationComparisonResponse struct {
 	Metrics        []EvaluationComparisonMetric    `json:"metrics"`
 }
 
+// EvaluationComparisonMetricIdentity identifies a metric implementation and configuration.
 type EvaluationComparisonMetricIdentity struct {
 	Key          string
 	Version      string
 	ConfigSHA256 string
 }
 
+// NormalizeEvaluationComparisonTaskIDs validates, trims, and stably deduplicates task IDs.
 func NormalizeEvaluationComparisonTaskIDs(raw []string) ([]string, error) {
 	seen := make(map[string]struct{}, len(raw))
 	ids := make([]string, 0, len(raw))
@@ -129,6 +152,7 @@ var evaluationComparisonParameterRoots = []struct {
 	{pointer: "/metric_plan", keys: []string{"metric_plan"}},
 }
 
+// FlattenEvaluationComparisonParameters extracts leaves below the approved stable parameter roots.
 func FlattenEvaluationComparisonParameters(snapshot JSON) (map[string]json.RawMessage, error) {
 	var root map[string]any
 	if err := json.Unmarshal(snapshot, &root); err != nil || root == nil {
@@ -155,6 +179,7 @@ func FlattenEvaluationComparisonParameters(snapshot JSON) (map[string]json.RawMe
 	return result, nil
 }
 
+// FlattenEvaluationNumericMetrics extracts every numeric leaf from an aggregate metric object.
 func FlattenEvaluationNumericMetrics(metric JSON) (map[string]float64, error) {
 	trimmed := bytes.TrimSpace(metric)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
@@ -181,7 +206,12 @@ func flattenEvaluationComparisonLeaves(prefix string, value any, target any, num
 		}
 		sort.Strings(keys)
 		for _, key := range keys {
-			flattenEvaluationComparisonLeaves(prefix+"/"+escapeEvaluationJSONPointer(key), node[key], target, numericOnly)
+			flattenEvaluationComparisonLeaves(
+				prefix+"/"+escapeEvaluationJSONPointer(key),
+				node[key],
+				target,
+				numericOnly,
+			)
 		}
 	case []any:
 		for index, item := range node {
@@ -203,6 +233,7 @@ func flattenEvaluationComparisonLeaves(prefix string, value any, target any, num
 	}
 }
 
+// EvaluationComparisonMetricIdentityForPath resolves the metric identity for an aggregate metric pointer.
 func EvaluationComparisonMetricIdentityForPath(
 	experiment *EvaluationExperimentSnapshot,
 	pointer string,

@@ -140,7 +140,7 @@ func TestPrepareEvaluationCSVExportUsesJSONLiteralsForUserText(t *testing.T) {
 	t.Cleanup(func() { _ = os.Remove(prepared.Path) })
 	file, err := os.Open(prepared.Path)
 	require.NoError(t, err)
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	records, err := csv.NewReader(file).ReadAll()
 	require.NoError(t, err)
 	require.Len(t, records, 3)
@@ -253,4 +253,5 @@ func directoryEntries(t *testing.T, path string) []string {
 }
 
 var _ interfaces.EvaluationQuestionResultRepository = (*fakeEvaluationExportQuestionRepository)(nil)
+
 var _ io.Writer = (*limitedTestWriter)(nil)

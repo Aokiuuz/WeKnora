@@ -51,6 +51,7 @@ type evaluationExportContext struct {
 	Metrics    json.RawMessage
 }
 
+// PrepareEvaluationExport builds a bounded audit artifact before an HTTP response starts.
 func (e *EvaluationService) PrepareEvaluationExport(
 	ctx context.Context,
 	taskID string,
@@ -316,7 +317,8 @@ func (e *EvaluationService) writeEvaluationCSVExport(
 		"run_status":          strconv.Itoa(int(exportContext.Task.Status)),
 		"start_time":          exportContext.Task.StartTime.Format(time.RFC3339Nano),
 		"end_time":            timePointerValue(exportContext.Task.EndTime),
-		"total":               strconv.Itoa(exportContext.Task.Total), "finished": strconv.Itoa(exportContext.Task.Finished),
+		"total":               strconv.Itoa(exportContext.Task.Total),
+		"finished":            strconv.Itoa(exportContext.Task.Finished),
 	}
 	var err error
 	runValues["dataset_id_json"], err = evaluationExportJSONLiteral(exportContext.Task.DatasetID)
@@ -470,11 +472,12 @@ func (e *EvaluationService) forEachEvaluationExportQuestion(
 func evaluationExportQuestionFromEntity(row *types.EvaluationQuestionResultEntity) types.EvaluationExportQuestion {
 	return types.EvaluationExportQuestion{
 		SampleIndex: row.SampleIndex, QID: row.QID, Question: row.Question,
-		ReferenceAnswer: row.ReferenceAnswer,
-		GroundTruthPIDs: types.JSON(normalizedEvaluationExportJSON(row.GroundTruthPIDs)),
-		SearchResults:   types.JSON(normalizedEvaluationExportJSON(row.SearchResults)),
-		RerankResults:   types.JSON(normalizedEvaluationExportJSON(row.RerankResults)),
-		GenerationPIDs:  types.JSON(normalizedEvaluationExportJSON(row.GenerationPIDs)), GeneratedText: row.GeneratedText,
+		ReferenceAnswer:    row.ReferenceAnswer,
+		GroundTruthPIDs:    types.JSON(normalizedEvaluationExportJSON(row.GroundTruthPIDs)),
+		SearchResults:      types.JSON(normalizedEvaluationExportJSON(row.SearchResults)),
+		RerankResults:      types.JSON(normalizedEvaluationExportJSON(row.RerankResults)),
+		GenerationPIDs:     types.JSON(normalizedEvaluationExportJSON(row.GenerationPIDs)),
+		GeneratedText:      row.GeneratedText,
 		PerSampleMetrics:   types.JSON(normalizedEvaluationExportJSON(row.PerSampleMetrics)),
 		MetricObservations: types.JSON(normalizedEvaluationExportJSON(row.MetricObservations)),
 		ErrorCode:          row.ErrorCode, Status: row.Status, ResultHash: row.ResultHash,

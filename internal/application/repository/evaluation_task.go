@@ -584,7 +584,7 @@ func (r *evaluationTaskRepository) ListTasks(
 		dbQuery = dbQuery.Where("dataset_version_id = ?", query.DatasetVersionID)
 	}
 	if query.ModelID != "" {
-		if r.db.Dialector.Name() == "postgres" {
+		if r.db.Name() == "postgres" {
 			dbQuery = dbQuery.Where(`(
 				experiment_snapshot #>> '{models,embedding,id}' = ? OR
 				experiment_snapshot #>> '{models,chat,id}' = ? OR

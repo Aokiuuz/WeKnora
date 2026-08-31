@@ -9,20 +9,30 @@ import (
 )
 
 const (
+	// EvaluationExportSchemaVersion identifies the audit export schema.
 	EvaluationExportSchemaVersion = 1
-	EvaluationExportFormatJSON    = "json"
-	EvaluationExportFormatCSV     = "csv"
-	EvaluationExportPageSize      = 500
-	EvaluationExportMaxQuestions  = 50_000
-	EvaluationExportMaxBytes      = int64(256 * 1024 * 1024)
+	// EvaluationExportFormatJSON selects JavaScript Object Notation output.
+	EvaluationExportFormatJSON = "json"
+	// EvaluationExportFormatCSV selects comma-separated values output.
+	EvaluationExportFormatCSV = "csv"
+	// EvaluationExportPageSize is the repository page size used while building an export.
+	EvaluationExportPageSize = 500
+	// EvaluationExportMaxQuestions bounds the number of exported question records.
+	EvaluationExportMaxQuestions = 50_000
+	// EvaluationExportMaxBytes bounds the completed temporary artifact size.
+	EvaluationExportMaxBytes = int64(256 * 1024 * 1024)
 )
 
 var (
+	// ErrEvaluationExportFormatInvalid indicates an unsupported export format.
 	ErrEvaluationExportFormatInvalid = errors.New("evaluation export format invalid")
-	ErrEvaluationExportTaskConflict  = errors.New("evaluation export task conflict")
+	// ErrEvaluationExportTaskConflict indicates that a task is not terminal.
+	ErrEvaluationExportTaskConflict = errors.New("evaluation export task conflict")
+	// ErrEvaluationExportLimitExceeded indicates a question-count or byte-size bound was reached.
 	ErrEvaluationExportLimitExceeded = errors.New("evaluation export limit exceeded")
 )
 
+// NormalizeEvaluationExportFormat validates and canonicalizes an export format.
 func NormalizeEvaluationExportFormat(raw string) (string, error) {
 	format := strings.ToLower(strings.TrimSpace(raw))
 	switch format {
@@ -33,6 +43,7 @@ func NormalizeEvaluationExportFormat(raw string) (string, error) {
 	}
 }
 
+// IsEvaluationTerminalStatus reports whether a task can produce an audit export.
 func IsEvaluationTerminalStatus(status EvaluationStatue) bool {
 	switch status {
 	case EvaluationStatueSuccess,
@@ -46,6 +57,7 @@ func IsEvaluationTerminalStatus(status EvaluationStatue) bool {
 	}
 }
 
+// EvaluationPreparedExport describes a completed temporary export artifact.
 type EvaluationPreparedExport struct {
 	Path        string
 	Filename    string
@@ -53,6 +65,7 @@ type EvaluationPreparedExport struct {
 	Size        int64
 }
 
+// EvaluationExportTask is the fixed task record included in an audit export.
 type EvaluationExportTask struct {
 	ID                   string           `json:"id"`
 	DatasetID            string           `json:"dataset_id"`
@@ -69,6 +82,7 @@ type EvaluationExportTask struct {
 	CleanupErrors        JSON             `json:"cleanup_errors"`
 }
 
+// EvaluationExportQuestion is the fixed question record included in an audit export.
 type EvaluationExportQuestion struct {
 	SampleIndex        int    `json:"sample_index"`
 	QID                string `json:"qid"`
@@ -94,6 +108,7 @@ type EvaluationExportQuestion struct {
 	TotalTokens      *int   `json:"total_tokens"`
 }
 
+// EvaluationExportDocument is the fixed JSON audit export envelope.
 type EvaluationExportDocument struct {
 	SchemaVersion    int                           `json:"schema_version"`
 	ExportedAt       time.Time                     `json:"exported_at"`

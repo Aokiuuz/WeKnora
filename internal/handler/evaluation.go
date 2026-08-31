@@ -378,7 +378,10 @@ func (e *EvaluationHandler) ExportEvaluationTask(c *gin.Context) {
 		case stderrors.Is(err, types.ErrEvaluationExportTaskConflict):
 			_ = c.Error(errors.NewConflictError("Evaluation task is not terminal").WithDetails(err.Error()))
 		case stderrors.Is(err, types.ErrEvaluationExportLimitExceeded):
-			_ = c.Error(errors.NewRequestEntityTooLargeError("Evaluation export exceeds the configured limits").WithDetails(err.Error()))
+			requestError := errors.NewRequestEntityTooLargeError(
+				"Evaluation export exceeds the configured limits",
+			).WithDetails(err.Error())
+			_ = c.Error(requestError)
 		default:
 			logger.ErrorWithFields(c.Request.Context(), err, nil)
 			_ = c.Error(errors.NewInternalServerError(err.Error()))
@@ -389,13 +392,13 @@ func (e *EvaluationHandler) ExportEvaluationTask(c *gin.Context) {
 		_ = c.Error(errors.NewInternalServerError("Evaluation export preparation returned no file"))
 		return
 	}
-	defer os.Remove(prepared.Path)
+	defer func() { _ = os.Remove(prepared.Path) }()
 	file, err := os.Open(prepared.Path)
 	if err != nil {
 		_ = c.Error(errors.NewInternalServerError("Failed to open prepared evaluation export"))
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	headers := map[string]string{
 		"Content-Disposition": mime.FormatMediaType("attachment", map[string]string{
 			"filename": prepared.Filename,
