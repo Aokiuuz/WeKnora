@@ -291,9 +291,13 @@ func (h *HookMetric) questionResultInput(
 	}
 	h.mu.RUnlock()
 
+	qid := qaPair.DatasetQID
+	if qid == "" {
+		qid = strconv.Itoa(qaPair.QID)
+	}
 	return &types.EvaluationQuestionResultInput{
 		SampleIndex:      index,
-		QID:              strconv.Itoa(qaPair.QID),
+		QID:              qid,
 		Question:         qaPair.Question,
 		ReferenceAnswer:  qaPair.Answer,
 		GroundTruthPIDs:  append([]int(nil), qaPair.PIDs...),

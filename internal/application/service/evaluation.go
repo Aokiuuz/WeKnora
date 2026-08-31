@@ -602,6 +602,9 @@ func (e *EvaluationService) EvaluationWithOptions(
 	if err != nil {
 		return nil, err
 	}
+	if experiment != nil {
+		detail.Task.DatasetID = experiment.Dataset.DatasetID
+	}
 
 	entity, err := evaluationDetailToEntity(
 		detail,
@@ -716,8 +719,8 @@ func (e *EvaluationService) evalDataset(
 		return err
 	}
 
-	// Retrieve dataset from storage
-	dataset, err := e.dataset.GetDatasetByID(ctx, detail.Task.DatasetID)
+	// Load the immutable dataset version frozen in the experiment manifest.
+	dataset, err := e.loadEvaluationDataset(ctx, detail)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to get dataset: %v", err)
 		captureEvaluationTaskDeadline(ctx, err, taskDeadlineStoppedRun)
@@ -971,6 +974,11 @@ func (e *EvaluationService) publishQuestionResult(
 // getPassageList extracts and organizes passages from QA pairs
 // Returns a slice of passages indexed by their passage IDs
 func getPassageList(dataset []*types.QAPair) []string {
+	for _, qaPair := range dataset {
+		if qaPair != nil && len(qaPair.Corpus) > 0 {
+			return append([]string(nil), qaPair.Corpus...)
+		}
+	}
 	pIDMap := make(map[int]string)
 	maxPID := 0
 	for _, qaPair := range dataset {
