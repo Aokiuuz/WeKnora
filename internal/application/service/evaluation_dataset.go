@@ -119,6 +119,15 @@ func (s *EvaluationDatasetRegistryService) CreateVersion(
 	return version, nil
 }
 
+// GetDataset returns one dataset visible to the tenant.
+func (s *EvaluationDatasetRegistryService) GetDataset(
+	ctx context.Context,
+	tenantID uint64,
+	datasetID string,
+) (*types.EvaluationDataset, error) {
+	return s.repo.GetDataset(ctx, tenantID, datasetID)
+}
+
 // ListDatasets returns every dataset visible to the tenant.
 func (s *EvaluationDatasetRegistryService) ListDatasets(
 	ctx context.Context,

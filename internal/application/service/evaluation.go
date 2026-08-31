@@ -953,7 +953,7 @@ func (e *EvaluationService) publishQuestionResult(
 			Finished:        finished,
 			Metric:          metricJSON,
 			Now:             now,
-			LeaseExpiresAt:  evaluationLeaseExpiresAt(e.config, now),
+			LeaseExpiresAt:  e.evaluationLeaseExpiresAt(now),
 			Result:          input,
 		},
 	)
