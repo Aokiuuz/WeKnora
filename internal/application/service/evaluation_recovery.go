@@ -234,13 +234,13 @@ func (r *EvaluationTaskRecoveryRunner) recoverTask(
 	cleanupBase := context.WithValue(ctx, types.TenantIDContextKey, task.TenantID)
 	cleanupBase = context.WithValue(cleanupBase, types.TenantInfoContextKey, tenant)
 
-	if err := r.validateRecoveryOwnership(ctx, task); err != nil {
+	knowledgeCtx, knowledgeCancel := context.WithTimeout(cleanupBase, evaluationRecoveryOperationTimeout)
+	if err := r.validateRecoveryOwnership(knowledgeCtx, task); err != nil {
+		knowledgeCancel()
 		return err
 	}
 	if task.TemporaryKnowledgeID != "" && r.knowledgeService != nil {
-		cleanupCtx, cancel := context.WithTimeout(cleanupBase, evaluationRecoveryOperationTimeout)
-		cleanupErr := r.knowledgeService.DeleteKnowledge(cleanupCtx, task.TemporaryKnowledgeID)
-		cancel()
+		cleanupErr := r.knowledgeService.DeleteKnowledge(knowledgeCtx, task.TemporaryKnowledgeID)
 		if cleanupErr != nil && !errors.Is(cleanupErr, apprepo.ErrKnowledgeNotFound) {
 			appendEvaluationCleanupError(
 				&cleanupErrors,
@@ -250,20 +250,22 @@ func (r *EvaluationTaskRecoveryRunner) recoverTask(
 			)
 		}
 	}
+	knowledgeCancel()
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("recover evaluation task %s: runner stopped during cleanup: %w", task.ID, err)
 	}
-	if err := r.validateRecoveryOwnership(ctx, task); err != nil {
+
+	knowledgeBaseCtx, knowledgeBaseCancel := context.WithTimeout(cleanupBase, evaluationRecoveryOperationTimeout)
+	if err := r.validateRecoveryOwnership(knowledgeBaseCtx, task); err != nil {
+		knowledgeBaseCancel()
 		return err
 	}
 
 	if task.TemporaryKnowledgeBaseID != "" && r.knowledgeBaseService != nil {
-		cleanupCtx, cancel := context.WithTimeout(cleanupBase, evaluationRecoveryOperationTimeout)
 		cleanupErr := r.knowledgeBaseService.DeleteKnowledgeBase(
-			cleanupCtx,
+			knowledgeBaseCtx,
 			task.TemporaryKnowledgeBaseID,
 		)
-		cancel()
 		if cleanupErr != nil && !errors.Is(cleanupErr, apprepo.ErrKnowledgeBaseNotFound) {
 			appendEvaluationCleanupError(
 				&cleanupErrors,
@@ -273,11 +275,9 @@ func (r *EvaluationTaskRecoveryRunner) recoverTask(
 			)
 		}
 	}
+	knowledgeBaseCancel()
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("recover evaluation task %s: runner stopped during cleanup: %w", task.ID, err)
-	}
-	if err := r.validateRecoveryOwnership(ctx, task); err != nil {
-		return err
 	}
 
 	cleanupJSON, err := encodeEvaluationCleanupErrors(cleanupErrors)
@@ -298,6 +298,9 @@ func (r *EvaluationTaskRecoveryRunner) recoverTask(
 		evaluationRecoveryOperationTimeout,
 	)
 	defer publicationCancel()
+	if err := r.validateRecoveryOwnership(publicationCtx, task); err != nil {
+		return err
+	}
 	_, err = r.evaluationTaskRepository.PublishTerminal(
 		publicationCtx,
 		types.EvaluationTaskTerminalCommand{

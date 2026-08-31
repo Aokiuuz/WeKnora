@@ -110,14 +110,10 @@ func (e *EvaluationService) startEvaluationHeartbeat(
 		return handle
 	}
 
-	// leaseDeadline is the locally known expiry of the last successful renewal.
-	// Consecutive transient failures may only continue until this point. The
-	// window never starts earlier than one full lease from heartbeat startup,
-	// because the task start itself just wrote a fresh lease.
+	// leaseDeadline is the persisted expiry of the last successful start or
+	// renewal. A transient heartbeat failure must not extend this local view:
+	// another instance may claim the task as soon as the database lease expires.
 	leaseDeadline := runState.leaseExpiresAt
-	if freshDeadline := e.evaluationLeaseExpiresAt(time.Now().UTC()); freshDeadline.After(leaseDeadline) {
-		leaseDeadline = freshDeadline
-	}
 	beat := func() error {
 		now := time.Now().UTC()
 		callCtx, callCancel := context.WithTimeout(heartbeatCtx, e.heartbeatCallTimeout())

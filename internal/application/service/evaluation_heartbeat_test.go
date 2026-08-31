@@ -21,8 +21,8 @@ func TestEvaluationHeartbeatRenewsRunningLeaseWithoutChangingVersion(t *testing.
 	entity.OwnerID = "heartbeat-owner"
 	entity.Version = 7
 	entity.HeartbeatAt = now.Add(-time.Minute)
-	expiredLease := now.Add(-time.Second)
-	entity.LeaseExpiresAt = &expiredLease
+	currentLease := now.Add(time.Minute)
+	entity.LeaseExpiresAt = &currentLease
 	repository.register(entity)
 
 	service := &EvaluationService{
@@ -89,6 +89,8 @@ func TestEvaluationHeartbeatRetriesTransientFailureWithoutCancelingRun(t *testin
 	entity.Status = types.EvaluationStatueRunning
 	entity.OwnerID = "heartbeat-owner"
 	entity.Version = 2
+	leaseExpiresAt := time.Now().UTC().Add(time.Minute)
+	entity.LeaseExpiresAt = &leaseExpiresAt
 	repository.register(entity)
 
 	service := &EvaluationService{
@@ -184,6 +186,43 @@ func TestEvaluationHeartbeatStopsRunAfterTransientFailuresOutliveLease(t *testin
 	heartbeatErr := heartbeat.StopAndWait()
 	assert.ErrorIs(t, heartbeatErr, errEvaluationTaskHeartbeatLeaseExpired)
 	assert.ErrorIs(t, heartbeatErr, transientErr)
+}
+
+func TestEvaluationHeartbeatDoesNotExtendExpiredKnownLeaseAfterTransientFailure(t *testing.T) {
+	transientErr := errors.New("heartbeat database unavailable")
+	repository := newFakeEvaluationTaskRepository()
+	repository.heartbeatErr = transientErr
+	now := time.Now().UTC()
+	entity := newPersistentLifecycleEntity(42, "heartbeat-known-lease-expired")
+	entity.Status = types.EvaluationStatueRunning
+	entity.OwnerID = "heartbeat-owner"
+	entity.Version = 2
+	entity.HeartbeatAt = now.Add(-time.Second)
+	expiredLease := now.Add(-time.Millisecond)
+	entity.LeaseExpiresAt = &expiredLease
+	repository.register(entity)
+
+	service := &EvaluationService{
+		evaluationTaskRepository: repository,
+		ownerID:                  entity.OwnerID,
+		heartbeatInterval:        time.Hour,
+		heartbeatTimeout:         10 * time.Millisecond,
+		runningLeaseDuration:     time.Second,
+	}
+	runState, err := newEvaluationRunState(entity)
+	require.NoError(t, err)
+	runCtx, cancelRun := context.WithCancelCause(context.Background())
+	defer cancelRun(nil)
+
+	heartbeat := service.startEvaluationHeartbeat(runCtx, runState, cancelRun)
+	t.Cleanup(func() { _ = heartbeat.StopAndWait() })
+	select {
+	case <-runCtx.Done():
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("run context remained active after the persisted lease had already expired")
+	}
+	assert.ErrorIs(t, context.Cause(runCtx), errEvaluationTaskHeartbeatLeaseExpired)
+	assert.ErrorIs(t, heartbeat.StopAndWait(), transientErr)
 }
 
 type evaluationHeartbeatCleanupKnowledgeBaseStub struct {

@@ -68,6 +68,27 @@ type evaluationRecoveryTenantStub struct {
 	err    error
 }
 
+var errEvaluationRecoveryValidationWithoutDeadline = errors.New(
+	"evaluation recovery ownership validation has no deadline",
+)
+
+type evaluationRecoveryDeadlineRepository struct {
+	interfaces.EvaluationTaskRepository
+	validationCalls int
+}
+
+func (r *evaluationRecoveryDeadlineRepository) GetTask(
+	ctx context.Context,
+	tenantID uint64,
+	taskID string,
+) (*types.EvaluationTaskEntity, error) {
+	if _, ok := ctx.Deadline(); !ok {
+		return nil, errEvaluationRecoveryValidationWithoutDeadline
+	}
+	r.validationCalls++
+	return r.EvaluationTaskRepository.GetTask(ctx, tenantID, taskID)
+}
+
 func (s *evaluationRecoveryTenantStub) GetTenantByID(ctx context.Context, id uint64) (*types.Tenant, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -364,4 +385,19 @@ func TestEvaluationRecoveryOperationBudgetsFitInsideRecoveryLease(t *testing.T) 
 		evaluationRecoveryLeaseSafetyMargin,
 		"tenant, cleanup, and terminal budgets must keep a safety margin inside the recovery lease",
 	)
+}
+
+func TestEvaluationTaskRecoveryBoundsOwnershipValidation(t *testing.T) {
+	now := time.Date(2026, time.August, 28, 12, 0, 0, 0, time.UTC)
+	baseRepository := newFakeEvaluationTaskRepository()
+	entity := newExpiredRecoveryTask(57, "bounded-recovery-validation", now)
+	baseRepository.register(entity)
+	repository := &evaluationRecoveryDeadlineRepository{
+		EvaluationTaskRepository: baseRepository,
+	}
+	recorder := &evaluationRecoveryResourceRecorder{}
+	runner := newTestEvaluationTaskRecoveryRunner(repository, recorder, nil, nil, now)
+
+	require.NoError(t, runner.runOnce(context.Background()))
+	assert.Equal(t, 3, repository.validationCalls)
 }
