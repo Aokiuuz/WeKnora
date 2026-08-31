@@ -29,6 +29,8 @@ var versionedSQLiteTables = []string{
 	"evaluation_dataset_relevance",
 	"evaluation_question_results",
 	"evaluation_task_labels",
+	"model_price_versions",
+	"model_call_records",
 }
 
 // versionedSQLiteColumns maps each existing table to the columns that the
@@ -51,7 +53,7 @@ var versionedSQLiteColumns = map[string][]string{
 	"evaluation_question_results": {"usage_reported"},
 }
 
-const expectedSQLiteMigrationVersion = 21
+const expectedSQLiteMigrationVersion = 22
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -85,8 +87,23 @@ func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	assertSQLiteEvaluationTaskSchema(t, db)
 	assertSQLiteEvaluationQuestionResultsSchema(t, db)
 	assertSQLiteEvaluationTaskLabelsSchema(t, db)
+	assertSQLiteModelObservabilitySchema(t, db)
 	require.False(t, sqliteColumnExists(t, db, "knowledges", "tag_id"),
 		"SQLite migrations must drop legacy knowledges.tag_id after multi-tag migration")
+}
+
+func assertSQLiteModelObservabilitySchema(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, table := range []string{"model_price_versions", "model_call_records"} {
+		require.Truef(t, sqliteTableExists(t, db, table), "SQLite must contain table %s", table)
+	}
+	for _, column := range []string{
+		"model_snapshot", "purpose", "operation", "duration_ms", "provider_cache_status",
+		"application_cache_status", "cost_microunits", "accounting_complete",
+	} {
+		require.Truef(t, sqliteColumnExists(t, db, "model_call_records", column),
+			"SQLite model_call_records must contain column %s", column)
+	}
 }
 
 func TestSQLiteMigrationsUpgradeV4PreservesData(t *testing.T) {

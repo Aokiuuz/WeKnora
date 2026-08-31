@@ -38,13 +38,22 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 
 	version, dirty, err := migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(21), version)
+	require.Equal(t, uint(22), version)
 	require.False(t, dirty)
 	inspectionDB := openSQLiteDB(t, dbPath)
 	assertSQLiteEvaluationTaskSchema(t, inspectionDB)
 	assertSQLiteEvaluationQuestionResultsSchema(t, inspectionDB)
 	assertSQLiteEvaluationTaskLabelsSchema(t, inspectionDB)
 	assertSQLiteEvaluationRuntimeMetricsSchema(t, inspectionDB)
+	assertSQLiteModelObservabilitySchema(t, inspectionDB)
+
+	require.NoError(t, migrator.Steps(-1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(21), version)
+	require.False(t, dirty)
+	require.False(t, sqliteTableExists(t, inspectionDB, "model_call_records"))
+	require.False(t, sqliteTableExists(t, inspectionDB, "model_price_versions"))
 
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
@@ -102,9 +111,16 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(expectedSQLiteMigrationVersion), version)
+	require.Equal(t, uint(21), version)
 	require.False(t, dirty)
 	assertSQLiteEvaluationRuntimeMetricsSchema(t, inspectionDB)
+
+	require.NoError(t, migrator.Steps(1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(expectedSQLiteMigrationVersion), version)
+	require.False(t, dirty)
+	assertSQLiteModelObservabilitySchema(t, inspectionDB)
 }
 
 func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
@@ -137,12 +153,25 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	})
 	version, dirty, err := migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(98), version)
+	require.Equal(t, uint(99), version)
 	require.False(t, dirty)
 	assertPostgresEvaluationSchema(t, adminDB, schema)
 	assertPostgresM3EvaluationSchema(t, adminDB, schema)
 	assertPostgresM4EvaluationSchema(t, adminDB, schema)
 	assertPostgresM5RuntimeSchema(t, adminDB, schema)
+	assertPostgresM5LedgerSchema(t, adminDB, schema)
+
+	require.NoError(t, migrator.Steps(-1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(98), version)
+	require.False(t, dirty)
+	var ledgerTableExists bool
+	require.NoError(t, adminDB.Raw(
+		"SELECT EXISTS (SELECT 1 FROM information_schema.tables "+
+			"WHERE table_schema = ? AND table_name = 'model_call_records')", schema,
+	).Scan(&ledgerTableExists).Error)
+	require.False(t, ledgerTableExists)
 
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
@@ -225,6 +254,13 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.Equal(t, uint(98), version)
 	require.False(t, dirty)
 	assertPostgresM5RuntimeSchema(t, adminDB, schema)
+
+	require.NoError(t, migrator.Steps(1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(99), version)
+	require.False(t, dirty)
+	assertPostgresM5LedgerSchema(t, adminDB, schema)
 }
 
 func assertSQLiteEvaluationRuntimeMetricsSchema(t *testing.T, db *sql.DB) {
@@ -246,6 +282,18 @@ func assertPostgresM5RuntimeSchema(t *testing.T, db *gorm.DB, schema string) {
 			schema, table, column,
 		).Scan(&exists).Error)
 		require.Truef(t, exists, "PostgreSQL %s must contain column %s", table, column)
+	}
+}
+
+func assertPostgresM5LedgerSchema(t *testing.T, db *gorm.DB, schema string) {
+	t.Helper()
+	for _, table := range []string{"model_price_versions", "model_call_records"} {
+		var exists bool
+		require.NoError(t, db.Raw(
+			"SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = ?)",
+			schema, table,
+		).Scan(&exists).Error)
+		require.Truef(t, exists, "PostgreSQL must contain table %s", table)
 	}
 }
 

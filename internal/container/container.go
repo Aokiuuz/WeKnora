@@ -81,6 +81,7 @@ import (
 	infra_web_search "github.com/Tencent/WeKnora/internal/infrastructure/web_search"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/mcp"
+	"github.com/Tencent/WeKnora/internal/modelobs"
 	"github.com/Tencent/WeKnora/internal/models/chat"
 	"github.com/Tencent/WeKnora/internal/models/embedding"
 	"github.com/Tencent/WeKnora/internal/models/limiter"
@@ -186,6 +187,10 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(func(db *gorm.DB) interfaces.EvaluationQuestionResultRepository {
 		return repository.NewEvaluationQuestionResultRepository(db)
 	}))
+	must(container.Provide(func(db *gorm.DB) modelobs.Store {
+		return repository.NewModelObservabilityRepository(db)
+	}))
+	must(container.Provide(modelobs.NewRecorder))
 
 	// MCP manager for managing MCP client connections
 	logger.Debugf(ctx, "[Container] Registering MCP manager...")
@@ -219,7 +224,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewChunkService))
 	must(container.Provide(service.NewKnowledgeTagService))
 	must(container.Provide(embedding.NewBatchEmbedder))
-	must(container.Provide(service.NewModelService))
+	must(container.Provide(service.NewModelServiceWithObservability))
 	must(container.Provide(service.NewDatasetService))
 	must(container.Provide(service.NewEvaluationDatasetRegistryService))
 	must(container.Provide(metricregistry.NewDefaultRegistry))

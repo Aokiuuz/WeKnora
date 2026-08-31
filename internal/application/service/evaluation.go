@@ -11,6 +11,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/evaluation/metricregistry"
 	"github.com/Tencent/WeKnora/internal/logger"
+	"github.com/Tencent/WeKnora/internal/modelobs"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 	"github.com/Tencent/WeKnora/internal/utils"
@@ -797,6 +798,8 @@ func (e *EvaluationService) evalDataset(
 	taskDeadlineStoppedRun *bool,
 	runtimeCollector *evaluationRuntimeCollector,
 ) (runErr error) {
+	ctx = modelobs.WithPurpose(ctx, modelobs.PurposeEvaluation, true)
+	ctx = modelobs.WithEvaluationTask(ctx, detail.Task.ID)
 	defer func() {
 		captureEvaluationTaskDeadline(ctx, runErr, taskDeadlineStoppedRun)
 	}()
