@@ -57,7 +57,7 @@ func (h *EvaluationDatasetHandler) CreateDataset(c *gin.Context) {
 
 	var request CreateEvaluationDatasetRequest
 	if err := c.ShouldBind(&request); err != nil {
-		c.Error(apperrors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
+		_ = c.Error(apperrors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
 		return
 	}
 
@@ -95,15 +95,15 @@ func (h *EvaluationDatasetHandler) CreateVersion(c *gin.Context) {
 	if err := c.ShouldBindJSON(&content); err != nil {
 		var maxBytesError *http.MaxBytesError
 		if errors.As(err, &maxBytesError) {
-			c.Error(apperrors.NewRequestEntityTooLargeError("Evaluation dataset request body exceeds the configured limit").
-				WithDetails(err.Error()))
+			message := "Evaluation dataset request body exceeds the configured limit"
+			_ = c.Error(apperrors.NewRequestEntityTooLargeError(message).WithDetails(err.Error()))
 			return
 		}
 		if errors.Is(err, io.ErrUnexpectedEOF) {
-			c.Error(apperrors.NewBadRequestError("Truncated evaluation dataset request body"))
+			_ = c.Error(apperrors.NewBadRequestError("Truncated evaluation dataset request body"))
 			return
 		}
-		c.Error(apperrors.NewBadRequestError("Invalid evaluation dataset version content").WithDetails(err.Error()))
+		_ = c.Error(apperrors.NewBadRequestError("Invalid evaluation dataset version content").WithDetails(err.Error()))
 		return
 	}
 
@@ -165,12 +165,12 @@ func (h *EvaluationDatasetHandler) ListVersions(c *gin.Context) {
 func evaluationHandlerTenantID(c *gin.Context) (uint64, bool) {
 	value, exists := c.Get(string(types.TenantIDContextKey))
 	if !exists {
-		c.Error(apperrors.NewUnauthorizedError("Unauthorized"))
+		_ = c.Error(apperrors.NewUnauthorizedError("Unauthorized"))
 		return 0, false
 	}
 	tenantID, ok := value.(uint64)
 	if !ok {
-		c.Error(apperrors.NewUnauthorizedError("Unauthorized"))
+		_ = c.Error(apperrors.NewUnauthorizedError("Unauthorized"))
 		return 0, false
 	}
 	return tenantID, true
@@ -179,18 +179,18 @@ func evaluationHandlerTenantID(c *gin.Context) (uint64, bool) {
 func writeEvaluationDatasetError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, interfaces.ErrEvaluationDatasetLimitExceeded):
-		c.Error(apperrors.NewRequestEntityTooLargeError("Evaluation dataset exceeds the configured limits").
+		_ = c.Error(apperrors.NewRequestEntityTooLargeError("Evaluation dataset exceeds the configured limits").
 			WithDetails(err.Error()))
 	case errors.Is(err, interfaces.ErrEvaluationDatasetNotFound),
 		errors.Is(err, interfaces.ErrEvaluationDatasetVersionNotFound):
-		c.Error(apperrors.NewNotFoundError("Evaluation dataset not found").WithDetails(err.Error()))
+		_ = c.Error(apperrors.NewNotFoundError("Evaluation dataset not found").WithDetails(err.Error()))
 	case errors.Is(err, interfaces.ErrEvaluationDatasetVersionConflict),
 		errors.Is(err, interfaces.ErrEvaluationDatasetAlreadyExists):
-		c.Error(apperrors.NewConflictError("Evaluation dataset conflicts with an existing record").
+		_ = c.Error(apperrors.NewConflictError("Evaluation dataset conflicts with an existing record").
 			WithDetails(err.Error()))
 	case errors.Is(err, interfaces.ErrEvaluationDatasetInvalid):
-		c.Error(apperrors.NewBadRequestError("Invalid evaluation dataset content").WithDetails(err.Error()))
+		_ = c.Error(apperrors.NewBadRequestError("Invalid evaluation dataset content").WithDetails(err.Error()))
 	default:
-		c.Error(apperrors.NewInternalServerError(err.Error()))
+		_ = c.Error(apperrors.NewInternalServerError(err.Error()))
 	}
 }

@@ -128,7 +128,7 @@ func TestOllamaRequestForwardsExplicitSeed(t *testing.T) {
 func TestAnthropicRejectsExplicitSeed(t *testing.T) {
 	allowSeedTestLoopback(t)
 	called := false
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		called = true
 	}))
 	defer srv.Close()
@@ -156,7 +156,7 @@ func TestAnthropicRejectsExplicitSeed(t *testing.T) {
 	}
 }
 
-func TestChatSeedSupportStateClassification(t *testing.T) {
+func TestSeedSupportStateClassification(t *testing.T) {
 	cases := []struct {
 		name     string
 		provider string
@@ -174,24 +174,24 @@ func TestChatSeedSupportStateClassification(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := ChatSeedSupportState(tc.provider, tc.baseURL, tc.source); got != tc.want {
-				t.Fatalf("ChatSeedSupportState() = %q, want %q", got, tc.want)
+			if got := SeedSupportState(tc.provider, tc.baseURL, tc.source); got != tc.want {
+				t.Fatalf("SeedSupportState() = %q, want %q", got, tc.want)
 			}
 		})
 	}
 }
 
-func TestChatOptionsSeedProvidedSemantics(t *testing.T) {
-	if ChatOptionsSeedProvided(nil) {
+func TestOptionsSeedProvidedSemantics(t *testing.T) {
+	if OptionsSeedProvided(nil) {
 		t.Fatal("nil options carry no seed")
 	}
-	if ChatOptionsSeedProvided(&ChatOptions{}) {
+	if OptionsSeedProvided(&ChatOptions{}) {
 		t.Fatal("zero options carry no explicit seed")
 	}
-	if !ChatOptionsSeedProvided(&ChatOptions{Seed: 0, SeedProvided: true}) {
+	if !OptionsSeedProvided(&ChatOptions{Seed: 0, SeedProvided: true}) {
 		t.Fatal("explicit seed=0 must be detected")
 	}
-	if !ChatOptionsSeedProvided(&ChatOptions{Seed: 5}) {
+	if !OptionsSeedProvided(&ChatOptions{Seed: 5}) {
 		t.Fatal("a configured non-zero seed counts as provided")
 	}
 }

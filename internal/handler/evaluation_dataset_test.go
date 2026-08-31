@@ -248,7 +248,12 @@ func TestEvaluationDatasetHandlerListEndpoints(t *testing.T) {
 	assert.Contains(t, response.Body.String(), "dataset-1")
 
 	response = httptest.NewRecorder()
-	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/evaluation/datasets/dataset-1/versions", nil))
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/evaluation/datasets/dataset-1/versions",
+		nil,
+	)
+	engine.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code)
 	assert.Contains(t, response.Body.String(), `"v1"`)
 }

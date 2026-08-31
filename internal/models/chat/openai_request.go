@@ -121,7 +121,7 @@ func (c *RemoteAPIChat) BuildChatCompletionRequest(
 	}
 	// The seed is forwarded only when explicitly provided; providers that
 	// support it then mark the response applied (target architecture 6.3).
-	if ChatOptionsSeedProvided(opts) {
+	if OptionsSeedProvided(opts) {
 		seed := opts.Seed
 		req.Seed = &seed
 	}

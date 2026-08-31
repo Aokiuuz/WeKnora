@@ -327,7 +327,10 @@ start /wait "" "%s" /S
 start "" "%s"
 del "%%~f0"
 `, savePath, execPath)
-		os.WriteFile(scriptPath, []byte(scriptContent), 0o755)
+		if err := os.WriteFile(scriptPath, []byte(scriptContent), 0o755); err != nil {
+			logger.Warnf(context.Background(), "Failed to write Windows update script: %v", err)
+			return
+		}
 
 		cmd := exec.Command("cmd.exe", "/C", "start", "/b", scriptPath)
 		cmd.Start()
@@ -352,7 +355,10 @@ del "%%~f0"
 				}
 
 				mountPoint := filepath.Join(os.TempDir(), "WeKnoraUpdateMount")
-				os.MkdirAll(mountPoint, 0o755)
+				if err := os.MkdirAll(mountPoint, 0o755); err != nil {
+					logger.Warnf(context.Background(), "Failed to create update mount point: %v", err)
+					return
+				}
 
 				cmdMount := exec.Command("hdiutil", "attach", savePath, "-mountpoint", mountPoint, "-nobrowse", "-quiet")
 				if err := cmdMount.Run(); err != nil {
@@ -397,7 +403,13 @@ open "%s"
 rm "$0"
 `, appBundlePath, newAppPath, appDir, appBundlePath, newAppPath, appDir, mountPoint, appBundlePath)
 
-				os.WriteFile(scriptPath, []byte(scriptContent), 0o755)
+				if err := os.WriteFile(scriptPath, []byte(scriptContent), 0o755); err != nil {
+					logger.Warnf(context.Background(), "Failed to write macOS update script: %v", err)
+					if detachErr := exec.Command("hdiutil", "detach", mountPoint, "-force").Run(); detachErr != nil {
+						logger.Warnf(context.Background(), "Failed to detach update image: %v", detachErr)
+					}
+					return
+				}
 
 				exec.Command("bash", scriptPath).Start()
 				wailsruntime.Quit(ctx)

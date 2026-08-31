@@ -23,7 +23,10 @@ func newEvaluationDatasetFixture(tenantID uint64, suffix string) *types.Evaluati
 	}
 }
 
-func newEvaluationDatasetVersionFixture(datasetID, suffix string) (*types.EvaluationDatasetVersion, *types.EvaluationDatasetVersionInput) {
+func newEvaluationDatasetVersionFixture(
+	datasetID string,
+	suffix string,
+) (*types.EvaluationDatasetVersion, *types.EvaluationDatasetVersionInput) {
 	content := &types.EvaluationDatasetVersionInput{
 		Passages: []types.EvaluationDatasetPassageInput{
 			{PID: "p1", Content: "passage one"},

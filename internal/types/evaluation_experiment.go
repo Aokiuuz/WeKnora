@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Experiment snapshot schema version 1 (target architecture section 6.2).
+// EvaluationExperimentSchemaVersion is the experiment snapshot schema version.
 // The snapshot is frozen before a task enters Pending and never changes
 // afterwards; lifecycle compare-and-swap updates must not modify it.
 const EvaluationExperimentSchemaVersion = 1

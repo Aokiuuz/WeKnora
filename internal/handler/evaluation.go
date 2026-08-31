@@ -60,14 +60,14 @@ func (e *EvaluationHandler) Evaluation(c *gin.Context) {
 	var request EvaluationRequest
 	if err := c.ShouldBind(&request); err != nil {
 		logger.Error(ctx, "Failed to parse request parameters", err)
-		c.Error(errors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
+		_ = c.Error(errors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
 		return
 	}
 
 	tenantID, exists := c.Get(string(types.TenantIDContextKey))
 	if !exists {
 		logger.Error(ctx, "Failed to get tenant ID")
-		c.Error(errors.NewUnauthorizedError("Unauthorized"))
+		_ = c.Error(errors.NewUnauthorizedError("Unauthorized"))
 		return
 	}
 
@@ -92,15 +92,15 @@ func (e *EvaluationHandler) Evaluation(c *gin.Context) {
 		logger.ErrorWithFields(ctx, err, nil)
 		switch {
 		case stderrors.Is(err, service.ErrEvaluationSeedUnsupported):
-			c.Error(errors.NewUnprocessableEntityError(
+			_ = c.Error(errors.NewUnprocessableEntityError(
 				"The requested seed is not supported by the chat model provider").WithDetails(err.Error()))
 		case stderrors.Is(err, interfaces.ErrEvaluationDatasetNotFound),
 			stderrors.Is(err, interfaces.ErrEvaluationDatasetVersionNotFound):
-			c.Error(errors.NewNotFoundError("Evaluation dataset not found").WithDetails(err.Error()))
+			_ = c.Error(errors.NewNotFoundError("Evaluation dataset not found").WithDetails(err.Error()))
 		case stderrors.Is(err, service.ErrEvaluationSourceKnowledgeBaseNotFound):
-			c.Error(errors.NewNotFoundError("Evaluation source knowledge base not found"))
+			_ = c.Error(errors.NewNotFoundError("Evaluation source knowledge base not found"))
 		default:
-			c.Error(errors.NewInternalServerError(err.Error()))
+			_ = c.Error(errors.NewInternalServerError(err.Error()))
 		}
 		return
 	}
@@ -277,18 +277,18 @@ func (e *EvaluationHandler) GetEvaluationResult(c *gin.Context) {
 	var request GetEvaluationRequest
 	if err := c.ShouldBind(&request); err != nil {
 		logger.Error(ctx, "Failed to parse request parameters", err)
-		c.Error(errors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
+		_ = c.Error(errors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
 		return
 	}
 
 	result, err := e.evaluationService.EvaluationResult(ctx, secutils.SanitizeForLog(request.TaskID))
 	if err != nil {
 		if stderrors.Is(err, interfaces.ErrEvaluationTaskNotFound) {
-			c.Error(errors.NewNotFoundError("Evaluation task not found"))
+			_ = c.Error(errors.NewNotFoundError("Evaluation task not found"))
 			return
 		}
 		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewInternalServerError(err.Error()))
+		_ = c.Error(errors.NewInternalServerError(err.Error()))
 		return
 	}
 

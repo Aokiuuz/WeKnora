@@ -76,7 +76,8 @@ func TestEvaluationModelConfigSHA256CoversBehavior(t *testing.T) {
 }
 
 func TestEvaluationModelSanitizeBaseURLStripsUserinfo(t *testing.T) {
-	if got := EvaluationModelSanitizeBaseURL("https://user:secret@api.example.test/v1"); got != "https://api.example.test/v1" {
+	rawURL := "https://user:secret@api.example.test/v1"
+	if got := EvaluationModelSanitizeBaseURL(rawURL); got != "https://api.example.test/v1" {
 		t.Fatalf("SanitizeBaseURL = %q, want credentials stripped", got)
 	}
 	if got := EvaluationModelSanitizeBaseURL(""); got != "" {

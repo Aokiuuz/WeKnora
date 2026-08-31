@@ -172,7 +172,8 @@ func (s *EvaluationDatasetRegistryService) RegisterBuiltinDataset(
 	registration *types.EvaluationBuiltinDatasetRegistration,
 ) (*types.EvaluationDatasetVersion, error) {
 	if registration == nil || registration.Content == nil || registration.DatasetID == "" {
-		return nil, fmt.Errorf("register builtin evaluation dataset: registration, dataset id and content are required: %w",
+		return nil, fmt.Errorf(
+			"register builtin evaluation dataset: registration, dataset id and content are required: %w",
 			interfaces.ErrEvaluationDatasetInvalid)
 	}
 	if len(registration.ExpectedArtifactSHA256) != 64 {

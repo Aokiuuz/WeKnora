@@ -19,10 +19,10 @@ const (
 	ChatSeedSupportNotRequested = "not_requested"
 )
 
-// ChatSeedSupportState classifies whether a chat backend actually accepts a
+// SeedSupportState classifies whether a chat backend actually accepts a
 // seed in its request: OpenAI-compatible providers and Ollama forward it;
 // Anthropic's Messages API has no seed parameter.
-func ChatSeedSupportState(providerName string, baseURL string, source types.ModelSource) string {
+func SeedSupportState(providerName string, baseURL string, source types.ModelSource) string {
 	if source == types.ModelSourceLocal {
 		return ChatSeedSupportApplied
 	}
@@ -36,9 +36,9 @@ func ChatSeedSupportState(providerName string, baseURL string, source types.Mode
 	return ChatSeedSupportApplied
 }
 
-// ChatOptionsSeedProvided reports whether the options carry an explicit seed:
+// OptionsSeedProvided reports whether the options carry an explicit seed:
 // either the pointer-derived flag (evaluation requests distinguish seed=0)
 // or a non-zero configured seed (interactive sessions).
-func ChatOptionsSeedProvided(opts *ChatOptions) bool {
+func OptionsSeedProvided(opts *ChatOptions) bool {
 	return opts != nil && (opts.SeedProvided || opts.Seed != 0)
 }

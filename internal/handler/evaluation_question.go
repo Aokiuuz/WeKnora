@@ -42,7 +42,7 @@ func (h *EvaluationQuestionHandler) ListQuestionResults(c *gin.Context) {
 	}
 	taskID := c.Param("task_id")
 	if taskID == "" {
-		c.Error(apperrors.NewBadRequestError("task_id is required"))
+		_ = c.Error(apperrors.NewBadRequestError("task_id is required"))
 		return
 	}
 
@@ -50,7 +50,7 @@ func (h *EvaluationQuestionHandler) ListQuestionResults(c *gin.Context) {
 	if raw := c.Query("page_size"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed < 1 || parsed > types.EvaluationQuestionPageMaxSize {
-			c.Error(apperrors.NewBadRequestError("page_size must be between 1 and 500"))
+			_ = c.Error(apperrors.NewBadRequestError("page_size must be between 1 and 500"))
 			return
 		}
 		pageSize = parsed
@@ -60,7 +60,7 @@ func (h *EvaluationQuestionHandler) ListQuestionResults(c *gin.Context) {
 	if raw := c.Query("cursor"); raw != "" {
 		from, err := types.DecodeEvaluationQuestionCursor(taskID, raw)
 		if err != nil {
-			c.Error(apperrors.NewBadRequestError("invalid question results cursor"))
+			_ = c.Error(apperrors.NewBadRequestError("invalid question results cursor"))
 			return
 		}
 		sampleIndexFrom = from
@@ -70,10 +70,10 @@ func (h *EvaluationQuestionHandler) ListQuestionResults(c *gin.Context) {
 	rows, err := h.questionResults.ListQuestionResults(ctx, tenantID, taskID, sampleIndexFrom, pageSize+1)
 	if err != nil {
 		if errors.Is(err, interfaces.ErrEvaluationTaskNotFound) {
-			c.Error(apperrors.NewNotFoundError("Evaluation task not found"))
+			_ = c.Error(apperrors.NewNotFoundError("Evaluation task not found"))
 			return
 		}
-		c.Error(apperrors.NewInternalServerError(err.Error()))
+		_ = c.Error(apperrors.NewInternalServerError(err.Error()))
 		return
 	}
 
@@ -82,7 +82,7 @@ func (h *EvaluationQuestionHandler) ListQuestionResults(c *gin.Context) {
 		last := rows[pageSize-1]
 		nextCursor, err = types.EncodeEvaluationQuestionCursor(taskID, last.SampleIndex+1)
 		if err != nil {
-			c.Error(apperrors.NewInternalServerError(err.Error()))
+			_ = c.Error(apperrors.NewInternalServerError(err.Error()))
 			return
 		}
 		rows = rows[:pageSize]

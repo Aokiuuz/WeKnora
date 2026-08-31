@@ -63,7 +63,9 @@ func (e *EvaluationService) buildExperimentForTask(
 		return nil, "", nil
 	}
 
-	datasetSnapshot, err := e.resolveExperimentDatasetBinding(ctx, tenantID, options.DatasetVersionID, detail.Task.DatasetID)
+	datasetSnapshot, err := e.resolveExperimentDatasetBinding(
+		ctx, tenantID, options.DatasetVersionID, detail.Task.DatasetID,
+	)
 	if err != nil {
 		return nil, "", err
 	}
@@ -143,7 +145,7 @@ func seedSupportForChatModel(model *types.Model) string {
 	if model == nil {
 		return types.EvaluationSeedSupportUnavailable
 	}
-	switch chat.ChatSeedSupportState(model.Parameters.Provider, model.Parameters.BaseURL, model.Source) {
+	switch chat.SeedSupportState(model.Parameters.Provider, model.Parameters.BaseURL, model.Source) {
 	case chat.ChatSeedSupportApplied:
 		return types.EvaluationSeedSupportApplied
 	case chat.ChatSeedSupportUnsupported:

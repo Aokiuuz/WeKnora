@@ -38,7 +38,8 @@ func BuiltinEvaluationDatasetRegistration() (*types.EvaluationBuiltinDatasetRegi
 		artifact.Write(data)
 		artifact.WriteByte(0)
 	}
-	if actual := types.EvaluationDatasetArtifactSHA256(artifact.Bytes()); actual != builtinEvaluationDatasetArtifactSHA256 {
+	actual := types.EvaluationDatasetArtifactSHA256(artifact.Bytes())
+	if actual != builtinEvaluationDatasetArtifactSHA256 {
 		return nil, fmt.Errorf("load built-in evaluation dataset: artifact %s != pinned %s",
 			actual, builtinEvaluationDatasetArtifactSHA256)
 	}

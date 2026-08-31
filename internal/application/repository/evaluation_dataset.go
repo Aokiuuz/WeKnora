@@ -219,7 +219,11 @@ func (r *evaluationDatasetRepository) CreateVersion(
 				"updated_at":         version.CreatedAt,
 			})
 		if result.Error != nil {
-			return fmt.Errorf("create evaluation dataset version %s: update current version: %w", version.ID, result.Error)
+			return fmt.Errorf(
+				"create evaluation dataset version %s: update current version: %w",
+				version.ID,
+				result.Error,
+			)
 		}
 		if result.RowsAffected != 1 {
 			return fmt.Errorf("create evaluation dataset version %s: update current version: %w",
@@ -238,7 +242,9 @@ func (r *evaluationDatasetRepository) GetVersion(
 	var version types.EvaluationDatasetVersion
 	err := r.db.WithContext(ctx).
 		Joins("JOIN evaluation_datasets ON evaluation_datasets.id = evaluation_dataset_versions.dataset_id").
-		Where("evaluation_dataset_versions.id = ? AND (evaluation_datasets.scope = ? OR evaluation_datasets.owner_tenant_id = ?)",
+		Where(
+			"evaluation_dataset_versions.id = ? AND "+
+				"(evaluation_datasets.scope = ? OR evaluation_datasets.owner_tenant_id = ?)",
 			datasetVersionID, types.EvaluationDatasetScopeSystem, tenantID).
 		First(&version).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {

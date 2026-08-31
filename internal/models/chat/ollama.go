@@ -104,7 +104,7 @@ func (c *OllamaChat) buildChatRequest(messages []Message, opts *ChatOptions, isS
 			chatReq.Options["top_p"] = opts.TopP
 		}
 		// 显式提供的 seed 真实下发到 Ollama options。
-		if ChatOptionsSeedProvided(opts) {
+		if OptionsSeedProvided(opts) {
 			chatReq.Options["seed"] = opts.Seed
 		}
 		if opts.MaxTokens > 0 {
