@@ -32,6 +32,7 @@ var versionedSQLiteTables = []string{
 	"model_price_versions",
 	"model_call_records",
 	"embedding_cache_entries",
+	"embedding_cache_events",
 }
 
 // versionedSQLiteColumns maps each existing table to the columns that the
@@ -54,7 +55,7 @@ var versionedSQLiteColumns = map[string][]string{
 	"evaluation_question_results": {"usage_reported"},
 }
 
-const expectedSQLiteMigrationVersion = 23
+const expectedSQLiteMigrationVersion = 24
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -90,6 +91,7 @@ func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	assertSQLiteEvaluationTaskLabelsSchema(t, db)
 	assertSQLiteModelObservabilitySchema(t, db)
 	assertSQLiteEmbeddingCacheSchema(t, db)
+	assertSQLiteModelStatisticsSchema(t, db)
 	require.False(t, sqliteColumnExists(t, db, "knowledges", "tag_id"),
 		"SQLite migrations must drop legacy knowledges.tag_id after multi-tag migration")
 }
@@ -120,6 +122,17 @@ func assertSQLiteEmbeddingCacheSchema(t *testing.T, db *sql.DB) {
 	}
 	require.False(t, sqliteColumnExists(t, db, "embedding_cache_entries", "text"),
 		"embedding cache schema must not persist source text")
+}
+
+func assertSQLiteModelStatisticsSchema(t *testing.T, db *sql.DB) {
+	t.Helper()
+	require.True(t, sqliteTableExists(t, db, "embedding_cache_events"))
+	for _, column := range []string{"tenant_id", "model_id", "hit_items", "miss_items", "bypass_items", "occurred_at"} {
+		require.Truef(t, sqliteColumnExists(t, db, "embedding_cache_events", column),
+			"SQLite embedding_cache_events must contain column %s", column)
+	}
+	require.False(t, sqliteColumnExists(t, db, "embedding_cache_events", "text_sha256"),
+		"cache statistics must not persist cache keys")
 }
 
 func TestSQLiteMigrationsUpgradeV4PreservesData(t *testing.T) {
@@ -183,6 +196,7 @@ func TestSQLiteMigrationsUpgradeV4PreservesData(t *testing.T) {
 	require.Equal(t, 1, relationCount)
 	assertSQLiteEvaluationTaskSchema(t, db)
 	assertSQLiteEmbeddingCacheSchema(t, db)
+	assertSQLiteModelStatisticsSchema(t, db)
 	require.False(t, sqliteColumnExists(t, db, "knowledges", "tag_id"))
 }
 

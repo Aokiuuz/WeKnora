@@ -1,0 +1,60 @@
+package client
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+)
+
+func TestListModelUsageEncodesIntervalAndModels(t *testing.T) {
+	from := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/models/usage" || r.URL.Query().Get("model_ids") != "a,b" {
+			t.Fatalf("request URL = %s", r.URL.String())
+		}
+		if r.URL.Query().Get("from") != from.Format(time.RFC3339) || r.URL.Query().Get("to") != to.Format(time.RFC3339) {
+			t.Fatalf("interval query = %s", r.URL.RawQuery)
+		}
+		_, _ = w.Write([]byte(`{"success":true,"data":{"from":"2026-08-01T00:00:00Z","to":"2026-09-01T00:00:00Z","items":[{"model_id":"a","call_count":2,"costs":[],"provider_cache":{"hit_rate":null},"application_cache":{"hit_rate":0.5}}]}}`))
+	}))
+	defer server.Close()
+
+	report, err := NewClient(server.URL).ListModelUsage(context.Background(), ModelUsageOptions{
+		From: &from, To: &to, ModelIDs: []string{"a", "b"},
+	})
+	if err != nil {
+		t.Fatalf("ListModelUsage() error = %v", err)
+	}
+	if len(report.Items) != 1 || report.Items[0].ApplicationCache.HitRate == nil {
+		t.Fatalf("report = %#v", report)
+	}
+}
+
+func TestPutModelPriceUsesImmutablePriceEndpoint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut || r.URL.Path != "/api/v1/models/model-1/prices" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		var request PutModelPriceRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		if request.Currency != "USD" || request.InputMicrounitsPerMillion != 1_000_000 {
+			t.Fatalf("request = %#v", request)
+		}
+		_, _ = w.Write([]byte(`{"success":true,"data":{"id":"price-1","model_id":"model-1","currency":"USD","valid_from":"2026-09-01T00:00:00Z","created_at":"2026-09-01T00:00:00Z","input_microunits_per_million":1000000,"output_microunits_per_million":2000000}}`))
+	}))
+	defer server.Close()
+
+	price, err := NewClient(server.URL).PutModelPrice(context.Background(), "model-1", PutModelPriceRequest{
+		ValidFrom: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), Currency: "USD",
+		InputMicrounitsPerMillion: 1_000_000, OutputMicrounitsPerMillion: 2_000_000,
+	})
+	if err != nil || price.ID != "price-1" {
+		t.Fatalf("price = %#v, err = %v", price, err)
+	}
+}

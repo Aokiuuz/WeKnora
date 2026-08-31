@@ -2062,7 +2062,35 @@ export default {
     },
     actions: {
       addModel: '모델 추가',
-      debugModel: '모델 테스트'
+      debugModel: '모델 테스트',
+      usage: '사용량 및 요금'
+    },
+    usage: {
+      title: '모델 사용량 및 요금',
+      description: '공급자 호출, 비용, 지연 시간과 독립적인 공급자/애플리케이션 캐시 비율을 확인합니다',
+      days: '일',
+      empty: '선택한 기간에 모델 사용 기록이 없습니다',
+      calls: '공급자 호출',
+      tokens: '전체 토큰',
+      latency: '평균 지연 시간',
+      unpriced: '미요금 호출',
+      providerCache: '공급자 프롬프트 캐시',
+      applicationCache: '애플리케이션 임베딩 캐시',
+      providerDenominator: '관찰된 토큰 {value}개',
+      applicationDenominator: '관찰된 키 {value}개 · 우회 {bypass}개',
+      noPricedCost: '산정된 비용 없음',
+      pricingTitle: '불변 요금 버전',
+      pricingDescription: '가격은 입력/출력 토큰 백만 개당 통화 금액이며 선택한 시각부터 적용됩니다.',
+      selectModel: '모델 선택',
+      inputPrice: '입력/백만',
+      outputPrice: '출력/백만',
+      currency: '통화',
+      validTo: '선택 종료 시각',
+      addPrice: '버전 추가',
+      loadFailed: '모델 사용량을 불러오지 못했습니다',
+      priceLoadFailed: '요금 버전을 불러오지 못했습니다',
+      priceSaved: '요금 버전이 추가되었습니다',
+      priceSaveFailed: '요금 버전을 추가하지 못했습니다'
     },
     typeShort: {
       chat: '대화',

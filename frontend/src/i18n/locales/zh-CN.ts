@@ -2064,7 +2064,35 @@ export default {
     },
     actions: {
       addModel: '添加模型',
-      debugModel: '模型测试'
+      debugModel: '模型测试',
+      usage: '用量与定价'
+    },
+    usage: {
+      title: '模型用量与定价',
+      description: '查看供应商调用、成本、时延以及独立计算的供应商缓存率和应用缓存率',
+      days: '天',
+      empty: '所选时间范围内没有模型用量记录',
+      calls: '供应商调用',
+      tokens: '总令牌数',
+      latency: '平均时延',
+      unpriced: '未定价调用',
+      providerCache: '供应商提示词缓存',
+      applicationCache: '应用嵌入缓存',
+      providerDenominator: '已观测 {value} 个令牌',
+      applicationDenominator: '已观测 {value} 个键 · 旁路 {bypass} 个',
+      noPricedCost: '暂无已定价成本',
+      pricingTitle: '不可变价格版本',
+      pricingDescription: '价格单位为每百万输入/输出令牌对应的货币金额，并从所选时间开始生效。',
+      selectModel: '选择模型',
+      inputPrice: '输入/百万',
+      outputPrice: '输出/百万',
+      currency: '币种',
+      validTo: '可选结束时间',
+      addPrice: '添加版本',
+      loadFailed: '模型用量加载失败',
+      priceLoadFailed: '价格版本加载失败',
+      priceSaved: '价格版本已添加',
+      priceSaveFailed: '价格版本添加失败'
     },
     typeShort: {
       chat: '对话',

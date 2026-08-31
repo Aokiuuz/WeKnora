@@ -4606,7 +4606,35 @@ export default {
     },
     actions: {
       addModel: 'Add Model',
-      debugModel: 'Model Test'
+      debugModel: 'Model Test',
+      usage: 'Usage & Pricing'
+    },
+    usage: {
+      title: 'Model Usage & Pricing',
+      description: 'Review provider calls, costs, latency, and independent provider/application cache rates',
+      days: 'days',
+      empty: 'No model usage was recorded in this interval',
+      calls: 'Provider calls',
+      tokens: 'Total tokens',
+      latency: 'Average latency',
+      unpriced: 'Unpriced calls',
+      providerCache: 'Provider prompt cache',
+      applicationCache: 'Application embedding cache',
+      providerDenominator: '{value} observed tokens',
+      applicationDenominator: '{value} observed keys · {bypass} bypassed',
+      noPricedCost: 'No priced cost',
+      pricingTitle: 'Immutable price versions',
+      pricingDescription: 'Prices use one currency unit per million input/output tokens and apply from the selected time.',
+      selectModel: 'Select model',
+      inputPrice: 'Input / million',
+      outputPrice: 'Output / million',
+      currency: 'Currency',
+      validTo: 'Optional end time',
+      addPrice: 'Add version',
+      loadFailed: 'Failed to load model usage',
+      priceLoadFailed: 'Failed to load price versions',
+      priceSaved: 'Price version added',
+      priceSaveFailed: 'Failed to add price version'
     },
     source: {
       remote: 'Remote',

@@ -129,7 +129,7 @@ func (r *modelObservabilityRepository) CreateModelPrice(
 		return errors.New("create model price: tenant, model, and valid_from are required")
 	}
 	price.Currency = strings.ToUpper(strings.TrimSpace(price.Currency))
-	if len(price.Currency) != 3 || price.InputMicrounitsPerMillion < 0 || price.OutputMicrounitsPerMillion < 0 {
+	if !isCurrencyCode(price.Currency) || price.InputMicrounitsPerMillion < 0 || price.OutputMicrounitsPerMillion < 0 {
 		return errors.New("create model price: currency must have three letters and prices must be non-negative")
 	}
 	price.ValidFrom = price.ValidFrom.UTC()
@@ -167,6 +167,18 @@ func (r *modelObservabilityRepository) CreateModelPrice(
 		}
 		return nil
 	})
+}
+
+func isCurrencyCode(value string) bool {
+	if len(value) != 3 {
+		return false
+	}
+	for _, character := range value {
+		if character < 'A' || character > 'Z' {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *modelObservabilityRepository) ListModelPrices(

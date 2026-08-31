@@ -17,6 +17,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/modelobs"
 	"github.com/Tencent/WeKnora/internal/models/embedding"
 	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/google/uuid"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -41,6 +42,11 @@ type Store interface {
 	GetEmbeddingCache(context.Context, CachePrefix, []string) (map[string]*types.EmbeddingCacheEntry, error)
 	PutEmbeddingCache(context.Context, []*types.EmbeddingCacheEntry) error
 	DeleteExpiredEmbeddingCache(context.Context, int) (int64, error)
+}
+
+// EventStore persists aggregate hit, miss, and bypass counts without cache keys or source text.
+type EventStore interface {
+	RecordEmbeddingCacheEvent(context.Context, *types.EmbeddingCacheEvent) error
 }
 
 // Coordinator owns the process-wide singleflight group shared by every wrapper.
@@ -210,6 +216,14 @@ func (e *cachedEmbedder) cachedBatch(
 		missingTexts = append(missingTexts, uniqueTexts[i])
 		missingHashes = append(missingHashes, hash)
 	}
+	hitItems := int64(len(uniqueHashes) - len(missingHashes))
+	missItems := int64(len(missingHashes))
+	bypassItems := int64(0)
+	if lookupErr != nil {
+		bypassItems = int64(len(uniqueHashes))
+		missItems = 0
+	}
+	e.coordinator.recordEvent(ctx, prefix, hitItems, missItems, bypassItems)
 	if len(missingTexts) > 0 {
 		batchKey := singleflightBatchKey(prefix, missingHashes)
 		value, err, _ := e.coordinator.requests.Do(batchKey, func() (any, error) {
@@ -247,6 +261,23 @@ func (e *cachedEmbedder) cachedBatch(
 		result[i] = append([]float32(nil), vector...)
 	}
 	return result, nil
+}
+
+func (c *Coordinator) recordEvent(
+	ctx context.Context,
+	prefix CachePrefix,
+	hitItems, missItems, bypassItems int64,
+) {
+	store, ok := c.store.(EventStore)
+	if !ok {
+		return
+	}
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cacheWriteTimeout)
+	defer cancel()
+	_ = store.RecordEmbeddingCacheEvent(writeCtx, &types.EmbeddingCacheEvent{
+		ID: uuid.NewString(), TenantID: prefix.TenantID, ModelID: prefix.ModelID,
+		HitItems: hitItems, MissItems: missItems, BypassItems: bypassItems, OccurredAt: time.Now().UTC(),
+	})
 }
 
 func EmbeddingModelFingerprint(model *types.Model) string {

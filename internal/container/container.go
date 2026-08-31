@@ -87,6 +87,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/models/embedding"
 	"github.com/Tencent/WeKnora/internal/models/limiter"
 	"github.com/Tencent/WeKnora/internal/models/utils/ollama"
+	"github.com/Tencent/WeKnora/internal/modelstats"
 	"github.com/Tencent/WeKnora/internal/router"
 	"github.com/Tencent/WeKnora/internal/storageallowlist"
 	"github.com/Tencent/WeKnora/internal/stream"
@@ -196,6 +197,10 @@ func BuildContainer(container *dig.Container) *dig.Container {
 		return repository.NewEmbeddingCacheRepository(db)
 	}))
 	must(container.Provide(modelcache.NewCoordinator))
+	must(container.Provide(func(db *gorm.DB) modelstats.Store {
+		return repository.NewModelStatisticsRepository(db)
+	}))
+	must(container.Provide(modelstats.NewService))
 
 	// MCP manager for managing MCP client connections
 	logger.Debugf(ctx, "[Container] Registering MCP manager...")
@@ -427,6 +432,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewMessageHandler))
 	must(container.Provide(handler.NewMessageSuggestionHandler))
 	must(container.Provide(handler.NewModelHandler))
+	must(container.Provide(handler.NewModelStatisticsHandler))
 	must(container.Provide(handler.NewSandboxConfigHandler))
 	must(container.Provide(func(
 		s *service.TenantSkillService, streams interfaces.StreamManager,

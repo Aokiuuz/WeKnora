@@ -15,6 +15,7 @@ func RegisterModelRoutes(
 	r *gin.RouterGroup,
 	handler *handler.ModelHandler,
 	credHandler *handler.ModelCredentialsHandler,
+	statisticsHandler *handler.ModelStatisticsHandler,
 	g *rbacGuards,
 ) {
 	// 模型路由组。空间级基础设施：仅完全访问（Owner）API key 可访问。
@@ -26,6 +27,12 @@ func RegisterModelRoutes(
 		models.POST("", g.Admin(), handler.CreateModel)
 		// 获取模型列表 — Viewer+
 		models.GET("", g.Viewer(), handler.ListModels)
+		// 聚合模型调用、成本和两级缓存统计 — Viewer+
+		models.GET("/usage", g.Viewer(), statisticsHandler.ListUsage)
+		models.GET("/:id/usage", g.Viewer(), statisticsHandler.GetUsage)
+		models.GET("/:id/prices", g.Viewer(), statisticsHandler.ListPrices)
+		// 新建不可变的生效区间价格版本 — Admin+
+		models.PUT("/:id/prices", g.Admin(), statisticsHandler.PutPrice)
 		// 调试已保存模型会发起真实上游调用并产生费用 — Admin+
 		models.POST("/:id/debug", g.Admin(), handler.DebugModel)
 		// 获取单个模型 — Viewer+

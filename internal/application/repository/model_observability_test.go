@@ -82,3 +82,13 @@ func TestModelObservabilityRepositoryRejectsOverlappingPriceVersions(t *testing.
 	require.Len(t, prices, 1)
 	assert.Equal(t, "USD", prices[0].Currency)
 }
+
+func TestModelObservabilityRepositoryRequiresASCIICurrencyCode(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:model-price-currency?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&types.ModelPriceVersion{}))
+	err = NewModelObservabilityRepository(db).CreateModelPrice(context.Background(), &types.ModelPriceVersion{
+		TenantID: 7, ModelID: "model-1", ValidFrom: time.Now(), Currency: "12$",
+	})
+	require.ErrorContains(t, err, "three letters")
+}

@@ -19,6 +19,7 @@ type cacheStore struct {
 	entries map[string]*types.EmbeddingCacheEntry
 	getErr  error
 	putErr  error
+	events  []*types.EmbeddingCacheEvent
 }
 
 func cacheStoreKey(prefix CachePrefix, hash string) string {
@@ -55,6 +56,14 @@ func (s *cacheStore) PutEmbeddingCache(_ context.Context, entries []*types.Embed
 		prefix := CachePrefix{TenantID: entry.TenantID, ModelID: entry.ModelID, ModelFingerprint: entry.ModelFingerprint, RequestOptionsSHA256: entry.RequestOptionsSHA256}
 		s.entries[cacheStoreKey(prefix, entry.TextSHA256)] = &copy
 	}
+	return nil
+}
+
+func (s *cacheStore) RecordEmbeddingCacheEvent(_ context.Context, event *types.EmbeddingCacheEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	copy := *event
+	s.events = append(s.events, &copy)
 	return nil
 }
 
@@ -145,6 +154,9 @@ func TestBatchEmbeddingCacheDeduplicatesMissesAndRestoresOrder(t *testing.T) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	require.Len(t, store.entries, 2)
+	require.Len(t, store.events, 2)
+	assert.Equal(t, int64(2), store.events[0].MissItems)
+	assert.Equal(t, int64(2), store.events[1].HitItems)
 }
 
 func TestEmbeddingCacheSingleflightIsSharedAcrossWrappers(t *testing.T) {

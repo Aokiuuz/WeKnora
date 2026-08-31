@@ -38,7 +38,7 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 
 	version, dirty, err := migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(23), version)
+	require.Equal(t, uint(24), version)
 	require.False(t, dirty)
 	inspectionDB := openSQLiteDB(t, dbPath)
 	assertSQLiteEvaluationTaskSchema(t, inspectionDB)
@@ -47,6 +47,14 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 	assertSQLiteEvaluationRuntimeMetricsSchema(t, inspectionDB)
 	assertSQLiteModelObservabilitySchema(t, inspectionDB)
 	assertSQLiteEmbeddingCacheSchema(t, inspectionDB)
+	assertSQLiteModelStatisticsSchema(t, inspectionDB)
+
+	require.NoError(t, migrator.Steps(-1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(23), version)
+	require.False(t, dirty)
+	require.False(t, sqliteTableExists(t, inspectionDB, "embedding_cache_events"))
 
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
@@ -133,9 +141,16 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(expectedSQLiteMigrationVersion), version)
+	require.Equal(t, uint(23), version)
 	require.False(t, dirty)
 	assertSQLiteEmbeddingCacheSchema(t, inspectionDB)
+
+	require.NoError(t, migrator.Steps(1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(expectedSQLiteMigrationVersion), version)
+	require.False(t, dirty)
+	assertSQLiteModelStatisticsSchema(t, inspectionDB)
 }
 
 func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
@@ -168,7 +183,7 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	})
 	version, dirty, err := migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(100), version)
+	require.Equal(t, uint(101), version)
 	require.False(t, dirty)
 	assertPostgresEvaluationSchema(t, adminDB, schema)
 	assertPostgresM3EvaluationSchema(t, adminDB, schema)
@@ -176,6 +191,19 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	assertPostgresM5RuntimeSchema(t, adminDB, schema)
 	assertPostgresM5LedgerSchema(t, adminDB, schema)
 	assertPostgresM5EmbeddingCacheSchema(t, adminDB, schema)
+	assertPostgresM5ModelStatisticsSchema(t, adminDB, schema)
+
+	require.NoError(t, migrator.Steps(-1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(100), version)
+	require.False(t, dirty)
+	var statisticsTableExists bool
+	require.NoError(t, adminDB.Raw(
+		"SELECT EXISTS (SELECT 1 FROM information_schema.tables "+
+			"WHERE table_schema = ? AND table_name = 'embedding_cache_events')", schema,
+	).Scan(&statisticsTableExists).Error)
+	require.False(t, statisticsTableExists)
 
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
@@ -296,6 +324,13 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.Equal(t, uint(100), version)
 	require.False(t, dirty)
 	assertPostgresM5EmbeddingCacheSchema(t, adminDB, schema)
+
+	require.NoError(t, migrator.Steps(1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(101), version)
+	require.False(t, dirty)
+	assertPostgresM5ModelStatisticsSchema(t, adminDB, schema)
 }
 
 func assertSQLiteEvaluationRuntimeMetricsSchema(t *testing.T, db *sql.DB) {
@@ -348,6 +383,22 @@ func assertPostgresM5EmbeddingCacheSchema(t *testing.T, db *gorm.DB, schema stri
 		schema,
 	).Scan(&textColumnExists).Error)
 	require.False(t, textColumnExists)
+}
+
+func assertPostgresM5ModelStatisticsSchema(t *testing.T, db *gorm.DB, schema string) {
+	t.Helper()
+	var exists bool
+	require.NoError(t, db.Raw(
+		"SELECT EXISTS (SELECT 1 FROM information_schema.tables "+
+			"WHERE table_schema = ? AND table_name = 'embedding_cache_events')", schema,
+	).Scan(&exists).Error)
+	require.True(t, exists)
+	require.NoError(t, db.Raw(
+		"SELECT EXISTS (SELECT 1 FROM information_schema.columns "+
+			"WHERE table_schema = ? AND table_name = 'embedding_cache_events' AND column_name = 'text_sha256')",
+		schema,
+	).Scan(&exists).Error)
+	require.False(t, exists)
 }
 
 func postgresMigrationDSN(t *testing.T, baseDSN, schema string) string {

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
+	"time"
 )
 
 // ModelType represents the type of AI model
@@ -232,4 +234,150 @@ func (c *Client) ListModelProviders(ctx context.Context, modelType string) ([]Mo
 	}
 
 	return response.Data, nil
+}
+
+// ModelUsageOptions selects a half-open UTC reporting interval and optional models.
+type ModelUsageOptions struct {
+	From     *time.Time
+	To       *time.Time
+	ModelIDs []string
+}
+
+type ModelCostTotal struct {
+	Currency       string `json:"currency"`
+	CostMicrounits int64  `json:"cost_microunits"`
+}
+
+type ProviderCacheStatistics struct {
+	ReadTokens     int64    `json:"read_tokens"`
+	WriteTokens    int64    `json:"write_tokens"`
+	MissTokens     int64    `json:"miss_tokens"`
+	ObservedTokens int64    `json:"observed_tokens"`
+	HitRate        *float64 `json:"hit_rate"`
+}
+
+type ApplicationCacheStatistics struct {
+	HitItems      int64    `json:"hit_items"`
+	MissItems     int64    `json:"miss_items"`
+	BypassItems   int64    `json:"bypass_items"`
+	ObservedItems int64    `json:"observed_items"`
+	HitRate       *float64 `json:"hit_rate"`
+}
+
+type ModelUsageStatistics struct {
+	ModelID                 string                     `json:"model_id"`
+	CallCount               int64                      `json:"call_count"`
+	SuccessCalls            int64                      `json:"success_calls"`
+	ErrorCalls              int64                      `json:"error_calls"`
+	CanceledCalls           int64                      `json:"canceled_calls"`
+	UsageReportedCalls      int64                      `json:"usage_reported_calls"`
+	UsageUnreportedCalls    int64                      `json:"usage_unreported_calls"`
+	AccountingCompleteCalls int64                      `json:"accounting_complete_calls"`
+	UnpricedCalls           int64                      `json:"unpriced_calls"`
+	PromptTokens            int64                      `json:"prompt_tokens"`
+	CompletionTokens        int64                      `json:"completion_tokens"`
+	TotalTokens             int64                      `json:"total_tokens"`
+	AverageDurationMs       float64                    `json:"average_duration_ms"`
+	Costs                   []ModelCostTotal           `json:"costs"`
+	ProviderCache           ProviderCacheStatistics    `json:"provider_cache"`
+	ApplicationCache        ApplicationCacheStatistics `json:"application_cache"`
+}
+
+type ModelUsageReport struct {
+	From  time.Time              `json:"from"`
+	To    time.Time              `json:"to"`
+	Items []ModelUsageStatistics `json:"items"`
+}
+
+type ModelPriceVersion struct {
+	ID                         string     `json:"id"`
+	TenantID                   uint64     `json:"tenant_id"`
+	ModelID                    string     `json:"model_id"`
+	ValidFrom                  time.Time  `json:"valid_from"`
+	ValidTo                    *time.Time `json:"valid_to,omitempty"`
+	InputMicrounitsPerMillion  int64      `json:"input_microunits_per_million"`
+	OutputMicrounitsPerMillion int64      `json:"output_microunits_per_million"`
+	Currency                   string     `json:"currency"`
+	CreatedAt                  time.Time  `json:"created_at"`
+}
+
+type PutModelPriceRequest struct {
+	ValidFrom                  time.Time  `json:"valid_from"`
+	ValidTo                    *time.Time `json:"valid_to,omitempty"`
+	InputMicrounitsPerMillion  int64      `json:"input_microunits_per_million"`
+	OutputMicrounitsPerMillion int64      `json:"output_microunits_per_million"`
+	Currency                   string     `json:"currency"`
+}
+
+func (c *Client) ListModelUsage(ctx context.Context, options ModelUsageOptions) (*ModelUsageReport, error) {
+	return c.modelUsage(ctx, "/api/v1/models/usage", options)
+}
+
+func (c *Client) GetModelUsage(
+	ctx context.Context,
+	modelID string,
+	options ModelUsageOptions,
+) (*ModelUsageReport, error) {
+	return c.modelUsage(ctx, fmt.Sprintf("/api/v1/models/%s/usage", url.PathEscape(modelID)), options)
+}
+
+func (c *Client) modelUsage(ctx context.Context, path string, options ModelUsageOptions) (*ModelUsageReport, error) {
+	query := url.Values{}
+	if options.From != nil {
+		query.Set("from", options.From.UTC().Format(time.RFC3339))
+	}
+	if options.To != nil {
+		query.Set("to", options.To.UTC().Format(time.RFC3339))
+	}
+	if len(options.ModelIDs) > 0 {
+		query.Set("model_ids", strings.Join(options.ModelIDs, ","))
+	}
+	resp, err := c.doRequest(ctx, http.MethodGet, path, nil, query)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Success bool             `json:"success"`
+		Data    ModelUsageReport `json:"data"`
+	}
+	if err := parseResponse(resp, &response); err != nil {
+		return nil, err
+	}
+	return &response.Data, nil
+}
+
+func (c *Client) ListModelPrices(ctx context.Context, modelID string) ([]ModelPriceVersion, error) {
+	path := fmt.Sprintf("/api/v1/models/%s/prices", url.PathEscape(modelID))
+	resp, err := c.doRequest(ctx, http.MethodGet, path, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Success bool                `json:"success"`
+		Data    []ModelPriceVersion `json:"data"`
+	}
+	if err := parseResponse(resp, &response); err != nil {
+		return nil, err
+	}
+	return response.Data, nil
+}
+
+func (c *Client) PutModelPrice(
+	ctx context.Context,
+	modelID string,
+	request PutModelPriceRequest,
+) (*ModelPriceVersion, error) {
+	path := fmt.Sprintf("/api/v1/models/%s/prices", url.PathEscape(modelID))
+	resp, err := c.doRequest(ctx, http.MethodPut, path, request, nil)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Success bool              `json:"success"`
+		Data    ModelPriceVersion `json:"data"`
+	}
+	if err := parseResponse(resp, &response); err != nil {
+		return nil, err
+	}
+	return &response.Data, nil
 }

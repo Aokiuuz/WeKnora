@@ -94,4 +94,21 @@ func (r *embeddingCacheRepository) DeleteExpiredEmbeddingCache(ctx context.Conte
 	return result.RowsAffected, nil
 }
 
+func (r *embeddingCacheRepository) RecordEmbeddingCacheEvent(
+	ctx context.Context,
+	event *types.EmbeddingCacheEvent,
+) error {
+	if event == nil || event.ID == "" || event.TenantID == 0 || event.ModelID == "" || event.OccurredAt.IsZero() ||
+		event.HitItems < 0 || event.MissItems < 0 || event.BypassItems < 0 ||
+		event.HitItems+event.MissItems+event.BypassItems == 0 {
+		return errors.New("record embedding cache event: complete non-negative event is required")
+	}
+	event.OccurredAt = event.OccurredAt.UTC()
+	if err := r.db.WithContext(ctx).Create(event).Error; err != nil {
+		return fmt.Errorf("record embedding cache event: %w", err)
+	}
+	return nil
+}
+
 var _ modelcache.Store = (*embeddingCacheRepository)(nil)
+var _ modelcache.EventStore = (*embeddingCacheRepository)(nil)
