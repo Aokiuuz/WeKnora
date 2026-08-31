@@ -13,13 +13,13 @@ import (
 func newEvaluationDatasetFixture(tenantID uint64, suffix string) *types.EvaluationDataset {
 	createdAt := time.Date(2026, 8, 28, 8, 0, 0, 0, time.UTC)
 	return &types.EvaluationDataset{
-		ID:          "dataset-" + suffix,
-		Scope:       types.EvaluationDatasetScopeTenant,
+		ID:            "dataset-" + suffix,
+		Scope:         types.EvaluationDatasetScopeTenant,
 		OwnerTenantID: &tenantID,
-		Name:        "Dataset " + suffix,
-		Description: "fixture",
-		CreatedAt:   createdAt,
-		UpdatedAt:   createdAt,
+		Name:          "Dataset " + suffix,
+		Description:   "fixture",
+		CreatedAt:     createdAt,
+		UpdatedAt:     createdAt,
 	}
 }
 
@@ -62,7 +62,7 @@ func TestEvaluationDatasetRepositoryTenantIsolation(t *testing.T) {
 	ctx := context.Background()
 
 	systemDataset := &types.EvaluationDataset{
-		ID:   "dataset-system",
+		ID:    "dataset-system",
 		Scope: types.EvaluationDatasetScopeSystem,
 		Name:  "Built-in samples",
 	}
@@ -106,14 +106,22 @@ func TestEvaluationDatasetRepositoryRejectsInvalidDataset(t *testing.T) {
 		dataset *types.EvaluationDataset
 	}{
 		{name: "nil"},
-		{name: "missing id", dataset: &types.EvaluationDataset{Scope: types.EvaluationDatasetScopeTenant,
-			OwnerTenantID: &tenant, Name: "x"}},
-		{name: "system with owner", dataset: &types.EvaluationDataset{ID: "d1",
-			Scope: types.EvaluationDatasetScopeSystem, OwnerTenantID: &tenant, Name: "x"}},
-		{name: "tenant without owner", dataset: &types.EvaluationDataset{ID: "d2",
-			Scope: types.EvaluationDatasetScopeTenant, Name: "x"}},
-		{name: "unknown scope", dataset: &types.EvaluationDataset{ID: "d3",
-			Scope: "public", Name: "x"}},
+		{name: "missing id", dataset: &types.EvaluationDataset{
+			Scope:         types.EvaluationDatasetScopeTenant,
+			OwnerTenantID: &tenant, Name: "x",
+		}},
+		{name: "system with owner", dataset: &types.EvaluationDataset{
+			ID:    "d1",
+			Scope: types.EvaluationDatasetScopeSystem, OwnerTenantID: &tenant, Name: "x",
+		}},
+		{name: "tenant without owner", dataset: &types.EvaluationDataset{
+			ID:    "d2",
+			Scope: types.EvaluationDatasetScopeTenant, Name: "x",
+		}},
+		{name: "unknown scope", dataset: &types.EvaluationDataset{
+			ID:    "d3",
+			Scope: "public", Name: "x",
+		}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

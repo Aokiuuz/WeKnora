@@ -165,8 +165,10 @@ func TestChatSeedSupportStateClassification(t *testing.T) {
 		want     string
 	}{
 		{"openai", "openai", "", types.ModelSourceOpenAI, ChatSeedSupportApplied},
-		{"openai compatible", "generic", "https://api.example.test/v1", types.ModelSourceOpenAI,
-			ChatSeedSupportApplied},
+		{
+			"openai compatible", "generic", "https://api.example.test/v1", types.ModelSourceOpenAI,
+			ChatSeedSupportApplied,
+		},
 		{"ollama", "ollama", "", types.ModelSourceLocal, ChatSeedSupportApplied},
 		{"anthropic", "anthropic", "", types.ModelSourceOpenAI, ChatSeedSupportUnsupported},
 	}

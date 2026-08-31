@@ -209,8 +209,8 @@ func (e *EvaluationService) verifyExperimentModelFingerprints(
 		return nil
 	}
 	roles := []struct {
-		name    string
-		frozen  *types.EvaluationModelSnapshot
+		name   string
+		frozen *types.EvaluationModelSnapshot
 	}{
 		{"embedding", experiment.Models.Embedding},
 		{"chat", experiment.Models.Chat},

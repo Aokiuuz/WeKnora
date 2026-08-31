@@ -8,10 +8,10 @@ import (
 
 func evaluationModelFingerprintFixture() *Model {
 	return &Model{
-		ID:      "chat-model-1",
-		Name:    "gpt-fixture",
-		Type:    ModelTypeKnowledgeQA,
-		Source:  ModelSourceOpenAI,
+		ID:        "chat-model-1",
+		Name:      "gpt-fixture",
+		Type:      ModelTypeKnowledgeQA,
+		Source:    ModelSourceOpenAI,
 		UpdatedAt: time.Date(2026, 8, 28, 8, 0, 0, 0, time.FixedZone("UTC+8", 8*3600)),
 		Parameters: ModelParameters{
 			BaseURL:       "https://user:secret@api.example.test/v1",

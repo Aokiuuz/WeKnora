@@ -327,7 +327,7 @@ start /wait "" "%s" /S
 start "" "%s"
 del "%%~f0"
 `, savePath, execPath)
-		os.WriteFile(scriptPath, []byte(scriptContent), 0755)
+		os.WriteFile(scriptPath, []byte(scriptContent), 0o755)
 
 		cmd := exec.Command("cmd.exe", "/C", "start", "/b", scriptPath)
 		cmd.Start()
@@ -352,7 +352,7 @@ del "%%~f0"
 				}
 
 				mountPoint := filepath.Join(os.TempDir(), "WeKnoraUpdateMount")
-				os.MkdirAll(mountPoint, 0755)
+				os.MkdirAll(mountPoint, 0o755)
 
 				cmdMount := exec.Command("hdiutil", "attach", savePath, "-mountpoint", mountPoint, "-nobrowse", "-quiet")
 				if err := cmdMount.Run(); err != nil {
@@ -397,7 +397,7 @@ open "%s"
 rm "$0"
 `, appBundlePath, newAppPath, appDir, appBundlePath, newAppPath, appDir, mountPoint, appBundlePath)
 
-				os.WriteFile(scriptPath, []byte(scriptContent), 0755)
+				os.WriteFile(scriptPath, []byte(scriptContent), 0o755)
 
 				exec.Command("bash", scriptPath).Start()
 				wailsruntime.Quit(ctx)

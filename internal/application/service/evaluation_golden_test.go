@@ -225,7 +225,8 @@ func goldenSearchResults(entries []struct {
 	KnowledgeID string  `json:"knowledge_id"`
 	ChunkIndex  int     `json:"chunk_index"`
 	Score       float64 `json:"score"`
-}) []*types.SearchResult {
+},
+) []*types.SearchResult {
 	results := make([]*types.SearchResult, 0, len(entries))
 	for _, entry := range entries {
 		results = append(results, &types.SearchResult{

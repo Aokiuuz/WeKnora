@@ -23,8 +23,10 @@ import (
 	secutils "github.com/Tencent/WeKnora/internal/utils"
 )
 
-const oidcNonceCookieName = "weknora_oidc_nonce"
-const oidcNonceCookieMaxAge = 600
+const (
+	oidcNonceCookieName   = "weknora_oidc_nonce"
+	oidcNonceCookieMaxAge = 600
+)
 
 // AuthHandler implements HTTP request handlers for user authentication
 // Provides functionality for user registration, login, logout, and token management

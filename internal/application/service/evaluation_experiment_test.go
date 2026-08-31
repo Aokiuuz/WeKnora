@@ -26,8 +26,10 @@ func evaluationExperimentInputFixture() *EvaluationExperimentInput {
 			ID: "embedding-1", Name: "bge-m3", Type: types.ModelTypeEmbedding,
 			Source:    types.ModelSourceLocal,
 			UpdatedAt: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
-			Parameters: types.ModelParameters{Provider: "ollama", InterfaceType: "ollama",
-				EmbeddingParameters: types.EmbeddingParameters{Dimension: 1024}},
+			Parameters: types.ModelParameters{
+				Provider: "ollama", InterfaceType: "ollama",
+				EmbeddingParameters: types.EmbeddingParameters{Dimension: 1024},
+			},
 		},
 		ChatModel: &types.Model{
 			ID: "chat-1", Name: "qwen3", Type: types.ModelTypeKnowledgeQA,
@@ -247,12 +249,18 @@ func TestSeedSupportForChatModelClassification(t *testing.T) {
 		model *types.Model
 		want  string
 	}{
-		{"openai", &types.Model{Source: types.ModelSourceOpenAI,
-			Parameters: types.ModelParameters{Provider: "openai"}}, types.EvaluationSeedSupportApplied},
-		{"ollama", &types.Model{Source: types.ModelSourceLocal,
-			Parameters: types.ModelParameters{Provider: "ollama"}}, types.EvaluationSeedSupportApplied},
-		{"anthropic", &types.Model{Source: types.ModelSourceOpenAI,
-			Parameters: types.ModelParameters{Provider: "anthropic"}}, types.EvaluationSeedSupportUnsupported},
+		{"openai", &types.Model{
+			Source:     types.ModelSourceOpenAI,
+			Parameters: types.ModelParameters{Provider: "openai"},
+		}, types.EvaluationSeedSupportApplied},
+		{"ollama", &types.Model{
+			Source:     types.ModelSourceLocal,
+			Parameters: types.ModelParameters{Provider: "ollama"},
+		}, types.EvaluationSeedSupportApplied},
+		{"anthropic", &types.Model{
+			Source:     types.ModelSourceOpenAI,
+			Parameters: types.ModelParameters{Provider: "anthropic"},
+		}, types.EvaluationSeedSupportUnsupported},
 		{"nil model", nil, types.EvaluationSeedSupportUnavailable},
 	}
 	for _, tc := range cases {

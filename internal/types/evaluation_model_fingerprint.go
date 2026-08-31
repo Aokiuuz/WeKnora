@@ -11,14 +11,14 @@ import (
 // keys, app secrets, app IDs, custom headers, and URL-embedded credentials:
 // the fingerprint explains output behavior, never authentication.
 type EvaluationModelBehaviorConfig struct {
-	BaseURL                   string              `json:"base_url"`
-	InterfaceType             string              `json:"interface_type"`
-	Provider                  string              `json:"provider"`
-	ParameterSize             string              `json:"parameter_size"`
-	EmbeddingParameters       EmbeddingParameters `json:"embedding_parameters"`
-	ExtraConfig               map[string]string   `json:"extra_config"`
-	SupportsVision            bool                `json:"supports_vision"`
-	MaxConcurrency            int                 `json:"max_concurrency"`
+	BaseURL             string              `json:"base_url"`
+	InterfaceType       string              `json:"interface_type"`
+	Provider            string              `json:"provider"`
+	ParameterSize       string              `json:"parameter_size"`
+	EmbeddingParameters EmbeddingParameters `json:"embedding_parameters"`
+	ExtraConfig         map[string]string   `json:"extra_config"`
+	SupportsVision      bool                `json:"supports_vision"`
+	MaxConcurrency      int                 `json:"max_concurrency"`
 }
 
 // EvaluationModelSanitizeBaseURL strips userinfo credentials from an upstream
@@ -79,14 +79,14 @@ func EvaluationModelConfigSHA256(model *Model) string {
 		ordered[key] = config.ExtraConfig[key]
 	}
 	encoded := canonicalEvaluationJSONBytes(map[string]any{
-		"base_url":        config.BaseURL,
-		"interface_type":  config.InterfaceType,
-		"provider":        config.Provider,
-		"parameter_size":  config.ParameterSize,
+		"base_url":       config.BaseURL,
+		"interface_type": config.InterfaceType,
+		"provider":       config.Provider,
+		"parameter_size": config.ParameterSize,
 		"embedding_parameters": map[string]any{
-			"dimension":                    config.EmbeddingParameters.Dimension,
-			"truncate_prompt_tokens":       config.EmbeddingParameters.TruncatePromptTokens,
-			"supports_dimension_override":  config.EmbeddingParameters.SupportsDimensionOverride,
+			"dimension":                   config.EmbeddingParameters.Dimension,
+			"truncate_prompt_tokens":      config.EmbeddingParameters.TruncatePromptTokens,
+			"supports_dimension_override": config.EmbeddingParameters.SupportsDimensionOverride,
 		},
 		"extra_config":    evaluationStringMapToAny(ordered),
 		"supports_vision": config.SupportsVision,

@@ -48,7 +48,7 @@ type EvaluationConfig struct {
 	// RetentionDays keeps terminal evaluation tasks for this many days before
 	// physical cleanup. Nil means the default, zero disables the cleanup, and
 	// a negative value fails startup.
-	RetentionDays *int                    `yaml:"retention_days" json:"retention_days"`
+	RetentionDays *int                     `yaml:"retention_days" json:"retention_days"`
 	Dataset       *EvaluationDatasetLimits `yaml:"dataset"      json:"dataset"`
 }
 
