@@ -117,6 +117,56 @@ func TestEvaluationTaskRepositoryListTasksFiltersStatusTenantAndSoftDelete(t *te
 	assert.Equal(t, []string{running.ID, succeeded.ID}, []string{tasks[0].ID, tasks[1].ID})
 }
 
+func TestEvaluationTaskRepositoryListTasksProjectsPublicSummaryColumns(t *testing.T) {
+	db := setupEvaluationTaskRepositoryTestDB(t)
+	repo := NewEvaluationTaskRepository(db)
+	ctx := context.Background()
+	now := time.Date(2026, 8, 28, 10, 0, 0, 0, time.UTC)
+
+	task := newListTask(74, "summary-projection", now, types.EvaluationStatueCanceled)
+	endTime := now.Add(time.Minute)
+	cancelRequestedAt := now.Add(30 * time.Second)
+	task.EndTime = &endTime
+	task.LeaseExpiresAt = nil
+	task.Total = 12
+	task.Finished = 9
+	task.ErrMsg = "summary error"
+	task.CleanupErrors = types.JSON(`["cleanup warning"]`)
+	task.CancelRequestedAt = &cancelRequestedAt
+	task.Params = types.JSON(`{"chat_model_id":"large-private-params"}`)
+	task.Metric = types.JSON(`{"retrieval_metrics":{"precision":0.9}}`)
+	task.TemporaryKnowledgeID = "private-knowledge"
+	task.Version = 8
+	require.NoError(t, db.Create(task).Error)
+
+	tasks, err := repo.ListTasks(ctx, task.TenantID, types.EvaluationTaskListQuery{Limit: 1})
+	require.NoError(t, err)
+	require.Len(t, tasks, 1)
+	got := tasks[0]
+	assert.Equal(t, task.ID, got.ID)
+	assert.Equal(t, task.TenantID, got.TenantID)
+	assert.Equal(t, task.DatasetID, got.DatasetID)
+	assert.Equal(t, task.Status, got.Status)
+	assert.Equal(t, task.StartTime, got.StartTime)
+	assert.Equal(t, task.EndTime, got.EndTime)
+	assert.Equal(t, task.Total, got.Total)
+	assert.Equal(t, task.Finished, got.Finished)
+	assert.Equal(t, task.ErrMsg, got.ErrMsg)
+	assert.JSONEq(t, task.CleanupErrors.ToString(), got.CleanupErrors.ToString())
+	assert.Equal(t, task.CancelRequestedAt, got.CancelRequestedAt)
+
+	assert.Empty(t, got.Params)
+	assert.Empty(t, got.Metric)
+	assert.Empty(t, got.TemporaryKnowledgeBaseID)
+	assert.Empty(t, got.TemporaryKnowledgeID)
+	assert.Empty(t, got.OwnerID)
+	assert.Nil(t, got.LeaseExpiresAt)
+	assert.True(t, got.HeartbeatAt.IsZero())
+	assert.Zero(t, got.Version)
+	assert.True(t, got.CreatedAt.IsZero())
+	assert.True(t, got.UpdatedAt.IsZero())
+}
+
 func TestEvaluationTaskRepositoryListTasksValidatesInput(t *testing.T) {
 	db := setupEvaluationTaskRepositoryTestDB(t)
 	repo := NewEvaluationTaskRepository(db)

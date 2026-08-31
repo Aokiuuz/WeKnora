@@ -531,6 +531,19 @@ func (r *evaluationTaskRepository) ListTasks(
 
 	dbQuery := r.db.WithContext(ctx).
 		Model(&types.EvaluationTaskEntity{}).
+		Select(
+			"id",
+			"tenant_id",
+			"dataset_id",
+			"status",
+			"start_time",
+			"end_time",
+			"total",
+			"finished",
+			"err_msg",
+			"cleanup_errors",
+			"cancel_requested_at",
+		).
 		Where("tenant_id = ?", tenantID)
 	if query.Status != nil {
 		dbQuery = dbQuery.Where("status = ?", *query.Status)
