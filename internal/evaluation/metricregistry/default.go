@@ -69,6 +69,11 @@ var emptyObjectSchema = json.RawMessage(`{"type":"object","additionalProperties"
 // NewDefaultRegistry constructs the current algorithm catalog. Returning an
 // error makes invalid or duplicate registrations a container startup error.
 func NewDefaultRegistry() (*Registry, error) {
+	return NewDefaultRegistryWithPlugins()
+}
+
+// NewDefaultRegistryWithPlugins combines the twelve compatibility metrics with opt-in plugins.
+func NewDefaultRegistryWithPlugins(plugins ...Metric) (*Registry, error) {
 	entries := []registeredMetric{
 		builtinEntry(
 			"retrieval.precision", KindRetrieval, "Fraction of retrieved ranks that are relevant.",
@@ -169,6 +174,9 @@ func NewDefaultRegistry() (*Registry, error) {
 				}
 			},
 		),
+	}
+	for _, plugin := range plugins {
+		entries = append(entries, registeredMetric{metric: plugin})
 	}
 	return newRegistry(entries)
 }

@@ -1,4 +1,4 @@
-.PHONY: help build run test clean docker-build-app docker-build-docreader docker-build-frontend docker-build-all docker-run migrate-up migrate-down docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-docreader build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend docs install-swagger build-lite run-lite package-lite anydoc-lib build-anydoc
+.PHONY: help build run test evaluation-reproduce clean docker-build-app docker-build-docreader docker-build-frontend docker-build-all docker-run migrate-up migrate-down docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-docreader build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend docs install-swagger build-lite run-lite package-lite anydoc-lib build-anydoc
 
 # Show help
 help:
@@ -106,6 +106,15 @@ run: build
 # Run tests
 test:
 	go test -v ./...
+
+EVALUATION_REPORT_DIR ?= artifacts/evaluation-regression
+
+# Run the keyless deterministic golden evaluation and regression gate.
+evaluation-reproduce:
+	go run ./cmd/evaluation-reproduce \
+		--dataset dataset/golden/v1/dataset.json \
+		--thresholds evaluation/regression/thresholds.json \
+		--output-dir "$(EVALUATION_REPORT_DIR)"
 
 # Clean build artifacts
 clean:
