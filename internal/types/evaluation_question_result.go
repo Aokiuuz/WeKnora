@@ -52,10 +52,10 @@ type EvaluationQuestionResultEntity struct {
 	QID                string `json:"qid" gorm:"column:qid;type:varchar(128);not null"`
 	Question           string `json:"question" gorm:"not null"`
 	ReferenceAnswer    string `json:"reference_answer" gorm:"not null;default:''"`
-	GroundTruthPIDs    JSON   `json:"ground_truth_pids" gorm:"not null"`
+	GroundTruthPIDs    JSON   `json:"ground_truth_pids" gorm:"column:ground_truth_pids;not null"`
 	SearchResults      JSON   `json:"search_results" gorm:"not null"`
 	RerankResults      JSON   `json:"rerank_results" gorm:"not null"`
-	GenerationPIDs     JSON   `json:"generation_pids" gorm:"not null"`
+	GenerationPIDs     JSON   `json:"generation_pids" gorm:"column:generation_pids;not null"`
 	GeneratedText      string `json:"generated_text" gorm:"not null;default:''"`
 	ErrorCode          string `json:"error_code,omitempty" gorm:"type:varchar(64);not null;default:''"`
 	PerSampleMetrics   JSON   `json:"per_sample_metrics" gorm:"not null"`
