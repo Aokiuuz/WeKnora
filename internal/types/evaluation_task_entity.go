@@ -43,6 +43,9 @@ type EvaluationTaskEntity struct {
 	Version        uint64     `json:"version" gorm:"not null;default:1"`
 
 	CancelRequestedAt *time.Time `json:"cancel_requested_at,omitempty"`
+
+	// Labels is a read-side projection populated after task pagination.
+	Labels []string `json:"labels" gorm:"-"`
 }
 
 // TableName binds EvaluationTaskEntity to the evaluation task table.
@@ -132,19 +135,31 @@ type EvaluationTaskCancelCommand struct {
 // the API: an optional numeric status filter, a bounded page size, and the
 // opaque keyset cursor.
 type EvaluationTaskListInput struct {
-	Status   *EvaluationStatue
-	PageSize int
-	Cursor   string
+	Status           *EvaluationStatue
+	DatasetID        string
+	DatasetVersionID string
+	ModelID          string
+	StartedFrom      *time.Time
+	StartedTo        *time.Time
+	Labels           []string
+	PageSize         int
+	Cursor           string
 }
 
 // EvaluationTaskListQuery selects one keyset page of tenant tasks ordered by
 // (start_time DESC, id DESC). StartBefore and IDBefore form the exclusive
 // keyset boundary decoded from the client cursor.
 type EvaluationTaskListQuery struct {
-	Status      *EvaluationStatue
-	StartBefore *time.Time
-	IDBefore    string
-	Limit       int
+	Status           *EvaluationStatue
+	DatasetID        string
+	DatasetVersionID string
+	ModelID          string
+	StartedFrom      *time.Time
+	StartedTo        *time.Time
+	Labels           []string
+	StartBefore      *time.Time
+	IDBefore         string
+	Limit            int
 }
 
 // EvaluationTaskListPage carries one page and the opaque next cursor.

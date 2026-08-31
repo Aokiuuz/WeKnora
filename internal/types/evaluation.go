@@ -55,6 +55,10 @@ type EvaluationTask struct {
 	CancelRequestedAt *time.Time `json:"cancel_requested_at,omitempty"` // First persistent cancel request time
 
 	CleanupErrors []string `json:"cleanup_errors,omitempty"` // Temporary resource cleanup warnings
+	Labels        []string `json:"labels"`                   // Normalized experiment labels
+
+	DatasetVersionID   *string `json:"dataset_version_id,omitempty"`
+	ProvenanceComplete bool    `json:"provenance_complete"`
 
 	Total    int `json:"total,omitempty"`    // Total items to evaluate
 	Finished int `json:"finished,omitempty"` // Completed items count

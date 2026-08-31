@@ -57,6 +57,14 @@ type EvaluationTaskRepository interface {
 		tenantID uint64,
 		query types.EvaluationTaskListQuery,
 	) ([]*types.EvaluationTaskEntity, error)
+	ListTaskLabels(ctx context.Context, tenantID uint64, taskIDs []string) (map[string][]string, error)
+	ReplaceTaskLabels(
+		ctx context.Context,
+		tenantID uint64,
+		taskID string,
+		labels []string,
+		now time.Time,
+	) error
 	DeleteTask(
 		ctx context.Context,
 		tenantID uint64,

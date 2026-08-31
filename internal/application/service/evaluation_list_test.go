@@ -163,3 +163,19 @@ func TestListEvaluationsRejectsUnsupportedStatus(t *testing.T) {
 	_, err := service.ListEvaluations(ctx, types.EvaluationTaskListInput{Status: &unknown})
 	require.ErrorIs(t, err, ErrEvaluationTaskListInvalidCursor)
 }
+
+func TestReplaceEvaluationTaskLabelsNormalizesAndStoresFullSet(t *testing.T) {
+	repository := newFakeEvaluationTaskRepository()
+	entity := newPersistentLifecycleEntity(92, "labels")
+	repository.register(entity)
+	service := &EvaluationService{evaluationTaskRepository: repository, ownerID: "list-owner"}
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(92))
+
+	labels, err := service.ReplaceEvaluationTaskLabels(ctx, entity.ID, []string{" Baseline ", "检索"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"baseline", "检索"}, labels)
+
+	stored, err := repository.ListTaskLabels(ctx, entity.TenantID, []string{entity.ID})
+	require.NoError(t, err)
+	assert.Equal(t, labels, stored[entity.ID])
+}

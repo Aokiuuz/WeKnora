@@ -115,9 +115,10 @@ type evaluationTaskRepositoryCall struct {
 }
 
 type fakeEvaluationTaskRepository struct {
-	mu    sync.Mutex
-	tasks map[evaluationTaskRepositoryKey]*types.EvaluationTaskEntity
-	calls []evaluationTaskRepositoryCall
+	mu     sync.Mutex
+	tasks  map[evaluationTaskRepositoryKey]*types.EvaluationTaskEntity
+	labels map[evaluationTaskRepositoryKey][]string
+	calls  []evaluationTaskRepositoryCall
 
 	createErr           error
 	getErr              error
@@ -145,7 +146,8 @@ type evaluationTaskRepositoryKey struct {
 
 func newFakeEvaluationTaskRepository() *fakeEvaluationTaskRepository {
 	return &fakeEvaluationTaskRepository{
-		tasks: make(map[evaluationTaskRepositoryKey]*types.EvaluationTaskEntity),
+		tasks:  make(map[evaluationTaskRepositoryKey]*types.EvaluationTaskEntity),
+		labels: make(map[evaluationTaskRepositoryKey][]string),
 	}
 }
 
@@ -537,6 +539,37 @@ func (r *fakeEvaluationTaskRepository) ListTasks(
 		if query.Status != nil && task.Status != *query.Status {
 			continue
 		}
+		if query.DatasetID != "" && task.DatasetID != query.DatasetID {
+			continue
+		}
+		if query.DatasetVersionID != "" && (task.DatasetVersionID == nil ||
+			*task.DatasetVersionID != query.DatasetVersionID) {
+			continue
+		}
+		if query.StartedFrom != nil && task.StartTime.Before(query.StartedFrom.UTC()) {
+			continue
+		}
+		if query.StartedTo != nil && task.StartTime.After(query.StartedTo.UTC()) {
+			continue
+		}
+		matchedLabels := true
+		storedLabels := r.labels[evaluationTaskRepositoryKey{tenantID: tenantID, taskID: task.ID}]
+		for _, requiredLabel := range query.Labels {
+			found := false
+			for _, storedLabel := range storedLabels {
+				if storedLabel == requiredLabel {
+					found = true
+					break
+				}
+			}
+			if !found {
+				matchedLabels = false
+				break
+			}
+		}
+		if !matchedLabels {
+			continue
+		}
 		if query.StartBefore != nil {
 			startBefore := query.StartBefore.UTC()
 			startTime := task.StartTime.UTC()
@@ -560,6 +593,40 @@ func (r *fakeEvaluationTaskRepository) ListTasks(
 		tasks = tasks[:query.Limit]
 	}
 	return tasks, nil
+}
+
+func (r *fakeEvaluationTaskRepository) ListTaskLabels(
+	_ context.Context,
+	tenantID uint64,
+	taskIDs []string,
+) (map[string][]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result := make(map[string][]string, len(taskIDs))
+	for _, taskID := range taskIDs {
+		labels := r.labels[evaluationTaskRepositoryKey{tenantID: tenantID, taskID: taskID}]
+		if labels != nil {
+			result[taskID] = append([]string(nil), labels...)
+		}
+	}
+	return result, nil
+}
+
+func (r *fakeEvaluationTaskRepository) ReplaceTaskLabels(
+	_ context.Context,
+	tenantID uint64,
+	taskID string,
+	labels []string,
+	_ time.Time,
+) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := evaluationTaskRepositoryKey{tenantID: tenantID, taskID: taskID}
+	if _, ok := r.tasks[key]; !ok {
+		return interfaces.ErrEvaluationTaskNotFound
+	}
+	r.labels[key] = append([]string(nil), labels...)
+	return nil
 }
 
 func (r *fakeEvaluationTaskRepository) DeleteTask(

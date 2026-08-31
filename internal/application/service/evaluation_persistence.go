@@ -314,7 +314,13 @@ func EvaluationTaskEntityToAPITask(entity *types.EvaluationTaskEntity) (*types.E
 		ErrMsg:            entity.ErrMsg,
 		CancelRequestedAt: cancelRequestedAt,
 		CleanupErrors:     cleanupErrors,
-		Total:             entity.Total,
-		Finished:          entity.Finished,
+		Labels:            append([]string(nil), entity.Labels...),
+		DatasetVersionID:  entity.DatasetVersionID,
+		ProvenanceComplete: entity.DatasetVersionID != nil && *entity.DatasetVersionID != "" &&
+			entity.DatasetContentSHA256 != nil && len(*entity.DatasetContentSHA256) == 64 &&
+			entity.ExperimentSHA256 != nil && len(*entity.ExperimentSHA256) == 64 &&
+			len(entity.ExperimentSnapshot) > 0,
+		Total:    entity.Total,
+		Finished: entity.Finished,
 	}, nil
 }

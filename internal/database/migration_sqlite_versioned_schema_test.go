@@ -28,6 +28,7 @@ var versionedSQLiteTables = []string{
 	"evaluation_dataset_questions",
 	"evaluation_dataset_relevance",
 	"evaluation_question_results",
+	"evaluation_task_labels",
 }
 
 // versionedSQLiteColumns maps each existing table to the columns that the
@@ -49,7 +50,7 @@ var versionedSQLiteColumns = map[string][]string{
 	},
 }
 
-const expectedSQLiteMigrationVersion = 19
+const expectedSQLiteMigrationVersion = 20
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -82,6 +83,7 @@ func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	assertSQLiteMCPOAuthPrincipalUpsertWorks(t, db)
 	assertSQLiteEvaluationTaskSchema(t, db)
 	assertSQLiteEvaluationQuestionResultsSchema(t, db)
+	assertSQLiteEvaluationTaskLabelsSchema(t, db)
 	require.False(t, sqliteColumnExists(t, db, "knowledges", "tag_id"),
 		"SQLite migrations must drop legacy knowledges.tag_id after multi-tag migration")
 }
@@ -422,4 +424,29 @@ func assertSQLiteEvaluationQuestionResultsSchema(t *testing.T, db *sql.DB) {
 		"SELECT COUNT(*) FROM evaluation_question_results WHERE task_id = 'task-for-questions'",
 	).Scan(&remaining))
 	require.Zero(t, remaining)
+}
+
+func assertSQLiteEvaluationTaskLabelsSchema(t *testing.T, db *sql.DB) {
+	t.Helper()
+	require.True(t, sqliteTableExists(t, db, "evaluation_task_labels"))
+	var definition string
+	require.NoError(t, db.QueryRow(
+		"SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'evaluation_task_labels'",
+	).Scan(&definition))
+	normalizedTableDefinition := strings.ToLower(definition)
+	require.Contains(t, normalizedTableDefinition, "evaluation_task_labels_label_bytes_check")
+	require.Contains(t, normalizedTableDefinition, "length(cast(label as blob)) <= 64")
+	require.Contains(t, normalizedTableDefinition, "foreign key (tenant_id, task_id)")
+	require.Contains(t, normalizedTableDefinition, "on delete cascade")
+	require.NoError(t, db.QueryRow(
+		"SELECT sql FROM sqlite_master WHERE type = 'index' "+
+			"AND name = 'idx_evaluation_task_labels_tenant_label_task'",
+	).Scan(&definition))
+	require.Contains(t, strings.ToLower(definition), "tenant_id, label, task_id")
+	for _, index := range []string{
+		"idx_evaluation_tasks_tenant_dataset_started",
+		"idx_evaluation_tasks_tenant_dataset_version_started",
+	} {
+		assertSQLitePartialIndex(t, db, index, "WHERE deleted_at IS NULL")
+	}
 }

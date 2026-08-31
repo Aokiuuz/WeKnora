@@ -29,7 +29,7 @@ func TestEvaluationTaskRepositoryPostgresListMigrationAndKeyset(t *testing.T) {
 		_ = sqlDB.Close()
 	})
 
-	schema := fmt.Sprintf("m2e_list_%d", time.Now().UnixNano())
+	schema := fmt.Sprintf("m4_list_%d", time.Now().UnixNano())
 	require.NoError(t, db.Exec("CREATE SCHEMA "+schema).Error)
 	t.Cleanup(func() {
 		cleanupDB, openErr := gorm.Open(postgres.Open(dsn), &gorm.Config{})
@@ -47,7 +47,11 @@ func TestEvaluationTaskRepositoryPostgresListMigrationAndKeyset(t *testing.T) {
 		"000090_evaluation_tasks.up.sql",
 		"000091_evaluation_task_cancellation.up.sql",
 		"000092_evaluation_task_list.up.sql",
+		"000093_evaluation_task_retention.up.sql",
+		"000094_evaluation_datasets.up.sql",
 		"000095_evaluation_experiment_snapshot.up.sql",
+		"000096_evaluation_question_results.up.sql",
+		"000097_evaluation_task_labels.up.sql",
 	} {
 		migrationSQL, err := os.ReadFile(filepath.Join(migrationDir, name))
 		require.NoError(t, err)
@@ -72,8 +76,30 @@ func TestEvaluationTaskRepositoryPostgresListMigrationAndKeyset(t *testing.T) {
 		endTime := sharedStart.Add(time.Minute)
 		task.EndTime = &endTime
 		task.LeaseExpiresAt = nil
+		versionID := "version-a"
+		task.DatasetVersionID = &versionID
+		hash := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		task.DatasetContentSHA256 = &hash
+		task.ExperimentSHA256 = &hash
+		task.ExperimentSnapshot = types.JSON(`{"models":{"chat":{"id":"chat-a"}}}`)
 		require.NoError(t, db.Create(task).Error)
 	}
+	require.NoError(t, repo.ReplaceTaskLabels(
+		ctx,
+		81,
+		"pg-list-2",
+		[]string{"baseline", "retrieval"},
+		sharedStart,
+	))
+	filtered, err := repo.ListTasks(ctx, 81, types.EvaluationTaskListQuery{
+		DatasetVersionID: "version-a",
+		ModelID:          "chat-a",
+		Labels:           []string{"baseline", "retrieval"},
+		Limit:            10,
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered, 1)
+	assert.Equal(t, "pg-list-2", filtered[0].ID)
 
 	first, err := repo.ListTasks(ctx, 81, types.EvaluationTaskListQuery{Limit: 2})
 	require.NoError(t, err)

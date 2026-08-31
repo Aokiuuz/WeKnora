@@ -124,6 +124,10 @@ func TestListEvaluationsSendsFiltersAndDecodesNestedPage(t *testing.T) {
 		if query.Get("status") != "2" || query.Get("page_size") != "5" || query.Get("cursor") != "cur-1" {
 			t.Errorf("query = %s, want status=2&page_size=5&cursor=cur-1", r.URL.RawQuery)
 		}
+		if query.Get("dataset_id") != "dataset" || query.Get("dataset_version_id") != "version" ||
+			query.Get("model_id") != "chat" || len(query["label"]) != 2 {
+			t.Errorf("extended query = %v", query)
+		}
 		writeEvaluationResponse(t, w, map[string]any{
 			"items":       []any{evaluationTaskFixture(2)},
 			"next_cursor": "cursor-next",
@@ -132,10 +136,16 @@ func TestListEvaluationsSendsFiltersAndDecodesNestedPage(t *testing.T) {
 	defer srv.Close()
 
 	status := EvaluationStatusSuccess
+	startedFrom := time.Date(2026, 8, 28, 1, 0, 0, 0, time.UTC)
 	page, err := NewClient(srv.URL).ListEvaluations(context.Background(), &EvaluationListOptions{
-		Status:   &status,
-		PageSize: 5,
-		Cursor:   "cur-1",
+		Status:           &status,
+		DatasetID:        "dataset",
+		DatasetVersionID: "version",
+		ModelID:          "chat",
+		StartedFrom:      &startedFrom,
+		Labels:           []string{"baseline", "retrieval"},
+		PageSize:         5,
+		Cursor:           "cur-1",
 	})
 	if err != nil {
 		t.Fatalf("ListEvaluations() error = %v", err)
@@ -145,6 +155,29 @@ func TestListEvaluationsSendsFiltersAndDecodesNestedPage(t *testing.T) {
 	}
 	if page.NextCursor != "cursor-next" {
 		t.Fatalf("next cursor = %q, want cursor-next", page.NextCursor)
+	}
+}
+
+func TestReplaceEvaluationTaskLabelsDecodesStrictNestedResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut || r.URL.Path != "/api/v1/evaluation/tasks/task-1/labels" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success":true,"data":{"task_id":"task-1","labels":["baseline"]}}`))
+	}))
+	defer srv.Close()
+
+	labels, err := NewClient(srv.URL).ReplaceEvaluationTaskLabels(
+		context.Background(),
+		"task-1",
+		[]string{" Baseline "},
+	)
+	if err != nil {
+		t.Fatalf("ReplaceEvaluationTaskLabels() error = %v", err)
+	}
+	if len(labels) != 1 || labels[0] != "baseline" {
+		t.Fatalf("labels = %#v", labels)
 	}
 }
 

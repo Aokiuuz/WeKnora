@@ -46,6 +46,10 @@ type EvaluationTask struct {
 	CancelRequestedAt *time.Time `json:"cancel_requested_at,omitempty"`
 
 	CleanupErrors []string `json:"cleanup_errors,omitempty"`
+	Labels        []string `json:"labels"`
+
+	DatasetVersionID   *string `json:"dataset_version_id,omitempty"`
+	ProvenanceComplete bool    `json:"provenance_complete"`
 
 	Total    int `json:"total,omitempty"`
 	Finished int `json:"finished,omitempty"`
@@ -65,6 +69,10 @@ func (t *EvaluationTask) UnmarshalJSON(data []byte) error {
 		CancelRequestedAt *time.Time `json:"cancel_requested_at,omitempty"`
 
 		CleanupErrors []string `json:"cleanup_errors,omitempty"`
+		Labels        []string `json:"labels"`
+
+		DatasetVersionID   *string `json:"dataset_version_id,omitempty"`
+		ProvenanceComplete bool    `json:"provenance_complete"`
 
 		Total    int `json:"total,omitempty"`
 		Finished int `json:"finished,omitempty"`
@@ -82,17 +90,20 @@ func (t *EvaluationTask) UnmarshalJSON(data []byte) error {
 	}
 
 	*t = EvaluationTask{
-		ID:                wire.ID,
-		TenantID:          wire.TenantID,
-		DatasetID:         wire.DatasetID,
-		StartTime:         wire.StartTime,
-		EndTime:           wire.EndTime,
-		Status:            *wire.Status,
-		ErrMsg:            wire.ErrMsg,
-		CancelRequestedAt: wire.CancelRequestedAt,
-		CleanupErrors:     wire.CleanupErrors,
-		Total:             wire.Total,
-		Finished:          wire.Finished,
+		ID:                 wire.ID,
+		TenantID:           wire.TenantID,
+		DatasetID:          wire.DatasetID,
+		StartTime:          wire.StartTime,
+		EndTime:            wire.EndTime,
+		Status:             *wire.Status,
+		ErrMsg:             wire.ErrMsg,
+		CancelRequestedAt:  wire.CancelRequestedAt,
+		CleanupErrors:      wire.CleanupErrors,
+		Labels:             wire.Labels,
+		DatasetVersionID:   wire.DatasetVersionID,
+		ProvenanceComplete: wire.ProvenanceComplete,
+		Total:              wire.Total,
+		Finished:           wire.Finished,
 	}
 	return nil
 }
@@ -314,9 +325,15 @@ func (c *Client) DeleteEvaluation(ctx context.Context, taskID string) error {
 // EvaluationListOptions carries the optional list filters: a numeric status,
 // a bounded page size, and the opaque keyset cursor from the previous page.
 type EvaluationListOptions struct {
-	Status   *EvaluationStatus
-	PageSize int
-	Cursor   string
+	Status           *EvaluationStatus
+	DatasetID        string
+	DatasetVersionID string
+	ModelID          string
+	StartedFrom      *time.Time
+	StartedTo        *time.Time
+	Labels           []string
+	PageSize         int
+	Cursor           string
 }
 
 // EvaluationTaskPage contains one keyset page and the next cursor.
@@ -344,6 +361,24 @@ func (c *Client) ListEvaluations(ctx context.Context, options *EvaluationListOpt
 	if options != nil {
 		if options.Status != nil {
 			queryParams.Add("status", fmt.Sprintf("%d", *options.Status))
+		}
+		if options.DatasetID != "" {
+			queryParams.Add("dataset_id", options.DatasetID)
+		}
+		if options.DatasetVersionID != "" {
+			queryParams.Add("dataset_version_id", options.DatasetVersionID)
+		}
+		if options.ModelID != "" {
+			queryParams.Add("model_id", options.ModelID)
+		}
+		if options.StartedFrom != nil {
+			queryParams.Add("started_from", options.StartedFrom.UTC().Format(time.RFC3339Nano))
+		}
+		if options.StartedTo != nil {
+			queryParams.Add("started_to", options.StartedTo.UTC().Format(time.RFC3339Nano))
+		}
+		for _, label := range options.Labels {
+			queryParams.Add("label", label)
 		}
 		if options.PageSize > 0 {
 			queryParams.Add("page_size", fmt.Sprintf("%d", options.PageSize))
@@ -376,6 +411,51 @@ func (c *Client) ListEvaluations(ctx context.Context, options *EvaluationListOpt
 		Items:      items,
 		NextCursor: response.Data.NextCursor,
 	}, nil
+}
+
+type evaluationLabelsResponse struct {
+	Success bool `json:"success"`
+	Data    *struct {
+		TaskID string   `json:"task_id"`
+		Labels []string `json:"labels"`
+	} `json:"data"`
+}
+
+// ReplaceEvaluationTaskLabels atomically replaces one task's labels.
+func (c *Client) ReplaceEvaluationTaskLabels(
+	ctx context.Context,
+	taskID string,
+	labels []string,
+) ([]string, error) {
+	if taskID == "" {
+		return nil, errors.New("evaluation task ID is required")
+	}
+	resp, err := c.doRequest(
+		ctx,
+		http.MethodPut,
+		"/api/v1/evaluation/tasks/"+url.PathEscape(taskID)+"/labels",
+		struct {
+			Labels []string `json:"labels"`
+		}{Labels: labels},
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var response evaluationLabelsResponse
+	if err := parseResponse(resp, &response); err != nil {
+		return nil, err
+	}
+	if !response.Success {
+		return nil, errors.New("evaluation label response is not successful")
+	}
+	if response.Data == nil {
+		return nil, errors.New("evaluation label response is missing data")
+	}
+	if response.Data.Labels == nil {
+		response.Data.Labels = []string{}
+	}
+	return response.Data.Labels, nil
 }
 
 // CancelEvaluation requests cancellation of an evaluation task and returns

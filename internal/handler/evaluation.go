@@ -4,6 +4,8 @@ import (
 	stderrors "errors"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/Tencent/WeKnora/internal/application/service"
 	"github.com/Tencent/WeKnora/internal/errors"
@@ -178,6 +180,28 @@ func (e *EvaluationHandler) ListEvaluationTasks(c *gin.Context) {
 		status := types.EvaluationStatue(value)
 		input.Status = &status
 	}
+	input.DatasetID = strings.TrimSpace(c.Query("dataset_id"))
+	input.DatasetVersionID = strings.TrimSpace(c.Query("dataset_version_id"))
+	input.ModelID = strings.TrimSpace(c.Query("model_id"))
+	if raw := strings.TrimSpace(c.Query("started_from")); raw != "" {
+		value, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			_ = c.Error(errors.NewBadRequestError("started_from must be an RFC3339 timestamp"))
+			return
+		}
+		value = value.UTC()
+		input.StartedFrom = &value
+	}
+	if raw := strings.TrimSpace(c.Query("started_to")); raw != "" {
+		value, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			_ = c.Error(errors.NewBadRequestError("started_to must be an RFC3339 timestamp"))
+			return
+		}
+		value = value.UTC()
+		input.StartedTo = &value
+	}
+	input.Labels = c.QueryArray("label")
 	if raw := c.Query("page_size"); raw != "" {
 		value, err := strconv.Atoi(raw)
 		if err != nil {
@@ -190,7 +214,9 @@ func (e *EvaluationHandler) ListEvaluationTasks(c *gin.Context) {
 
 	page, err := e.evaluationService.ListEvaluations(ctx, input)
 	if err != nil {
-		if stderrors.Is(err, service.ErrEvaluationTaskListInvalidCursor) {
+		if stderrors.Is(err, service.ErrEvaluationTaskListInvalidCursor) ||
+			stderrors.Is(err, types.ErrEvaluationTaskLabelInvalid) ||
+			stderrors.Is(err, types.ErrEvaluationTaskQueryInvalid) {
 			_ = c.Error(errors.NewBadRequestError(err.Error()))
 			return
 		}
@@ -215,6 +241,59 @@ func (e *EvaluationHandler) ListEvaluationTasks(c *gin.Context) {
 			"items":       items,
 			"next_cursor": page.NextCursor,
 		},
+	})
+}
+
+// ReplaceEvaluationTaskLabelsRequest is an atomic full replacement body.
+type ReplaceEvaluationTaskLabelsRequest struct {
+	Labels []string `json:"labels"`
+}
+
+// ReplaceEvaluationTaskLabels godoc
+// @Summary      替换评估任务标签
+// @Description  在一个事务内全量替换规范化标签，不修改任务版本与更新时间
+// @Tags         评估
+// @Accept       json
+// @Produce      json
+// @Param        task_id  path  string                              true  "评估任务ID"
+// @Param        request  body  ReplaceEvaluationTaskLabelsRequest true  "标签集合"
+// @Success      200      {object} map[string]interface{}           "规范化后的标签"
+// @Failure      400      {object} errors.AppError                  "标签非法"
+// @Failure      404      {object} errors.AppError                  "任务不存在"
+// @Security     Bearer
+// @Router       /evaluation/tasks/{task_id}/labels [put]
+func (e *EvaluationHandler) ReplaceEvaluationTaskLabels(c *gin.Context) {
+	taskID := strings.TrimSpace(c.Param("task_id"))
+	if taskID == "" {
+		_ = c.Error(errors.NewBadRequestError("task_id is required"))
+		return
+	}
+	var request ReplaceEvaluationTaskLabelsRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		_ = c.Error(errors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
+		return
+	}
+	labels, err := e.evaluationService.ReplaceEvaluationTaskLabels(
+		c.Request.Context(),
+		taskID,
+		request.Labels,
+	)
+	if err != nil {
+		switch {
+		case stderrors.Is(err, interfaces.ErrEvaluationTaskNotFound):
+			_ = c.Error(errors.NewNotFoundError("Evaluation task not found"))
+		case stderrors.Is(err, types.ErrEvaluationTaskLabelInvalid),
+			stderrors.Is(err, types.ErrEvaluationTaskQueryInvalid):
+			_ = c.Error(errors.NewBadRequestError("Invalid evaluation task labels").WithDetails(err.Error()))
+		default:
+			logger.ErrorWithFields(c.Request.Context(), err, nil)
+			_ = c.Error(errors.NewInternalServerError(err.Error()))
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    gin.H{"task_id": taskID, "labels": labels},
 	})
 }
 

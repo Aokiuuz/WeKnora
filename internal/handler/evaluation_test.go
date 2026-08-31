@@ -60,6 +60,12 @@ func (s *stubEvaluationService) ListEvaluations(
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (s *stubEvaluationService) ReplaceEvaluationTaskLabels(
+	context.Context, string, []string,
+) ([]string, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func (s *stubEvaluationService) DeleteEvaluation(context.Context, string) error {
 	return fmt.Errorf("not implemented")
 }

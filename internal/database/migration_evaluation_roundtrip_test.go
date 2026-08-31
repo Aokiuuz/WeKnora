@@ -38,11 +38,19 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 
 	version, dirty, err := migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(19), version)
+	require.Equal(t, uint(20), version)
 	require.False(t, dirty)
 	inspectionDB := openSQLiteDB(t, dbPath)
 	assertSQLiteEvaluationTaskSchema(t, inspectionDB)
 	assertSQLiteEvaluationQuestionResultsSchema(t, inspectionDB)
+	assertSQLiteEvaluationTaskLabelsSchema(t, inspectionDB)
+
+	require.NoError(t, migrator.Steps(-1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(19), version)
+	require.False(t, dirty)
+	require.False(t, sqliteTableExists(t, inspectionDB, "evaluation_task_labels"))
 
 	require.NoError(t, migrator.Steps(-3))
 	version, dirty, err = migrator.Version()
@@ -70,10 +78,17 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 	require.NoError(t, migrator.Steps(3))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(expectedSQLiteMigrationVersion), version)
+	require.Equal(t, uint(19), version)
 	require.False(t, dirty)
 	assertSQLiteEvaluationTaskSchema(t, inspectionDB)
 	assertSQLiteEvaluationQuestionResultsSchema(t, inspectionDB)
+
+	require.NoError(t, migrator.Steps(1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(expectedSQLiteMigrationVersion), version)
+	require.False(t, dirty)
+	assertSQLiteEvaluationTaskLabelsSchema(t, inspectionDB)
 }
 
 func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
@@ -90,7 +105,7 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = adminSQLDB.Close() })
 
-	schema := fmt.Sprintf("m3_migration_roundtrip_%d", time.Now().UnixNano())
+	schema := fmt.Sprintf("m4_migration_roundtrip_%d", time.Now().UnixNano())
 	require.NoError(t, adminDB.Exec("CREATE SCHEMA "+schema).Error)
 	t.Cleanup(func() {
 		_ = adminDB.Exec("DROP SCHEMA IF EXISTS " + schema + " CASCADE").Error
@@ -106,10 +121,24 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	})
 	version, dirty, err := migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(96), version)
+	require.Equal(t, uint(97), version)
 	require.False(t, dirty)
 	assertPostgresEvaluationSchema(t, adminDB, schema)
 	assertPostgresM3EvaluationSchema(t, adminDB, schema)
+	assertPostgresM4EvaluationSchema(t, adminDB, schema)
+
+	require.NoError(t, migrator.Steps(-1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(96), version)
+	require.False(t, dirty)
+	var labelsExist bool
+	require.NoError(t, adminDB.Raw(
+		"SELECT EXISTS (SELECT 1 FROM information_schema.tables "+
+			"WHERE table_schema = ? AND table_name = 'evaluation_task_labels')",
+		schema,
+	).Scan(&labelsExist).Error)
+	require.False(t, labelsExist)
 
 	require.NoError(t, migrator.Steps(-3))
 	version, dirty, err = migrator.Version()
@@ -152,6 +181,13 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.Equal(t, uint(96), version)
 	require.False(t, dirty)
 	assertPostgresM3EvaluationSchema(t, adminDB, schema)
+
+	require.NoError(t, migrator.Steps(1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(97), version)
+	require.False(t, dirty)
+	assertPostgresM4EvaluationSchema(t, adminDB, schema)
 }
 
 func postgresMigrationDSN(t *testing.T, baseDSN, schema string) string {
@@ -242,5 +278,35 @@ func assertPostgresM3EvaluationSchema(t *testing.T, db *gorm.DB, schema string) 
 			schema, column,
 		).Scan(&exists).Error)
 		require.Truef(t, exists, "PostgreSQL evaluation_tasks must contain M3 column %s", column)
+	}
+}
+
+func assertPostgresM4EvaluationSchema(t *testing.T, db *gorm.DB, schema string) {
+	t.Helper()
+	var exists bool
+	require.NoError(t, db.Raw(
+		"SELECT EXISTS (SELECT 1 FROM information_schema.tables "+
+			"WHERE table_schema = ? AND table_name = 'evaluation_task_labels')",
+		schema,
+	).Scan(&exists).Error)
+	require.True(t, exists)
+	require.NoError(t, db.Raw(
+		"SELECT EXISTS (SELECT 1 FROM pg_constraint c "+
+			"JOIN pg_namespace n ON n.oid = c.connamespace "+
+			"WHERE n.nspname = ? AND c.conname = 'evaluation_task_labels_label_bytes_check')",
+		schema,
+	).Scan(&exists).Error)
+	require.True(t, exists, "PostgreSQL labels must enforce the 64-byte limit")
+	for _, index := range []string{
+		"idx_evaluation_task_labels_tenant_label_task",
+		"idx_evaluation_tasks_tenant_dataset_started",
+		"idx_evaluation_tasks_tenant_dataset_version_started",
+	} {
+		require.NoError(t, db.Raw(
+			"SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = ? AND indexname = ?)",
+			schema,
+			index,
+		).Scan(&exists).Error)
+		require.Truef(t, exists, "PostgreSQL M4 index %s must exist", index)
 	}
 }

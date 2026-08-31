@@ -72,7 +72,13 @@ func TestListEvaluationTasksHandlerReturnsNestedPage(t *testing.T) {
 		},
 	}
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/evaluation/tasks?status=2&page_size=5&cursor=abc", nil)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/evaluation/tasks?status=2&dataset_id=dataset&dataset_version_id=version&"+
+			"model_id=chat&started_from=2026-08-28T01%3A00%3A00Z&started_to=2026-08-29T01%3A00%3A00Z&"+
+			"label=baseline&label=retrieval&page_size=5&cursor=abc",
+		nil,
+	)
 	newEvaluationListTestRouter(svc).ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
@@ -80,6 +86,12 @@ func TestListEvaluationTasksHandlerReturnsNestedPage(t *testing.T) {
 	assert.Equal(t, types.EvaluationStatueSuccess, *svc.gotInput.Status)
 	assert.Equal(t, 5, svc.gotInput.PageSize)
 	assert.Equal(t, "abc", svc.gotInput.Cursor)
+	assert.Equal(t, "dataset", svc.gotInput.DatasetID)
+	assert.Equal(t, "version", svc.gotInput.DatasetVersionID)
+	assert.Equal(t, "chat", svc.gotInput.ModelID)
+	assert.Equal(t, []string{"baseline", "retrieval"}, svc.gotInput.Labels)
+	require.NotNil(t, svc.gotInput.StartedFrom)
+	require.NotNil(t, svc.gotInput.StartedTo)
 
 	var response struct {
 		Success bool `json:"success"`

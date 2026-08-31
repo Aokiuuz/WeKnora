@@ -525,6 +525,9 @@ func (r *evaluationTaskRepository) ListTasks(
 	if query.Status != nil && !isKnownEvaluationTaskStatus(*query.Status) {
 		return nil, errors.New("list evaluation tasks: unsupported status filter")
 	}
+	if query.StartedFrom != nil && query.StartedTo != nil && query.StartedFrom.After(*query.StartedTo) {
+		return nil, errors.New("list evaluation tasks: started_from must not be after started_to")
+	}
 	if (query.StartBefore == nil) != (query.IDBefore == "") {
 		return nil, errors.New("list evaluation tasks: keyset boundary requires both start_time and id")
 	}
@@ -543,10 +546,51 @@ func (r *evaluationTaskRepository) ListTasks(
 			"err_msg",
 			"cleanup_errors",
 			"cancel_requested_at",
+			"dataset_version_id",
+			"dataset_content_sha256",
+			"experiment_snapshot",
+			"experiment_sha256",
 		).
 		Where("tenant_id = ?", tenantID)
 	if query.Status != nil {
 		dbQuery = dbQuery.Where("status = ?", *query.Status)
+	}
+	if query.DatasetID != "" {
+		dbQuery = dbQuery.Where("dataset_id = ?", query.DatasetID)
+	}
+	if query.DatasetVersionID != "" {
+		dbQuery = dbQuery.Where("dataset_version_id = ?", query.DatasetVersionID)
+	}
+	if query.ModelID != "" {
+		if r.db.Dialector.Name() == "postgres" {
+			dbQuery = dbQuery.Where(`(
+				experiment_snapshot #>> '{models,embedding,id}' = ? OR
+				experiment_snapshot #>> '{models,chat,id}' = ? OR
+				experiment_snapshot #>> '{models,rerank,id}' = ? OR
+				experiment_snapshot #>> '{models,summary,id}' = ?
+			)`, query.ModelID, query.ModelID, query.ModelID, query.ModelID)
+		} else {
+			dbQuery = dbQuery.Where(`(
+				json_extract(experiment_snapshot, '$.models.embedding.id') = ? OR
+				json_extract(experiment_snapshot, '$.models.chat.id') = ? OR
+				json_extract(experiment_snapshot, '$.models.rerank.id') = ? OR
+				json_extract(experiment_snapshot, '$.models.summary.id') = ?
+			)`, query.ModelID, query.ModelID, query.ModelID, query.ModelID)
+		}
+	}
+	if query.StartedFrom != nil {
+		dbQuery = dbQuery.Where("start_time >= ?", query.StartedFrom.UTC())
+	}
+	if query.StartedTo != nil {
+		dbQuery = dbQuery.Where("start_time <= ?", query.StartedTo.UTC())
+	}
+	for _, label := range query.Labels {
+		dbQuery = dbQuery.Where(`EXISTS (
+			SELECT 1 FROM evaluation_task_labels
+			WHERE evaluation_task_labels.tenant_id = evaluation_tasks.tenant_id
+			AND evaluation_task_labels.task_id = evaluation_tasks.id
+			AND evaluation_task_labels.label = ?
+		)`, label)
 	}
 	if query.StartBefore != nil {
 		startBefore := query.StartBefore.UTC()
@@ -568,6 +612,73 @@ func (r *evaluationTaskRepository) ListTasks(
 		normalizeEvaluationTaskTimes(task)
 	}
 	return tasks, nil
+}
+
+// ListTaskLabels batch-loads labels after task pagination, preserving stable
+// task keysets independently of label cardinality.
+func (r *evaluationTaskRepository) ListTaskLabels(
+	ctx context.Context,
+	tenantID uint64,
+	taskIDs []string,
+) (map[string][]string, error) {
+	labelsByTask := make(map[string][]string, len(taskIDs))
+	if tenantID == 0 || len(taskIDs) == 0 {
+		return labelsByTask, nil
+	}
+	var rows []types.EvaluationTaskLabelEntity
+	if err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND task_id IN ?", tenantID, taskIDs).
+		Order("task_id ASC").
+		Order("label ASC").
+		Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("list evaluation task labels: %w", err)
+	}
+	for _, row := range rows {
+		labelsByTask[row.TaskID] = append(labelsByTask[row.TaskID], row.Label)
+	}
+	return labelsByTask, nil
+}
+
+// ReplaceTaskLabels atomically replaces the complete label set without
+// updating the task row, its business version, or its updated_at value.
+func (r *evaluationTaskRepository) ReplaceTaskLabels(
+	ctx context.Context,
+	tenantID uint64,
+	taskID string,
+	labels []string,
+	now time.Time,
+) error {
+	if tenantID == 0 || taskID == "" || now.IsZero() {
+		return errors.New("replace evaluation task labels: tenant_id, task_id, and now are required")
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var count int64
+		if err := tx.Model(&types.EvaluationTaskEntity{}).
+			Where("tenant_id = ? AND id = ?", tenantID, taskID).
+			Count(&count).Error; err != nil {
+			return fmt.Errorf("replace evaluation task labels %s: load task: %w", taskID, err)
+		}
+		if count != 1 {
+			return fmt.Errorf("replace evaluation task labels %s: %w", taskID, ErrEvaluationTaskNotFound)
+		}
+		if err := tx.Where("tenant_id = ? AND task_id = ?", tenantID, taskID).
+			Delete(&types.EvaluationTaskLabelEntity{}).Error; err != nil {
+			return fmt.Errorf("replace evaluation task labels %s: delete current labels: %w", taskID, err)
+		}
+		if len(labels) == 0 {
+			return nil
+		}
+		rows := make([]types.EvaluationTaskLabelEntity, 0, len(labels))
+		for _, label := range labels {
+			rows = append(rows, types.EvaluationTaskLabelEntity{
+				TenantID: tenantID, TaskID: taskID, Label: label, CreatedAt: now.UTC(),
+			})
+		}
+		if err := tx.Create(&rows).Error; err != nil {
+			return fmt.Errorf("replace evaluation task labels %s: create labels: %w", taskID, err)
+		}
+		return nil
+	})
 }
 
 func isKnownEvaluationTaskStatus(status types.EvaluationStatue) bool {
