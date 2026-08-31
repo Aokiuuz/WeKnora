@@ -30,6 +30,14 @@ type EvaluationRequest struct {
 	KnowledgeBaseID string `json:"knowledge_base_id"` // ID of knowledge base to use
 	ChatModelID     string `json:"chat_id"`           // ID of chat model to use
 	RerankModelID   string `json:"rerank_id"`         // ID of rerank model to use
+
+	// DatasetVersionID optionally pins one immutable dataset version.
+	DatasetVersionID string `json:"dataset_version_id,omitempty"`
+	// Configuration optionally overrides resolved retrieval/rerank/generation
+	// parameters; every override enters the experiment snapshot.
+	Configuration *types.EvaluationConfigurationOverrides `json:"configuration,omitempty"`
+	// Seed distinguishes "not provided" (nil) from an explicit seed=0.
+	Seed *int `json:"seed,omitempty"`
 }
 
 // Evaluation godoc
@@ -71,15 +79,27 @@ func (e *EvaluationHandler) Evaluation(c *gin.Context) {
 		secutils.SanitizeForLog(request.RerankModelID),
 	)
 
-	task, err := e.evaluationService.Evaluation(ctx,
-		secutils.SanitizeForLog(request.DatasetID),
-		secutils.SanitizeForLog(request.KnowledgeBaseID),
-		secutils.SanitizeForLog(request.ChatModelID),
-		secutils.SanitizeForLog(request.RerankModelID),
-	)
+	task, err := e.evaluationService.EvaluationWithOptions(ctx, &types.EvaluationOptions{
+		DatasetID:        secutils.SanitizeForLog(request.DatasetID),
+		KnowledgeBaseID:  secutils.SanitizeForLog(request.KnowledgeBaseID),
+		ChatModelID:      secutils.SanitizeForLog(request.ChatModelID),
+		RerankModelID:    secutils.SanitizeForLog(request.RerankModelID),
+		DatasetVersionID: secutils.SanitizeForLog(request.DatasetVersionID),
+		Seed:             request.Seed,
+		Configuration:    request.Configuration,
+	})
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewInternalServerError(err.Error()))
+		switch {
+		case stderrors.Is(err, service.ErrEvaluationSeedUnsupported):
+			c.Error(errors.NewUnprocessableEntityError(
+				"The requested seed is not supported by the chat model provider").WithDetails(err.Error()))
+		case stderrors.Is(err, interfaces.ErrEvaluationDatasetNotFound),
+			stderrors.Is(err, interfaces.ErrEvaluationDatasetVersionNotFound):
+			c.Error(errors.NewNotFoundError("Evaluation dataset not found").WithDetails(err.Error()))
+		default:
+			c.Error(errors.NewInternalServerError(err.Error()))
+		}
 		return
 	}
 

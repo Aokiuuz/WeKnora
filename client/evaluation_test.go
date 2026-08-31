@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -437,5 +438,25 @@ func writeEvaluationResponse(t *testing.T, w http.ResponseWriter, data map[strin
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]any{"success": true, "data": data}); err != nil {
 		t.Errorf("encode response: %v", err)
+	}
+}
+
+func TestIsEvaluationSeedUnsupported(t *testing.T) {
+	if IsEvaluationSeedUnsupported(errors.New("random")) {
+		t.Fatal("plain errors must not classify as seed-unsupported")
+	}
+	if IsEvaluationSeedUnsupported(&APIError{StatusCode: 404, Body: "{}"}) {
+		t.Fatal("404 must not classify as seed-unsupported")
+	}
+	if !IsEvaluationSeedUnsupported(&APIError{
+		StatusCode: 422,
+		Body:       `{"success":false,"error":{"code":1010,"message":"seed unsupported"}}`,
+		Code:       1010,
+	}) {
+		t.Fatal("the evaluation 422 seed rejection must classify as seed-unsupported")
+	}
+	wrapped := fmt.Errorf("start evaluation: %w", &APIError{StatusCode: 422})
+	if !IsEvaluationSeedUnsupported(wrapped) {
+		t.Fatal("wrapped API errors must classify through errors.As")
 	}
 }

@@ -42,6 +42,13 @@ func TestEvaluationTaskRepositoryPostgresContract(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tx.Exec(string(cancelMigrationSQL)).Error)
 
+	// 000095 adds the nullable experiment snapshot columns on top of 000090.
+	snapshotMigrationPath := filepath.Join(
+		"..", "..", "..", "migrations", "versioned", "000095_evaluation_experiment_snapshot.up.sql")
+	snapshotMigrationSQL, err := os.ReadFile(snapshotMigrationPath)
+	require.NoError(t, err)
+	require.NoError(t, tx.Exec(string(snapshotMigrationSQL)).Error)
+
 	now := time.Date(2026, 8, 28, 8, 0, 0, 0, time.UTC)
 	leaseExpiresAt := now.Add(time.Minute)
 	task := &types.EvaluationTaskEntity{
@@ -68,4 +75,29 @@ func TestEvaluationTaskRepositoryPostgresContract(t *testing.T) {
 
 	err = repo.CreateTask(context.Background(), task.TenantID, task)
 	require.ErrorIs(t, err, ErrEvaluationTaskAlreadyExists)
+
+	// Experiment snapshot columns accept a frozen manifest and keep null
+	// provenance for pre-M3 rows.
+	datasetVersionID := "dataset-version-pg"
+	contentSHA256 := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	experimentSHA256 := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	snapshotTask := &types.EvaluationTaskEntity{
+		ID: "postgres-evaluation-task-snapshot", TenantID: 7, DatasetID: "default",
+		StartTime: now, Params: types.JSON(`{"chat_model_id":"chat-1"}`),
+		TemporaryKnowledgeBaseID: "kb-postgres-2", OwnerID: "owner-postgres",
+		LeaseExpiresAt: &leaseExpiresAt, HeartbeatAt: now,
+		DatasetVersionID: &datasetVersionID, DatasetContentSHA256: &contentSHA256,
+		ExperimentSnapshot: types.JSON(`{"schema_version":1}`),
+		ExperimentSHA256:   &experimentSHA256,
+	}
+	require.NoError(t, repo.CreateTask(context.Background(), snapshotTask.TenantID, snapshotTask))
+	snapshotGot, err := repo.GetTask(context.Background(), snapshotTask.TenantID, snapshotTask.ID)
+	require.NoError(t, err)
+	require.NotNil(t, snapshotGot.DatasetVersionID)
+	assert.Equal(t, datasetVersionID, *snapshotGot.DatasetVersionID)
+	assert.JSONEq(t, `{"schema_version":1}`, string(snapshotGot.ExperimentSnapshot))
+	require.NotNil(t, snapshotGot.ExperimentSHA256)
+	assert.Equal(t, experimentSHA256, *snapshotGot.ExperimentSHA256)
+	assert.Nil(t, got.DatasetVersionID, "pre-M3 rows keep null provenance")
+	assert.Nil(t, got.ExperimentSHA256, "pre-M3 rows keep null provenance")
 }

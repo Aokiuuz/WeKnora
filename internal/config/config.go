@@ -48,7 +48,60 @@ type EvaluationConfig struct {
 	// RetentionDays keeps terminal evaluation tasks for this many days before
 	// physical cleanup. Nil means the default, zero disables the cleanup, and
 	// a negative value fails startup.
-	RetentionDays *int `yaml:"retention_days" json:"retention_days"`
+	RetentionDays *int                    `yaml:"retention_days" json:"retention_days"`
+	Dataset       *EvaluationDatasetLimits `yaml:"dataset"      json:"dataset"`
+}
+
+// EvaluationDatasetLimits bounds structured dataset registry inputs. Limits
+// are enforced during decoding and again before transactional writes.
+type EvaluationDatasetLimits struct {
+	MaxRequestBodyBytes int64 `yaml:"max_request_body_bytes" json:"max_request_body_bytes"`
+	MaxPassages         int   `yaml:"max_passages"           json:"max_passages"`
+	MaxQuestions        int   `yaml:"max_questions"          json:"max_questions"`
+	MaxRelevance        int   `yaml:"max_relevance"          json:"max_relevance"`
+	MaxQuestionBytes    int   `yaml:"max_question_bytes"     json:"max_question_bytes"`
+	MaxPassageBytes     int   `yaml:"max_passage_bytes"      json:"max_passage_bytes"`
+}
+
+// DefaultEvaluationDatasetLimits returns the architecture-mandated default limits.
+func DefaultEvaluationDatasetLimits() EvaluationDatasetLimits {
+	return EvaluationDatasetLimits{
+		MaxRequestBodyBytes: 64 << 20, // 64 MiB
+		MaxPassages:         100000,
+		MaxQuestions:        10000,
+		MaxRelevance:        1000000,
+		MaxQuestionBytes:    64 << 10, // 64 KiB
+		MaxPassageBytes:     1 << 20,  // 1 MiB per passage or reference answer
+	}
+}
+
+// EvaluationDatasetLimitsOrDefault returns the configured limits with defaults
+// filling any unset (non-positive) field.
+func EvaluationDatasetLimitsOrDefault(cfg *Config) EvaluationDatasetLimits {
+	limits := DefaultEvaluationDatasetLimits()
+	if cfg == nil || cfg.Evaluation == nil || cfg.Evaluation.Dataset == nil {
+		return limits
+	}
+	configured := cfg.Evaluation.Dataset
+	if configured.MaxRequestBodyBytes > 0 {
+		limits.MaxRequestBodyBytes = configured.MaxRequestBodyBytes
+	}
+	if configured.MaxPassages > 0 {
+		limits.MaxPassages = configured.MaxPassages
+	}
+	if configured.MaxQuestions > 0 {
+		limits.MaxQuestions = configured.MaxQuestions
+	}
+	if configured.MaxRelevance > 0 {
+		limits.MaxRelevance = configured.MaxRelevance
+	}
+	if configured.MaxQuestionBytes > 0 {
+		limits.MaxQuestionBytes = configured.MaxQuestionBytes
+	}
+	if configured.MaxPassageBytes > 0 {
+		limits.MaxPassageBytes = configured.MaxPassageBytes
+	}
+	return limits
 }
 
 // DefaultEvaluationTaskTimeout bounds the execution phase of one background evaluation task.

@@ -181,6 +181,12 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewTaskPendingOpsRepository))
 	must(container.Provide(repository.NewTaskDeadLetterRepository))
 	must(container.Provide(repository.NewEvaluationTaskRepository))
+	must(container.Provide(repository.NewEvaluationDatasetRepository))
+	must(container.Provide(func(db *gorm.DB) interfaces.EvaluationQuestionResultRepository {
+		// The M2d cancellation predicate lands in its own slice; the narrow
+		// checker is wired then (see M3_INTEGRATION.md).
+		return repository.NewEvaluationQuestionResultRepository(db, nil)
+	}))
 
 	// MCP manager for managing MCP client connections
 	logger.Debugf(ctx, "[Container] Registering MCP manager...")
@@ -216,6 +222,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(embedding.NewBatchEmbedder))
 	must(container.Provide(service.NewModelService))
 	must(container.Provide(service.NewDatasetService))
+	must(container.Provide(service.NewEvaluationDatasetRegistryService))
 	must(container.Provide(service.NewEvaluationService))
 	must(container.Provide(service.NewEvaluationTaskRecoveryRunner))
 	must(container.Provide(service.NewUserService))
@@ -416,6 +423,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	}))
 	must(container.Provide(handler.NewMeEnvVarHandler))
 	must(container.Provide(handler.NewEvaluationHandler))
+	must(container.Provide(handler.NewEvaluationDatasetHandler))
+	must(container.Provide(handler.NewEvaluationQuestionHandler))
 	must(container.Provide(handler.NewInitializationHandler))
 	must(container.Provide(handler.NewAuthHandler))
 	must(container.Provide(handler.NewSystemHandler))

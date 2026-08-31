@@ -336,7 +336,8 @@ func TestTenantInfrastructureRoutesDeclareSpecificCapabilities(t *testing.T) {
 
 	RegisterTenantRoutes(v1, &handler.TenantHandler{}, nil, nil, nil, g)
 	RegisterModelRoutes(v1, &handler.ModelHandler{}, &handler.ModelCredentialsHandler{}, g)
-	RegisterEvaluationRoutes(v1, &handler.EvaluationHandler{}, g)
+	RegisterEvaluationRoutes(v1, &handler.EvaluationHandler{}, &handler.EvaluationDatasetHandler{},
+		&handler.EvaluationQuestionHandler{}, g)
 	RegisterSystemRoutes(v1, &handler.SystemHandler{}, g)
 	RegisterMCPServiceRoutes(v1, &handler.MCPServiceHandler{}, &handler.MCPCredentialsHandler{}, &handler.MCPOAuthHandler{}, g)
 	RegisterWebSearchProviderRoutes(v1, &handler.WebSearchProviderHandler{}, &handler.WebSearchProviderCredentialsHandler{}, g)
@@ -362,6 +363,7 @@ func TestTenantInfrastructureRoutesDeclareSpecificCapabilities(t *testing.T) {
 		{http.MethodGet, "/api/v1/models", types.APIKeyCapabilityManageModels},
 		{http.MethodPost, "/api/v1/evaluation", types.APIKeyCapabilityRunEvaluations},
 		{http.MethodPost, "/api/v1/evaluation/:task_id/cancel", types.APIKeyCapabilityRunEvaluations},
+		{http.MethodGet, "/api/v1/evaluation/datasets", types.APIKeyCapabilityRunEvaluations},
 		{http.MethodGet, "/api/v1/system/info", types.APIKeyCapabilityManageVectorStores},
 		{http.MethodGet, "/api/v1/mcp-services", types.APIKeyCapabilityManageMCPServices},
 		{http.MethodGet, "/api/v1/web-search-providers", types.APIKeyCapabilityManageWebSearch},

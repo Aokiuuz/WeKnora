@@ -113,6 +113,11 @@ func NewAnthropicChat(config *ChatConfig) (*AnthropicChat, error) {
 }
 
 func (c *AnthropicChat) Chat(ctx context.Context, messages []Message, opts *ChatOptions) (*types.ChatResponse, error) {
+	// Anthropic's Messages API has no seed parameter: an explicit seed is
+	// rejected with a typed error instead of being silently dropped.
+	if ChatOptionsSeedProvided(opts) {
+		return nil, fmt.Errorf("anthropic chat %s: %w", c.modelName, ErrChatSeedUnsupported)
+	}
 	reqBody := c.buildRequest(messages, opts)
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
@@ -176,6 +181,9 @@ func (c *AnthropicChat) Chat(ctx context.Context, messages []Message, opts *Chat
 }
 
 func (c *AnthropicChat) ChatStream(ctx context.Context, messages []Message, opts *ChatOptions) (<-chan types.StreamResponse, error) {
+	if ChatOptionsSeedProvided(opts) {
+		return nil, fmt.Errorf("anthropic chat stream %s: %w", c.modelName, ErrChatSeedUnsupported)
+	}
 	reqBody := c.buildRequest(messages, opts)
 	reqBody.Stream = true
 	jsonData, err := json.Marshal(reqBody)

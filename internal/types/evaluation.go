@@ -65,6 +65,13 @@ type EvaluationDetail struct {
 	Task   *EvaluationTask `json:"task"`             // Evaluation task info
 	Params *ChatManage     `json:"params"`           // Evaluation parameters
 	Metric *MetricResult   `json:"metric,omitempty"` // Evaluation metrics
+
+	// Experiment is the frozen schema-version-1 experiment manifest; it is
+	// null for pre-M3 tasks instead of an empty fabricated object.
+	Experiment *EvaluationExperimentSnapshot `json:"experiment"`
+	// ProvenanceComplete reports whether dataset, model, parameter, code,
+	// and environment provenance were fully frozen for this task.
+	ProvenanceComplete bool `json:"provenance_complete"`
 }
 
 // String returns JSON representation of EvaluationTask

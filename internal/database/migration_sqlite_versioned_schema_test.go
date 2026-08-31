@@ -13,7 +13,8 @@ import (
 // versionedSQLiteTables is the set of tables that SQLite migrations must
 // create to stay in sync with the versioned (PostgreSQL) migrations:
 // 000041 task queue, 000053 system settings, 000055 processing spans,
-// 000063 knowledge multi-tags, 000090 evaluation tasks.
+// 000063 knowledge multi-tags, 000090 evaluation tasks,
+// 000094 evaluation dataset registry (SQLite 000017).
 var versionedSQLiteTables = []string{
 	"task_pending_ops",
 	"task_dead_letters",
@@ -21,6 +22,12 @@ var versionedSQLiteTables = []string{
 	"knowledge_processing_spans",
 	"knowledge_tag_relations",
 	"evaluation_tasks",
+	"evaluation_datasets",
+	"evaluation_dataset_versions",
+	"evaluation_dataset_passages",
+	"evaluation_dataset_questions",
+	"evaluation_dataset_relevance",
+	"evaluation_question_results",
 }
 
 // versionedSQLiteColumns maps each existing table to the columns that the
@@ -33,15 +40,16 @@ var versionedSQLiteColumns = map[string][]string{
 	"tenant_invitations": {"token", "accepted_count"},        // 000054
 	"embed_channels":     {"allow_memory"},                   // 000060
 	"mcp_oauth_tokens":   {"principal_type", "principal_id"}, // 000064
-	"evaluation_tasks": { // 000090, 000091
+	"evaluation_tasks": { // 000090-000095 (SQLite 000013-000018)
 		"tenant_id", "dataset_id", "status", "start_time", "end_time", "total", "finished", "err_msg",
 		"cleanup_errors", "params", "metric", "temporary_kb_id", "temporary_knowledge_id", "owner_id",
 		"lease_expires_at", "heartbeat_at", "version", "created_at", "updated_at", "deleted_at",
-		"cancel_requested_at",
+		"cancel_requested_at", "dataset_version_id", "dataset_content_sha256", "experiment_snapshot",
+		"experiment_sha256",
 	},
 }
 
-const expectedSQLiteMigrationVersion = 16
+const expectedSQLiteMigrationVersion = 19
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -73,6 +81,7 @@ func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	assertSQLiteShareLinkInvitationsWork(t, db)
 	assertSQLiteMCPOAuthPrincipalUpsertWorks(t, db)
 	assertSQLiteEvaluationTaskSchema(t, db)
+	assertSQLiteEvaluationQuestionResultsSchema(t, db)
 	require.False(t, sqliteColumnExists(t, db, "knowledges", "tag_id"),
 		"SQLite migrations must drop legacy knowledges.tag_id after multi-tag migration")
 }
@@ -157,8 +166,11 @@ func chdirAndRestore(t *testing.T, dir string) {
 
 func openSQLiteDB(t *testing.T, dbPath string) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite3", dbPath)
+	// Foreign keys are connection-local; pinning the pool to one connection
+	// keeps the pragma deterministic for cascade and FK assertions.
+	db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on")
 	require.NoError(t, err)
+	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
@@ -289,6 +301,32 @@ func assertSQLiteEvaluationTaskSchema(t *testing.T, db *sql.DB) {
 		"nullable-lease",
 	)
 	require.NoError(t, err)
+
+	// 000095 / SQLite 000018: experiment snapshot columns and their partial index.
+	assertSQLitePartialIndex(t, db, "idx_evaluation_tasks_dataset_version",
+		"WHERE deleted_at IS NULL AND dataset_version_id IS NOT NULL")
+
+	_, err = db.Exec(`INSERT INTO evaluation_tasks (
+		id, tenant_id, dataset_id, status, start_time, cleanup_errors, params,
+		temporary_kb_id, owner_id, lease_expires_at, heartbeat_at,
+		dataset_version_id, dataset_content_sha256, experiment_snapshot, experiment_sha256
+	) VALUES ('snapshot-row', 1, 'default', 0, CURRENT_TIMESTAMP, '[]', '{}', 'kb', 'owner',
+		CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'version-1', ?, ?, ?)`,
+		strings.Repeat("a", 64), `{"schema_version":1}`, strings.Repeat("b", 64))
+	require.NoError(t, err)
+
+	// Pre-M3 rows keep null provenance.
+	var nullSnapshot sql.NullString
+	require.NoError(t, db.QueryRow(
+		"SELECT experiment_snapshot FROM evaluation_tasks WHERE id = 'nullable-lease'",
+	).Scan(&nullSnapshot))
+	require.False(t, nullSnapshot.Valid)
+
+	// Malformed hashes and non-JSON snapshots are rejected.
+	_, err = db.Exec("UPDATE evaluation_tasks SET dataset_content_sha256 = 'short' WHERE id = 'snapshot-row'")
+	require.Error(t, err)
+	_, err = db.Exec("UPDATE evaluation_tasks SET experiment_snapshot = 'not-json' WHERE id = 'snapshot-row'")
+	require.Error(t, err)
 }
 
 func assertSQLitePartialIndex(t *testing.T, db *sql.DB, name, predicate string) {
@@ -330,4 +368,58 @@ func copySQLiteMigrationsV4(t *testing.T, repoRoot string) string {
 		require.NoError(t, os.WriteFile(filepath.Join(destDir, name), data, 0o600))
 	}
 	return dest
+}
+
+// assertSQLiteEvaluationQuestionResultsSchema verifies the 000096 / SQLite
+// 000019 per-question table: composite foreign key, JSON validity checks,
+// result hash length, and the partial pagination index.
+func assertSQLiteEvaluationQuestionResultsSchema(t *testing.T, db *sql.DB) {
+	t.Helper()
+
+	var definition string
+	require.NoError(t, db.QueryRow(
+		"SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_evaluation_question_results_task_page'",
+	).Scan(&definition))
+	require.Contains(t, strings.ToLower(definition), "where deleted_at is null")
+
+	insertTask := `INSERT INTO evaluation_tasks (
+		id, tenant_id, dataset_id, status, start_time, cleanup_errors, params,
+		temporary_kb_id, owner_id, lease_expires_at, heartbeat_at
+	) VALUES (?, 1, 'default', 1, CURRENT_TIMESTAMP, '[]', '{}', 'kb', 'owner',
+		CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+	_, err := db.Exec(insertTask, "task-for-questions")
+	require.NoError(t, err)
+
+	insertRow := `INSERT INTO evaluation_question_results (
+		tenant_id, task_id, sample_index, qid, question, reference_answer,
+		ground_truth_pids, search_results, rerank_results, generation_pids,
+		per_sample_metrics, metric_observations, status, result_hash
+	) VALUES (1, 'task-for-questions', ?, 'q1', 'question?', 'answer',
+		'[3]', ?, ?, '[3]', '{}', '[]', 'success', ?)`
+	validRanked := `[{"rank":1,"pid":3,"score":0.9,"provenance":"known"}]`
+	validHash := strings.Repeat("c", 64)
+	_, err = db.Exec(insertRow, 0, validRanked, validRanked, validHash)
+	require.NoError(t, err)
+
+	// Composite primary key rejects duplicates.
+	_, err = db.Exec(insertRow, 0, validRanked, validRanked, validHash)
+	require.Error(t, err)
+	// The composite foreign key rejects rows without a parent task.
+	_, err = db.Exec(`INSERT INTO evaluation_question_results (
+		tenant_id, task_id, sample_index, qid, question, status, result_hash
+	) VALUES (1, 'task-missing', 0, 'q1', 'question?', 'success', ?)`, validHash)
+	require.Error(t, err)
+	// JSON validity and hash length are enforced.
+	_, err = db.Exec(insertRow, 1, "not-json", validRanked, validHash)
+	require.Error(t, err)
+	_, err = db.Exec(insertRow, 1, validRanked, validRanked, "short")
+	require.Error(t, err)
+	// Cascade delete removes the per-question rows with their task.
+	_, err = db.Exec("DELETE FROM evaluation_tasks WHERE id = 'task-for-questions'")
+	require.NoError(t, err)
+	var remaining int
+	require.NoError(t, db.QueryRow(
+		"SELECT COUNT(*) FROM evaluation_question_results WHERE task_id = 'task-for-questions'",
+	).Scan(&remaining))
+	require.Zero(t, remaining)
 }

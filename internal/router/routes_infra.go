@@ -79,13 +79,28 @@ func RegisterSandboxConfigRoutes(
 // evaluation drives LLM calls (cost) and reads from KBs across the
 // tenant; gate to Admin+ until product asks for a finer-grained
 // matrix.
-func RegisterEvaluationRoutes(r *gin.RouterGroup, handler *handler.EvaluationHandler, g *rbacGuards) {
+func RegisterEvaluationRoutes(
+	r *gin.RouterGroup,
+	handler *handler.EvaluationHandler,
+	datasetHandler *handler.EvaluationDatasetHandler,
+	questionHandler *handler.EvaluationQuestionHandler,
+	g *rbacGuards,
+) {
 	evaluationRoutes := g.apiKeyGroup(r.Group("/evaluation"), apiKeyRunEvaluations(apiKeyFullAccess()))
 	{
 		evaluationRoutes.POST("", g.Admin(), handler.Evaluation)
 		evaluationRoutes.GET("", g.Viewer(), handler.GetEvaluationResult)
 		evaluationRoutes.GET("/tasks", g.Viewer(), handler.ListEvaluationTasks)
 		evaluationRoutes.POST("/:task_id/cancel", g.Admin(), handler.CancelEvaluation)
+		evaluationRoutes.GET("/tasks/:task_id/questions", g.Viewer(), questionHandler.ListQuestionResults)
+
+		datasets := evaluationRoutes.Group("/datasets")
+		{
+			datasets.POST("", g.Admin(), datasetHandler.CreateDataset)
+			datasets.GET("", g.Viewer(), datasetHandler.ListDatasets)
+			datasets.POST("/:id/versions", g.Admin(), datasetHandler.CreateVersion)
+			datasets.GET("/:id/versions", g.Viewer(), datasetHandler.ListVersions)
+		}
 	}
 	// Deleting evaluation tasks stays JWT-Admin only: register on the raw
 	// group so scoped API keys fall back to default-deny.

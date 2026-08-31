@@ -18,6 +18,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/application/repository"
 	"github.com/Tencent/WeKnora/internal/application/service"
 	"github.com/Tencent/WeKnora/internal/application/service/file"
+	"github.com/Tencent/WeKnora/internal/buildinfo"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/database"
 	apperrors "github.com/Tencent/WeKnora/internal/errors"
@@ -299,15 +300,6 @@ type GetSystemInfoResponse struct {
 	UptimeSeconds int64 `json:"uptime_seconds,omitempty"`
 }
 
-// 编译时注入的版本信息
-var (
-	Version   = "unknown"
-	Edition   = "standard"
-	CommitID  = "unknown"
-	BuildTime = "unknown"
-	GoVersion = "unknown"
-)
-
 // GetSystemInfo godoc
 // @Summary      获取系统信息
 // @Description  获取系统版本、构建信息和引擎配置
@@ -355,12 +347,13 @@ func (h *SystemHandler) GetSystemInfo(c *gin.Context) {
 		uptimeSec = int64(runtime.ServerUptime().Seconds())
 	}
 
+	build := buildinfo.Get()
 	response := GetSystemInfoResponse{
-		Version:             Version,
-		Edition:             Edition,
-		CommitID:            CommitID,
-		BuildTime:           BuildTime,
-		GoVersion:           GoVersion,
+		Version:             build.Version,
+		Edition:             build.Edition,
+		CommitID:            build.CommitID,
+		BuildTime:           build.BuildTime,
+		GoVersion:           build.GoVersion,
 		KeywordIndexEngine:  keywordIndexEngine,
 		VectorStoreEngine:   vectorStoreEngine,
 		GraphDatabaseEngine: graphDatabaseEngine,

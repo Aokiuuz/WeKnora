@@ -48,6 +48,8 @@ type EvaluationService struct {
 	sessionService           interfaces.SessionService       // Service for chat sessions
 	modelService             interfaces.ModelService         // Service for model operations
 	evaluationTaskRepository interfaces.EvaluationTaskRepository
+	datasetRegistry          interfaces.EvaluationDatasetRegistryService
+	questionResultRepository interfaces.EvaluationQuestionResultRepository
 	ownerID                  string
 	heartbeatInterval        time.Duration
 	heartbeatTimeout         time.Duration
@@ -71,6 +73,8 @@ func NewEvaluationService(
 	sessionService interfaces.SessionService,
 	modelService interfaces.ModelService,
 	evaluationTaskRepository interfaces.EvaluationTaskRepository,
+	datasetRegistry interfaces.EvaluationDatasetRegistryService,
+	questionResultRepository interfaces.EvaluationQuestionResultRepository,
 ) interfaces.EvaluationService {
 	return &EvaluationService{
 		config:                   config,
@@ -80,6 +84,8 @@ func NewEvaluationService(
 		sessionService:           sessionService,
 		modelService:             modelService,
 		evaluationTaskRepository: evaluationTaskRepository,
+		datasetRegistry:          datasetRegistry,
+		questionResultRepository: questionResultRepository,
 		ownerID:                  uuid.NewString(),
 	}
 }
@@ -408,6 +414,28 @@ func (e *EvaluationService) EvaluationResult(ctx context.Context, taskID string)
 func (e *EvaluationService) Evaluation(ctx context.Context,
 	datasetID string, knowledgeBaseID string, chatModelID string, rerankModelID string,
 ) (*types.EvaluationDetail, error) {
+	return e.EvaluationWithOptions(ctx, &types.EvaluationOptions{
+		DatasetID:       datasetID,
+		KnowledgeBaseID: knowledgeBaseID,
+		ChatModelID:     chatModelID,
+		RerankModelID:   rerankModelID,
+	})
+}
+
+// EvaluationWithOptions starts a new evaluation task with the M3 option set.
+// The full effective configuration is resolved and frozen into an immutable
+// experiment manifest before the task enters Pending.
+func (e *EvaluationService) EvaluationWithOptions(
+	ctx context.Context,
+	options *types.EvaluationOptions,
+) (*types.EvaluationDetail, error) {
+	if options == nil {
+		return nil, errors.New("start evaluation: options are required")
+	}
+	datasetID := options.DatasetID
+	knowledgeBaseID := options.KnowledgeBaseID
+	chatModelID := options.ChatModelID
+	rerankModelID := options.RerankModelID
 	logger.Info(ctx, "Start evaluation")
 	logger.Infof(ctx, "Dataset ID: %s, Knowledge Base ID: %s, Chat Model ID: %s, Rerank Model ID: %s",
 		datasetID, knowledgeBaseID, chatModelID, rerankModelID)
@@ -420,7 +448,7 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 	if knowledgeBaseID == "" {
 		logger.Info(ctx, "No knowledge base ID provided, creating new knowledge base")
 		// Create new knowledge base with default evaluation settings
-		// 获取默认的嵌入模型和LLM模型
+		// 获取默认的嵌入模型和LLM模型（确定性选择：默认标记优先，ID 升序兜底）
 		models, err := e.modelService.ListModels(ctx)
 		if err != nil {
 			logger.Errorf(ctx, "Failed to list models: %v", err)
@@ -428,16 +456,11 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 		}
 
 		var embeddingModelID, llmModelID string
-		for _, model := range models {
-			if model == nil {
-				continue
-			}
-			if model.Type == types.ModelTypeEmbedding {
-				embeddingModelID = model.ID
-			}
-			if model.Type == types.ModelTypeKnowledgeQA {
-				llmModelID = model.ID
-			}
+		if embedding := SelectEvaluationDefaultModel(models, types.ModelTypeEmbedding); embedding != nil {
+			embeddingModelID = embedding.ID
+		}
+		if llm := SelectEvaluationDefaultModel(models, types.ModelTypeKnowledgeQA); llm != nil {
+			llmModelID = llm.ID
 		}
 
 		if embeddingModelID == "" || llmModelID == "" {
@@ -492,17 +515,11 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 	}
 
 	if rerankModelID == "" {
-		// 获取默认的重排模型
+		// 获取默认的重排模型（确定性选择，不依赖无序数据库返回）
 		models, err := e.modelService.ListModels(ctx)
 		if err == nil {
-			for _, model := range models {
-				if model == nil {
-					continue
-				}
-				if model.Type == types.ModelTypeRerank {
-					rerankModelID = model.ID
-					break
-				}
+			if rerank := SelectEvaluationDefaultModel(models, types.ModelTypeRerank); rerank != nil {
+				rerankModelID = rerank.ID
 			}
 		}
 		if rerankModelID == "" {
@@ -513,17 +530,11 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 	}
 
 	if chatModelID == "" {
-		// 获取默认的LLM模型
+		// 获取默认的LLM模型（确定性选择，不依赖无序数据库返回）
 		models, err := e.modelService.ListModels(ctx)
 		if err == nil {
-			for _, model := range models {
-				if model == nil {
-					continue
-				}
-				if model.Type == types.ModelTypeKnowledgeQA {
-					chatModelID = model.ID
-					break
-				}
+			if chat := SelectEvaluationDefaultModel(models, types.ModelTypeKnowledgeQA); chat != nil {
+				chatModelID = chat.ID
 			}
 		}
 		if chatModelID == "" {
@@ -578,6 +589,20 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 		},
 	}
 
+	// M3: apply creation-time seed and configuration overrides, then freeze
+	// the immutable experiment manifest before the task enters Pending.
+	if options.Seed != nil {
+		detail.Params.SummaryConfig.Seed = *options.Seed
+		detail.Params.SummaryConfig.SeedProvided = true
+	}
+	if err := applyEvaluationConfigurationOverrides(detail.Params, options.Configuration); err != nil {
+		return nil, err
+	}
+	experiment, experimentHash, err := e.buildExperimentForTask(ctx, tenantID, options, detail, knowledgeBaseID)
+	if err != nil {
+		return nil, err
+	}
+
 	entity, err := evaluationDetailToEntity(
 		detail,
 		knowledgeBaseID,
@@ -585,6 +610,9 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 		e.evaluationLeaseExpiresAt(now),
 	)
 	if err != nil {
+		return nil, err
+	}
+	if err := persistEvaluationExperiment(entity, experiment, experimentHash); err != nil {
 		return nil, err
 	}
 	logger.Info(ctx, "Persisting evaluation task")
@@ -681,6 +709,13 @@ func (e *EvaluationService) evalDataset(
 	logger.Info(ctx, "Start evaluating dataset")
 	logger.Infof(ctx, "Task ID: %s, Dataset ID: %s", detail.Task.ID, detail.Task.DatasetID)
 
+	// M3: the frozen model fingerprints must still match the live model
+	// records; drift fails the task instead of mixing configurations.
+	if err := e.verifyExperimentModelFingerprints(ctx, detail.Experiment); err != nil {
+		captureEvaluationTaskDeadline(ctx, err, taskDeadlineStoppedRun)
+		return err
+	}
+
 	// Retrieve dataset from storage
 	dataset, err := e.dataset.GetDatasetByID(ctx, detail.Task.DatasetID)
 	if err != nil {
@@ -748,7 +783,7 @@ func (e *EvaluationService) evalDataset(
 	var finished int
 	var publishMu sync.Mutex
 	g, workerCtx := errgroup.WithContext(ctx)
-	metricHook := NewHookMetric(len(dataset))
+	metricHook := NewHookMetric(len(dataset), knowledge.ID)
 
 	// Set worker limit based on available CPUs
 	g.SetLimit(max(runtime.GOMAXPROCS(0)-1, 1))
@@ -804,13 +839,27 @@ func (e *EvaluationService) evalDataset(
 			finished += 1
 			finishedSnapshot := finished
 			metricResult := metricHook.MetricResult()
-			updateErr := e.publishEvaluationProgress(
-				workerCtx,
-				runState,
-				len(dataset),
-				finishedSnapshot,
-				metricResult,
-			)
+			var updateErr error
+			if e.questionResultRepository != nil && detail.Experiment != nil {
+				// M3: publish the per-question fact, finished counter, and
+				// aggregate metric in one transaction.
+				input := metricHook.questionResultInput(i, detail.Experiment.MetricPlan, detail.Params.RerankTopK)
+				if input != nil {
+					updateErr = e.publishQuestionResult(workerCtx, runState, len(dataset), finishedSnapshot,
+						metricResult, input)
+				} else {
+					updateErr = e.publishEvaluationProgress(workerCtx, runState, len(dataset), finishedSnapshot,
+						metricResult)
+				}
+			} else {
+				updateErr = e.publishEvaluationProgress(
+					workerCtx,
+					runState,
+					len(dataset),
+					finishedSnapshot,
+					metricResult,
+				)
+			}
 			publishMu.Unlock()
 			if updateErr != nil {
 				return fmt.Errorf("publish progress for QA pair %d: %w", i, updateErr)
@@ -871,6 +920,51 @@ func (e *EvaluationService) publishEvaluationProgress(
 	}
 	runState.version = updated.Version
 	runState.metric = append(types.JSON(nil), updated.Metric...)
+	return nil
+}
+
+// publishQuestionResult publishes one per-question fact, the finished
+// counter, and the aggregate metric in one repository transaction. Idempotent
+// retries (same result hash) leave the task version untouched.
+func (e *EvaluationService) publishQuestionResult(
+	ctx context.Context,
+	runState *evaluationRunState,
+	total int,
+	finished int,
+	metric *types.MetricResult,
+	input *types.EvaluationQuestionResultInput,
+) error {
+	if runState == nil {
+		return errors.New("publish evaluation question result: run state is required")
+	}
+	metricJSON, err := encodeEvaluationMetric(metric)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	updated, inserted, err := e.questionResultRepository.PublishQuestionResult(
+		ctx,
+		interfaces.EvaluationQuestionResultCommand{
+			TenantID:        runState.tenantID,
+			TaskID:          runState.taskID,
+			OwnerID:         runState.ownerID,
+			ExpectedVersion: runState.version,
+			Total:           total,
+			Finished:        finished,
+			Metric:          metricJSON,
+			Now:             now,
+			LeaseExpiresAt:  evaluationLeaseExpiresAt(e.config, now),
+			Result:          input,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	runState.version = updated.Version
+	runState.metric = append(types.JSON(nil), updated.Metric...)
+	if !inserted {
+		logger.Infof(ctx, "Question result for sample %d already published with identical hash", input.SampleIndex)
+	}
 	return nil
 }
 

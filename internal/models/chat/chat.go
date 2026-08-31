@@ -29,6 +29,7 @@ type ChatOptions struct {
 	Temperature         float64         `json:"temperature"`                   // 温度参数
 	TopP                float64         `json:"top_p"`                         // Top P 参数
 	Seed                int             `json:"seed"`                          // 随机种子
+	SeedProvided        bool            `json:"seed_provided,omitempty"`       // 区分未提供 seed 与显式 seed=0
 	MaxTokens           int             `json:"max_tokens"`                    // 最大 token 数
 	MaxCompletionTokens int             `json:"max_completion_tokens"`         // 最大完成 token 数
 	FrequencyPenalty    float64         `json:"frequency_penalty"`             // 频率惩罚
