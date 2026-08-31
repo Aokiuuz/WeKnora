@@ -81,6 +81,7 @@ import (
 	infra_web_search "github.com/Tencent/WeKnora/internal/infrastructure/web_search"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/mcp"
+	"github.com/Tencent/WeKnora/internal/modelcache"
 	"github.com/Tencent/WeKnora/internal/modelobs"
 	"github.com/Tencent/WeKnora/internal/models/chat"
 	"github.com/Tencent/WeKnora/internal/models/embedding"
@@ -191,6 +192,10 @@ func BuildContainer(container *dig.Container) *dig.Container {
 		return repository.NewModelObservabilityRepository(db)
 	}))
 	must(container.Provide(modelobs.NewRecorder))
+	must(container.Provide(func(db *gorm.DB) modelcache.Store {
+		return repository.NewEmbeddingCacheRepository(db)
+	}))
+	must(container.Provide(modelcache.NewCoordinator))
 
 	// MCP manager for managing MCP client connections
 	logger.Debugf(ctx, "[Container] Registering MCP manager...")
@@ -224,7 +229,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewChunkService))
 	must(container.Provide(service.NewKnowledgeTagService))
 	must(container.Provide(embedding.NewBatchEmbedder))
-	must(container.Provide(service.NewModelServiceWithObservability))
+	must(container.Provide(service.NewModelServiceWithObservabilityAndCache))
 	must(container.Provide(service.NewDatasetService))
 	must(container.Provide(service.NewEvaluationDatasetRegistryService))
 	must(container.Provide(metricregistry.NewDefaultRegistry))
@@ -375,6 +380,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Invoke(registerBuiltinEvaluationDataset))
 	must(container.Invoke(startEvaluationTaskRecovery))
 	must(container.Invoke(startEvaluationTaskRetention))
+	must(container.Invoke(startEmbeddingCacheCleaner))
 	logger.Debugf(ctx, "[Container] Audit log retention runner registered")
 	must(container.Provide(service.NewHousekeepingService))
 	must(container.Invoke(startHousekeepingService))
@@ -1863,4 +1869,16 @@ func startEvaluationTaskRetention(
 		return nil
 	})
 	return nil
+}
+
+// startEmbeddingCacheCleaner starts bounded expiry cleanup and joins application shutdown.
+func startEmbeddingCacheCleaner(
+	coordinator *modelcache.Coordinator,
+	cleaner interfaces.ResourceCleaner,
+) {
+	coordinator.StartCleaner(context.Background())
+	cleaner.RegisterWithName("EmbeddingCacheCleaner", func() error {
+		coordinator.StopCleaner()
+		return nil
+	})
 }

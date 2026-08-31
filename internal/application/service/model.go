@@ -8,6 +8,7 @@ import (
 
 	apperrors "github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/logger"
+	"github.com/Tencent/WeKnora/internal/modelcache"
 	"github.com/Tencent/WeKnora/internal/modelobs"
 	"github.com/Tencent/WeKnora/internal/models/asr"
 	"github.com/Tencent/WeKnora/internal/models/chat"
@@ -33,6 +34,7 @@ type modelService struct {
 	pooler            embedding.EmbedderPooler
 	tenantService     interfaces.TenantService
 	modelCallRecorder *modelobs.Recorder
+	embeddingCache    *modelcache.Coordinator
 }
 
 // NewModelService creates a new model service instance
@@ -43,7 +45,7 @@ func NewModelService(repo interfaces.ModelRepository,
 	pooler embedding.EmbedderPooler,
 	tenantService interfaces.TenantService,
 ) interfaces.ModelService {
-	return newModelService(repo, kbRepo, agentRepo, ollamaService, pooler, tenantService, nil)
+	return newModelService(repo, kbRepo, agentRepo, ollamaService, pooler, tenantService, nil, nil)
 }
 
 // NewModelServiceWithObservability constructs the production model service with provider-call accounting.
@@ -55,7 +57,21 @@ func NewModelServiceWithObservability(repo interfaces.ModelRepository,
 	tenantService interfaces.TenantService,
 	modelCallRecorder *modelobs.Recorder,
 ) interfaces.ModelService {
-	return newModelService(repo, kbRepo, agentRepo, ollamaService, pooler, tenantService, modelCallRecorder)
+	return newModelService(repo, kbRepo, agentRepo, ollamaService, pooler, tenantService, modelCallRecorder, nil)
+}
+
+// NewModelServiceWithObservabilityAndCache constructs the production model service with
+// provider-call accounting and a process-wide persistent embedding cache coordinator.
+func NewModelServiceWithObservabilityAndCache(repo interfaces.ModelRepository,
+	kbRepo interfaces.KnowledgeBaseRepository,
+	agentRepo interfaces.CustomAgentRepository,
+	ollamaService *ollama.OllamaService,
+	pooler embedding.EmbedderPooler,
+	tenantService interfaces.TenantService,
+	modelCallRecorder *modelobs.Recorder,
+	embeddingCache *modelcache.Coordinator,
+) interfaces.ModelService {
+	return newModelService(repo, kbRepo, agentRepo, ollamaService, pooler, tenantService, modelCallRecorder, embeddingCache)
 }
 
 func newModelService(repo interfaces.ModelRepository,
@@ -65,6 +81,7 @@ func newModelService(repo interfaces.ModelRepository,
 	pooler embedding.EmbedderPooler,
 	tenantService interfaces.TenantService,
 	modelCallRecorder *modelobs.Recorder,
+	embeddingCache *modelcache.Coordinator,
 ) interfaces.ModelService {
 	return &modelService{
 		repo:              repo,
@@ -74,6 +91,7 @@ func newModelService(repo interfaces.ModelRepository,
 		pooler:            pooler,
 		tenantService:     tenantService,
 		modelCallRecorder: modelCallRecorder,
+		embeddingCache:    embeddingCache,
 	}
 }
 
@@ -481,7 +499,8 @@ func (s *modelService) GetEmbeddingModel(ctx context.Context, modelId string) (e
 	}
 
 	logger.Info(ctx, "Embedding model initialized successfully")
-	return s.modelCallRecorder.WrapEmbedder(model, embedder), nil
+	observed := s.modelCallRecorder.WrapEmbedder(model, embedder)
+	return s.embeddingCache.Wrap(model, observed), nil
 }
 
 // GetEmbeddingModelForTenant retrieves and initializes an embedding model for a specific tenant
@@ -529,7 +548,8 @@ func (s *modelService) GetEmbeddingModelForTenant(ctx context.Context, modelId s
 	}
 
 	logger.Info(ctx, "Cross-tenant embedding model initialized successfully")
-	return s.modelCallRecorder.WrapEmbedder(model, embedder), nil
+	observed := s.modelCallRecorder.WrapEmbedder(model, embedder)
+	return s.embeddingCache.Wrap(model, observed), nil
 }
 
 // GetRerankModel retrieves and initializes a reranking model instance
