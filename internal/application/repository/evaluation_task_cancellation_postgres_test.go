@@ -49,6 +49,9 @@ func TestEvaluationTaskRepositoryPostgresCancellationMigrationAndTruth(t *testin
 	up91, err := os.ReadFile(filepath.Join(migrationDir, "000091_evaluation_task_cancellation.up.sql"))
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(string(up91)).Error)
+	up95, err := os.ReadFile(filepath.Join(migrationDir, "000095_evaluation_experiment_snapshot.up.sql"))
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(string(up95)).Error)
 
 	var cancelColumn bool
 	require.NoError(t, db.Raw(

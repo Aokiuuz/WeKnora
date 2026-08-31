@@ -169,7 +169,18 @@ func (r *evaluationQuestionResultRepository) ListQuestionResults(
 	if err != nil {
 		return nil, fmt.Errorf("list evaluation question results %s: %w", taskID, err)
 	}
+	for _, row := range rows {
+		normalizeEvaluationQuestionResultTimes(row)
+	}
 	return rows, nil
+}
+
+func normalizeEvaluationQuestionResultTimes(row *types.EvaluationQuestionResultEntity) {
+	row.CreatedAt = row.CreatedAt.UTC()
+	row.UpdatedAt = row.UpdatedAt.UTC()
+	if row.DeletedAt.Valid {
+		row.DeletedAt.Time = row.DeletedAt.Time.UTC()
+	}
 }
 
 func (r *evaluationQuestionResultRepository) authorizeQuestionResultRead(

@@ -60,6 +60,12 @@ func TestEvaluationTaskRepositoryPostgresConnectionsClaimExpiredTaskMutuallyExcl
 	cancelMigrationSQL, err := os.ReadFile(cancelMigrationPath)
 	require.NoError(t, err)
 	require.NoError(t, firstDB.Exec(string(cancelMigrationSQL)).Error)
+	snapshotMigrationPath := filepath.Join(
+		"..", "..", "..", "migrations", "versioned", "000095_evaluation_experiment_snapshot.up.sql",
+	)
+	snapshotMigrationSQL, err := os.ReadFile(snapshotMigrationPath)
+	require.NoError(t, err)
+	require.NoError(t, firstDB.Exec(string(snapshotMigrationSQL)).Error)
 
 	claimAt := time.Date(2026, 8, 28, 10, 0, 0, 0, time.UTC)
 	task := newRecoveryTask(51, "postgres-mutual-claim", claimAt.Add(-time.Hour), claimAt)

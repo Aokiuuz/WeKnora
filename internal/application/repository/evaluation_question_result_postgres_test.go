@@ -35,6 +35,7 @@ func TestEvaluationQuestionResultPostgresContract(t *testing.T) {
 
 	for _, name := range []string{
 		"000090_evaluation_tasks.up.sql",
+		"000091_evaluation_task_cancellation.up.sql",
 		"000095_evaluation_experiment_snapshot.up.sql",
 		"000096_evaluation_question_results.up.sql",
 	} {

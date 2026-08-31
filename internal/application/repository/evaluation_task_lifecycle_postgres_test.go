@@ -41,6 +41,12 @@ func TestEvaluationTaskRepositoryPostgresLifecycleContract(t *testing.T) {
 	cancelMigrationSQL, err := os.ReadFile(cancelMigrationPath)
 	require.NoError(t, err)
 	require.NoError(t, tx.Exec(string(cancelMigrationSQL)).Error)
+	snapshotMigrationPath := filepath.Join(
+		"..", "..", "..", "migrations", "versioned", "000095_evaluation_experiment_snapshot.up.sql",
+	)
+	snapshotMigrationSQL, err := os.ReadFile(snapshotMigrationPath)
+	require.NoError(t, err)
+	require.NoError(t, tx.Exec(string(snapshotMigrationSQL)).Error)
 
 	ctx := context.Background()
 	repo := NewEvaluationTaskRepository(tx)
