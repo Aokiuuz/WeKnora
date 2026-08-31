@@ -24,7 +24,9 @@ func TestListModelUsageEncodesIntervalAndModels(t *testing.T) {
 			"data": {
 				"from":"2026-08-01T00:00:00Z","to":"2026-09-01T00:00:00Z",
 				"items":[{"model_id":"a","call_count":2,"costs":[],
-				"provider_cache":{"hit_rate":null},"application_cache":{"hit_rate":0.5}}]
+				"latency":{"p50_ms":12,"p95_ms":20,"p99_ms":22,"reported_calls":2},
+				"provider_cache":{"hit_rate":null},
+				"application_cache":{"lookup_count":3,"bypass_lookup_count":1,"hit_rate":0.5}}]
 			}
 		}`))
 	}))
@@ -39,11 +41,15 @@ func TestListModelUsageEncodesIntervalAndModels(t *testing.T) {
 	if len(report.Items) != 1 || report.Items[0].ApplicationCache.HitRate == nil {
 		t.Fatalf("report = %#v", report)
 	}
+	if report.Items[0].Latency.P95Ms == nil || *report.Items[0].Latency.P95Ms != 20 ||
+		report.Items[0].ApplicationCache.BypassLookupCount != 1 {
+		t.Fatalf("statistics details = %#v", report.Items[0])
+	}
 }
 
 func TestPutModelPriceUsesImmutablePriceEndpoint(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut || r.URL.Path != "/api/v1/models/model-1/prices" {
+		if r.Method != http.MethodPut || r.URL.Path != "/api/v1/models/model-1/pricing" {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
 		}
 		var request PutModelPriceRequest

@@ -19,7 +19,7 @@ type cacheStore struct {
 	entries map[string]*types.EmbeddingCacheEntry
 	getErr  error
 	putErr  error
-	events  []*types.EmbeddingCacheEvent
+	events  []*types.EmbeddingCacheLookupRecord
 }
 
 func cacheStoreKey(prefix CachePrefix, hash string) string {
@@ -70,7 +70,7 @@ func (s *cacheStore) PutEmbeddingCache(_ context.Context, entries []*types.Embed
 	return nil
 }
 
-func (s *cacheStore) RecordEmbeddingCacheEvent(_ context.Context, event *types.EmbeddingCacheEvent) error {
+func (s *cacheStore) RecordEmbeddingCacheLookup(_ context.Context, event *types.EmbeddingCacheLookupRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cloned := *event
@@ -174,8 +174,12 @@ func TestBatchEmbeddingCacheDeduplicatesMissesAndRestoresOrder(t *testing.T) {
 	defer store.mu.Unlock()
 	require.Len(t, store.entries, 2)
 	require.Len(t, store.events, 2)
+	assert.Equal(t, int64(3), store.events[0].RequestedItems)
+	assert.Equal(t, int64(2), store.events[0].UniqueItems)
 	assert.Equal(t, int64(2), store.events[0].MissItems)
+	assert.Equal(t, types.EmbeddingCacheLookupStatusMiss, store.events[0].Status)
 	assert.Equal(t, int64(2), store.events[1].HitItems)
+	assert.Equal(t, types.EmbeddingCacheLookupStatusHit, store.events[1].Status)
 }
 
 func TestEmbeddingCacheSingleflightIsSharedAcrossWrappers(t *testing.T) {

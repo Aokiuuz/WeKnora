@@ -257,11 +257,23 @@ type ProviderCacheStatistics struct {
 }
 
 type ApplicationCacheStatistics struct {
-	HitItems      int64    `json:"hit_items"`
-	MissItems     int64    `json:"miss_items"`
-	BypassItems   int64    `json:"bypass_items"`
-	ObservedItems int64    `json:"observed_items"`
-	HitRate       *float64 `json:"hit_rate"`
+	LookupCount             int64    `json:"lookup_count"`
+	BypassLookupCount       int64    `json:"bypass_lookup_count"`
+	RequestedItems          int64    `json:"requested_items"`
+	UniqueItems             int64    `json:"unique_items"`
+	HitItems                int64    `json:"hit_items"`
+	MissItems               int64    `json:"miss_items"`
+	BypassItems             int64    `json:"bypass_items"`
+	ObservedItems           int64    `json:"observed_items"`
+	HitRate                 *float64 `json:"hit_rate"`
+	AverageLookupDurationMs float64  `json:"average_lookup_duration_ms"`
+}
+
+type ModelLatencyStatistics struct {
+	P50Ms         *float64 `json:"p50_ms"`
+	P95Ms         *float64 `json:"p95_ms"`
+	P99Ms         *float64 `json:"p99_ms"`
+	ReportedCalls int64    `json:"reported_calls"`
 }
 
 type ModelUsageStatistics struct {
@@ -278,6 +290,7 @@ type ModelUsageStatistics struct {
 	CompletionTokens        int64                      `json:"completion_tokens"`
 	TotalTokens             int64                      `json:"total_tokens"`
 	AverageDurationMs       float64                    `json:"average_duration_ms"`
+	Latency                 ModelLatencyStatistics     `json:"latency"`
 	Costs                   []ModelCostTotal           `json:"costs"`
 	ProviderCache           ProviderCacheStatistics    `json:"provider_cache"`
 	ApplicationCache        ApplicationCacheStatistics `json:"application_cache"`
@@ -347,7 +360,7 @@ func (c *Client) modelUsage(ctx context.Context, path string, options ModelUsage
 }
 
 func (c *Client) ListModelPrices(ctx context.Context, modelID string) ([]ModelPriceVersion, error) {
-	path := fmt.Sprintf("/api/v1/models/%s/prices", url.PathEscape(modelID))
+	path := fmt.Sprintf("/api/v1/models/%s/pricing", url.PathEscape(modelID))
 	resp, err := c.doRequest(ctx, http.MethodGet, path, nil, nil)
 	if err != nil {
 		return nil, err
@@ -367,7 +380,7 @@ func (c *Client) PutModelPrice(
 	modelID string,
 	request PutModelPriceRequest,
 ) (*ModelPriceVersion, error) {
-	path := fmt.Sprintf("/api/v1/models/%s/prices", url.PathEscape(modelID))
+	path := fmt.Sprintf("/api/v1/models/%s/pricing", url.PathEscape(modelID))
 	resp, err := c.doRequest(ctx, http.MethodPut, path, request, nil)
 	if err != nil {
 		return nil, err

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 
+	evaluationstats "github.com/Tencent/WeKnora/internal/evaluation/statistics"
 	"github.com/Tencent/WeKnora/internal/modelobs"
 	"github.com/Tencent/WeKnora/internal/modelstats"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -47,10 +48,20 @@ type modelCostRow struct {
 }
 
 type applicationCacheRow struct {
-	ModelID     string
-	HitItems    int64
-	MissItems   int64
-	BypassItems int64
+	ModelID                 string
+	LookupCount             int64
+	BypassLookupCount       int64
+	RequestedItems          int64
+	UniqueItems             int64
+	HitItems                int64
+	MissItems               int64
+	BypassItems             int64
+	AverageLookupDurationMs float64
+}
+
+type modelLatencyRow struct {
+	ModelID    string
+	DurationMs int64
 }
 
 func (r *modelStatisticsRepository) QueryModelUsage(
@@ -108,6 +119,33 @@ func (r *modelStatisticsRepository) QueryModelUsage(
 		byModel[row.ModelID] = stat
 	}
 
+	latencyQuery := r.db.WithContext(ctx).Table("model_call_records").
+		Where("tenant_id = ? AND started_at >= ? AND started_at < ? AND deleted_at IS NULL",
+			query.TenantID, query.From.UTC(), query.To.UTC()).
+		Where("duration_ms IS NOT NULL")
+	if len(query.ModelIDs) > 0 {
+		latencyQuery = latencyQuery.Where("model_id IN ?", query.ModelIDs)
+	}
+	var latencyRows []modelLatencyRow
+	if err := latencyQuery.Select("model_id, duration_ms").Scan(&latencyRows).Error; err != nil {
+		return nil, fmt.Errorf("query model latency samples: %w", err)
+	}
+	latenciesByModel := make(map[string][]float64)
+	for _, row := range latencyRows {
+		latenciesByModel[row.ModelID] = append(latenciesByModel[row.ModelID], float64(row.DurationMs))
+	}
+	for modelID, values := range latenciesByModel {
+		p50, p95, p99, err := evaluationstats.Percentiles(values)
+		if err != nil {
+			return nil, fmt.Errorf("calculate model latency percentiles: %w", err)
+		}
+		stat := ensureUsageStatistic(byModel, modelID)
+		stat.Latency = types.ModelLatencyStatistics{
+			P50Ms: float64Pointer(p50), P95Ms: float64Pointer(p95), P99Ms: float64Pointer(p99),
+			ReportedCalls: int64(len(values)),
+		}
+	}
+
 	costQuery := r.db.WithContext(ctx).Table("model_call_records").
 		Where("tenant_id = ? AND started_at >= ? AND started_at < ? AND deleted_at IS NULL",
 			query.TenantID, query.From.UTC(), query.To.UTC()).
@@ -127,7 +165,7 @@ func (r *modelStatisticsRepository) QueryModelUsage(
 		})
 	}
 
-	cacheQuery := r.db.WithContext(ctx).Table("embedding_cache_events").
+	cacheQuery := r.db.WithContext(ctx).Table("embedding_cache_lookup_records").
 		Where(
 			"tenant_id = ? AND occurred_at >= ? AND occurred_at < ?",
 			query.TenantID, query.From.UTC(), query.To.UTC(),
@@ -136,8 +174,15 @@ func (r *modelStatisticsRepository) QueryModelUsage(
 		cacheQuery = cacheQuery.Where("model_id IN ?", query.ModelIDs)
 	}
 	var cacheRows []applicationCacheRow
-	if err := cacheQuery.Select(`model_id, COALESCE(SUM(hit_items), 0) AS hit_items,
-		COALESCE(SUM(miss_items), 0) AS miss_items, COALESCE(SUM(bypass_items), 0) AS bypass_items`).
+	if err := cacheQuery.Select(`model_id,
+		COUNT(*) AS lookup_count,
+		SUM(CASE WHEN status = 'bypass' THEN 1 ELSE 0 END) AS bypass_lookup_count,
+		COALESCE(SUM(requested_items), 0) AS requested_items,
+		COALESCE(SUM(unique_items), 0) AS unique_items,
+		COALESCE(SUM(hit_items), 0) AS hit_items,
+		COALESCE(SUM(miss_items), 0) AS miss_items,
+		COALESCE(SUM(bypass_items), 0) AS bypass_items,
+		COALESCE(AVG(duration_ms), 0) AS average_lookup_duration_ms`).
 		Group("model_id").Scan(&cacheRows).Error; err != nil {
 		return nil, fmt.Errorf("query application cache aggregates: %w", err)
 	}
@@ -145,8 +190,11 @@ func (r *modelStatisticsRepository) QueryModelUsage(
 		stat := ensureUsageStatistic(byModel, row.ModelID)
 		observed := row.HitItems + row.MissItems
 		stat.ApplicationCache = types.ApplicationCacheStatistics{
+			LookupCount: row.LookupCount, BypassLookupCount: row.BypassLookupCount,
+			RequestedItems: row.RequestedItems, UniqueItems: row.UniqueItems,
 			HitItems: row.HitItems, MissItems: row.MissItems, BypassItems: row.BypassItems,
 			ObservedItems: observed, HitRate: ratioPointer(row.HitItems, observed),
+			AverageLookupDurationMs: row.AverageLookupDurationMs,
 		}
 	}
 
@@ -189,5 +237,7 @@ func ratioPointer(numerator, denominator int64) *float64 {
 	value := float64(numerator) / float64(denominator)
 	return &value
 }
+
+func float64Pointer(value float64) *float64 { return &value }
 
 var _ modelstats.Store = (*modelStatisticsRepository)(nil)

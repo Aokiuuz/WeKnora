@@ -279,6 +279,12 @@ export interface ModelUsageStatistics {
   completion_tokens: number
   total_tokens: number
   average_duration_ms: number
+  latency: {
+    p50_ms: number | null
+    p95_ms: number | null
+    p99_ms: number | null
+    reported_calls: number
+  }
   costs: ModelCostTotal[]
   provider_cache: {
     read_tokens: number
@@ -288,11 +294,16 @@ export interface ModelUsageStatistics {
     hit_rate: number | null
   }
   application_cache: {
+    lookup_count: number
+    bypass_lookup_count: number
+    requested_items: number
+    unique_items: number
     hit_items: number
     miss_items: number
     bypass_items: number
     observed_items: number
     hit_rate: number | null
+    average_lookup_duration_ms: number
   }
 }
 
@@ -328,7 +339,7 @@ export async function listModelUsage(params: {
 }
 
 export async function listModelPrices(modelId: string): Promise<ModelPriceVersion[]> {
-  const response: any = await get(`/api/v1/models/${modelId}/prices`)
+  const response: any = await get(`/api/v1/models/${modelId}/pricing`)
   return (response.data || []) as ModelPriceVersion[]
 }
 
@@ -336,6 +347,6 @@ export async function putModelPrice(
   modelId: string,
   body: Omit<ModelPriceVersion, 'id' | 'tenant_id' | 'model_id' | 'created_at'>,
 ): Promise<ModelPriceVersion> {
-  const response: any = await put(`/api/v1/models/${modelId}/prices`, body)
+  const response: any = await put(`/api/v1/models/${modelId}/pricing`, body)
   return response.data as ModelPriceVersion
 }

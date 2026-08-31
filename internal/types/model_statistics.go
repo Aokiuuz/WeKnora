@@ -2,19 +2,34 @@ package types
 
 import "time"
 
-// EmbeddingCacheEvent records aggregate cache outcomes without source text or text hashes.
-type EmbeddingCacheEvent struct {
-	ID          string    `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID    uint64    `json:"tenant_id" gorm:"not null;index"`
-	ModelID     string    `json:"model_id" gorm:"type:varchar(64);not null;index"`
-	HitItems    int64     `json:"hit_items" gorm:"not null"`
-	MissItems   int64     `json:"miss_items" gorm:"not null"`
-	BypassItems int64     `json:"bypass_items" gorm:"not null"`
-	OccurredAt  time.Time `json:"occurred_at" gorm:"not null;index"`
+const (
+	// EmbeddingCacheLookupStatusHit marks a lookup whose unique items were all cached.
+	EmbeddingCacheLookupStatusHit = "hit"
+	// EmbeddingCacheLookupStatusMiss marks a lookup whose unique items were all absent.
+	EmbeddingCacheLookupStatusMiss = "miss"
+	// EmbeddingCacheLookupStatusPartial marks a lookup containing cached and absent items.
+	EmbeddingCacheLookupStatusPartial = "partial"
+	// EmbeddingCacheLookupStatusBypass marks a cache repository failure followed by a provider call.
+	EmbeddingCacheLookupStatusBypass = "bypass"
+)
+
+// EmbeddingCacheLookupRecord stores one cache-query outcome without source text, hashes, or vectors.
+type EmbeddingCacheLookupRecord struct {
+	ID             string    `json:"id" gorm:"type:varchar(36);primaryKey"`
+	TenantID       uint64    `json:"tenant_id" gorm:"not null;index"`
+	ModelID        string    `json:"model_id" gorm:"type:varchar(64);not null;index"`
+	RequestedItems int64     `json:"requested_items" gorm:"not null"`
+	UniqueItems    int64     `json:"unique_items" gorm:"not null"`
+	HitItems       int64     `json:"hit_items" gorm:"not null"`
+	MissItems      int64     `json:"miss_items" gorm:"not null"`
+	BypassItems    int64     `json:"bypass_items" gorm:"not null"`
+	Status         string    `json:"status" gorm:"type:varchar(16);not null"`
+	DurationMs     int64     `json:"duration_ms" gorm:"not null"`
+	OccurredAt     time.Time `json:"occurred_at" gorm:"not null;index"`
 }
 
-// TableName returns the embedding cache accounting event table name.
-func (EmbeddingCacheEvent) TableName() string { return "embedding_cache_events" }
+// TableName returns the embedding cache lookup accounting table name.
+func (EmbeddingCacheLookupRecord) TableName() string { return "embedding_cache_lookup_records" }
 
 // ModelUsageQuery selects tenant-scoped call and cache aggregates.
 type ModelUsageQuery struct {
@@ -41,11 +56,24 @@ type ProviderCacheStatistics struct {
 
 // ApplicationCacheStatistics describes persistent embedding-cache key lookups.
 type ApplicationCacheStatistics struct {
-	HitItems      int64    `json:"hit_items"`
-	MissItems     int64    `json:"miss_items"`
-	BypassItems   int64    `json:"bypass_items"`
-	ObservedItems int64    `json:"observed_items"`
-	HitRate       *float64 `json:"hit_rate"`
+	LookupCount             int64    `json:"lookup_count"`
+	BypassLookupCount       int64    `json:"bypass_lookup_count"`
+	RequestedItems          int64    `json:"requested_items"`
+	UniqueItems             int64    `json:"unique_items"`
+	HitItems                int64    `json:"hit_items"`
+	MissItems               int64    `json:"miss_items"`
+	BypassItems             int64    `json:"bypass_items"`
+	ObservedItems           int64    `json:"observed_items"`
+	HitRate                 *float64 `json:"hit_rate"`
+	AverageLookupDurationMs float64  `json:"average_lookup_duration_ms"`
+}
+
+// ModelLatencyStatistics describes reported provider-call latency percentiles.
+type ModelLatencyStatistics struct {
+	P50Ms         *float64 `json:"p50_ms"`
+	P95Ms         *float64 `json:"p95_ms"`
+	P99Ms         *float64 `json:"p99_ms"`
+	ReportedCalls int64    `json:"reported_calls"`
 }
 
 // ModelUsageStatistics is one model's usage, latency, cost, and cache summary.
@@ -63,6 +91,7 @@ type ModelUsageStatistics struct {
 	CompletionTokens        int64                      `json:"completion_tokens"`
 	TotalTokens             int64                      `json:"total_tokens"`
 	AverageDurationMs       float64                    `json:"average_duration_ms"`
+	Latency                 ModelLatencyStatistics     `json:"latency"`
 	Costs                   []ModelCostTotal           `json:"costs"`
 	ProviderCache           ProviderCacheStatistics    `json:"provider_cache"`
 	ApplicationCache        ApplicationCacheStatistics `json:"application_cache"`

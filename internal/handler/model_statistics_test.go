@@ -65,7 +65,7 @@ func TestModelStatisticsHandlerPutPriceUsesPathAndTenant(t *testing.T) {
 	require.NoError(t, err)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/models/model-1/prices", bytes.NewReader(body))
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/models/model-1/pricing", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Params = gin.Params{{Key: "id", Value: "model-1"}}
 	c.Set(types.TenantIDContextKey.String(), uint64(7))

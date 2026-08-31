@@ -631,7 +631,7 @@ func openDatabase(path string) (*gorm.DB, error) {
 	}
 	if err := db.AutoMigrate(
 		&types.EmbeddingCacheEntry{},
-		&types.EmbeddingCacheEvent{},
+		&types.EmbeddingCacheLookupRecord{},
 		&types.EvaluationQuestionResultEntity{},
 	); err != nil {
 		return nil, err

@@ -51,7 +51,7 @@ type Store interface {
 
 // EventStore persists aggregate hit, miss, and bypass counts without cache keys or source text.
 type EventStore interface {
-	RecordEmbeddingCacheEvent(context.Context, *types.EmbeddingCacheEvent) error
+	RecordEmbeddingCacheLookup(context.Context, *types.EmbeddingCacheLookupRecord) error
 }
 
 // Coordinator owns the process-wide singleflight group shared by every wrapper.
@@ -211,7 +211,9 @@ func (e *cachedEmbedder) cachedBatch(
 		uniqueHashes = append(uniqueHashes, hash)
 	}
 
+	lookupStarted := time.Now()
 	cached, lookupErr := e.coordinator.store.GetEmbeddingCache(ctx, prefix, uniqueHashes)
+	lookupDuration := time.Since(lookupStarted)
 	lookupStatus := types.ApplicationCacheStatusMiss
 	if lookupErr != nil {
 		cached = map[string]*types.EmbeddingCacheEntry{}
@@ -237,7 +239,10 @@ func (e *cachedEmbedder) cachedBatch(
 		bypassItems = int64(len(uniqueHashes))
 		missItems = 0
 	}
-	e.coordinator.recordEvent(ctx, prefix, hitItems, missItems, bypassItems)
+	e.coordinator.recordLookup(
+		ctx, prefix, int64(len(texts)), int64(len(uniqueTexts)),
+		hitItems, missItems, bypassItems, lookupDuration,
+	)
 	if len(missingTexts) > 0 {
 		batchKey := singleflightBatchKey(prefix, missingHashes)
 		value, err, _ := e.coordinator.requests.Do(batchKey, func() (any, error) {
@@ -279,10 +284,11 @@ func (e *cachedEmbedder) cachedBatch(
 	return result, nil
 }
 
-func (c *Coordinator) recordEvent(
+func (c *Coordinator) recordLookup(
 	ctx context.Context,
 	prefix CachePrefix,
-	hitItems, missItems, bypassItems int64,
+	requestedItems, uniqueItems, hitItems, missItems, bypassItems int64,
+	duration time.Duration,
 ) {
 	store, ok := c.store.(EventStore)
 	if !ok {
@@ -290,10 +296,26 @@ func (c *Coordinator) recordEvent(
 	}
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cacheWriteTimeout)
 	defer cancel()
-	_ = store.RecordEmbeddingCacheEvent(writeCtx, &types.EmbeddingCacheEvent{
+	_ = store.RecordEmbeddingCacheLookup(writeCtx, &types.EmbeddingCacheLookupRecord{
 		ID: uuid.NewString(), TenantID: prefix.TenantID, ModelID: prefix.ModelID,
-		HitItems: hitItems, MissItems: missItems, BypassItems: bypassItems, OccurredAt: time.Now().UTC(),
+		RequestedItems: requestedItems, UniqueItems: uniqueItems,
+		HitItems: hitItems, MissItems: missItems, BypassItems: bypassItems,
+		Status: cacheLookupStatus(hitItems, missItems, bypassItems), DurationMs: duration.Milliseconds(),
+		OccurredAt: time.Now().UTC(),
 	})
+}
+
+func cacheLookupStatus(hitItems, missItems, bypassItems int64) string {
+	if bypassItems > 0 {
+		return types.EmbeddingCacheLookupStatusBypass
+	}
+	if hitItems > 0 && missItems > 0 {
+		return types.EmbeddingCacheLookupStatusPartial
+	}
+	if hitItems > 0 {
+		return types.EmbeddingCacheLookupStatusHit
+	}
+	return types.EmbeddingCacheLookupStatusMiss
 }
 
 // EmbeddingModelFingerprint hashes behavior-affecting model configuration without secrets.

@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS embedding_cache_events;
+DROP TABLE IF EXISTS embedding_cache_lookup_records;

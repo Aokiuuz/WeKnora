@@ -103,20 +103,37 @@ func (r *embeddingCacheRepository) DeleteExpiredEmbeddingCache(ctx context.Conte
 	return result.RowsAffected, nil
 }
 
-func (r *embeddingCacheRepository) RecordEmbeddingCacheEvent(
+func (r *embeddingCacheRepository) RecordEmbeddingCacheLookup(
 	ctx context.Context,
-	event *types.EmbeddingCacheEvent,
+	record *types.EmbeddingCacheLookupRecord,
 ) error {
-	if event == nil || event.ID == "" || event.TenantID == 0 || event.ModelID == "" || event.OccurredAt.IsZero() ||
-		event.HitItems < 0 || event.MissItems < 0 || event.BypassItems < 0 ||
-		event.HitItems+event.MissItems+event.BypassItems == 0 {
-		return errors.New("record embedding cache event: complete non-negative event is required")
+	if record == nil || record.ID == "" || record.TenantID == 0 || record.ModelID == "" ||
+		record.RequestedItems <= 0 || record.UniqueItems <= 0 || record.UniqueItems > record.RequestedItems ||
+		record.HitItems < 0 || record.MissItems < 0 || record.BypassItems < 0 || record.DurationMs < 0 ||
+		record.HitItems+record.MissItems+record.BypassItems != record.UniqueItems ||
+		record.OccurredAt.IsZero() || !validEmbeddingCacheLookupStatus(record) {
+		return errors.New("record embedding cache lookup: complete non-negative record is required")
 	}
-	event.OccurredAt = event.OccurredAt.UTC()
-	if err := r.db.WithContext(ctx).Create(event).Error; err != nil {
-		return fmt.Errorf("record embedding cache event: %w", err)
+	record.OccurredAt = record.OccurredAt.UTC()
+	if err := r.db.WithContext(ctx).Create(record).Error; err != nil {
+		return fmt.Errorf("record embedding cache lookup: %w", err)
 	}
 	return nil
+}
+
+func validEmbeddingCacheLookupStatus(record *types.EmbeddingCacheLookupRecord) bool {
+	switch record.Status {
+	case types.EmbeddingCacheLookupStatusHit:
+		return record.HitItems == record.UniqueItems && record.MissItems == 0 && record.BypassItems == 0
+	case types.EmbeddingCacheLookupStatusMiss:
+		return record.HitItems == 0 && record.MissItems == record.UniqueItems && record.BypassItems == 0
+	case types.EmbeddingCacheLookupStatusPartial:
+		return record.HitItems > 0 && record.MissItems > 0 && record.BypassItems == 0
+	case types.EmbeddingCacheLookupStatusBypass:
+		return record.HitItems == 0 && record.MissItems == 0 && record.BypassItems == record.UniqueItems
+	default:
+		return false
+	}
 }
 
 var (

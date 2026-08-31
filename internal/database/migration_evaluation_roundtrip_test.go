@@ -62,7 +62,7 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint(23), version)
 	require.False(t, dirty)
-	require.False(t, sqliteTableExists(t, inspectionDB, "embedding_cache_events"))
+	require.False(t, sqliteTableExists(t, inspectionDB, "embedding_cache_lookup_records"))
 
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
@@ -229,7 +229,7 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	var statisticsTableExists bool
 	require.NoError(t, adminDB.Raw(
 		"SELECT EXISTS (SELECT 1 FROM information_schema.tables "+
-			"WHERE table_schema = ? AND table_name = 'embedding_cache_events')", schema,
+			"WHERE table_schema = ? AND table_name = 'embedding_cache_lookup_records')", schema,
 	).Scan(&statisticsTableExists).Error)
 	require.False(t, statisticsTableExists)
 
@@ -425,12 +425,12 @@ func assertPostgresM5ModelStatisticsSchema(t *testing.T, db *gorm.DB, schema str
 	var exists bool
 	require.NoError(t, db.Raw(
 		"SELECT EXISTS (SELECT 1 FROM information_schema.tables "+
-			"WHERE table_schema = ? AND table_name = 'embedding_cache_events')", schema,
+			"WHERE table_schema = ? AND table_name = 'embedding_cache_lookup_records')", schema,
 	).Scan(&exists).Error)
 	require.True(t, exists)
 	require.NoError(t, db.Raw(
 		"SELECT EXISTS (SELECT 1 FROM information_schema.columns "+
-			"WHERE table_schema = ? AND table_name = 'embedding_cache_events' AND column_name = 'text_sha256')",
+			"WHERE table_schema = ? AND table_name = 'embedding_cache_lookup_records' AND column_name = 'text_sha256')",
 		schema,
 	).Scan(&exists).Error)
 	require.False(t, exists)

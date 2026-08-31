@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,7 +16,7 @@ func TestModelStatisticsSeparatesProviderAndApplicationCacheDenominators(t *test
 	db, err := gorm.Open(sqlite.Open("file:model-statistics?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
-		&types.ModelCallRecord{}, &types.ModelPriceVersion{}, &types.EmbeddingCacheEvent{},
+		&types.ModelCallRecord{}, &types.ModelPriceVersion{}, &types.EmbeddingCacheLookupRecord{},
 	))
 	now := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
 	duration := int64(40)
@@ -29,9 +30,23 @@ func TestModelStatisticsSeparatesProviderAndApplicationCacheDenominators(t *test
 		ProviderCacheStatus: "partial", ApplicationCacheStatus: types.ApplicationCacheStatusUnavailable,
 		CreatedAt: now, UpdatedAt: now,
 	}).Error)
-	require.NoError(t, db.Create(&types.EmbeddingCacheEvent{
-		ID: "cache-1", TenantID: 7, ModelID: "model-1", HitItems: 8, MissItems: 2, BypassItems: 3,
-		OccurredAt: now.Add(-time.Hour),
+	for index, value := range []int64{10, 100} {
+		require.NoError(t, db.Create(&types.ModelCallRecord{
+			ID: fmt.Sprintf("call-%d", index+2), TenantID: 7, ModelID: "model-1", ModelSnapshot: types.JSON(`{}`),
+			Purpose: "general", Operation: "chat", StartedAt: now.Add(-time.Hour), DurationMs: &value,
+			Status: types.ModelCallStatusSuccess, ProviderCacheStatus: "unreported",
+			ApplicationCacheStatus: types.ApplicationCacheStatusUnavailable, CreatedAt: now, UpdatedAt: now,
+		}).Error)
+	}
+	require.NoError(t, db.Create(&types.EmbeddingCacheLookupRecord{
+		ID: "cache-1", TenantID: 7, ModelID: "model-1", RequestedItems: 10, UniqueItems: 10,
+		HitItems: 8, MissItems: 2, Status: types.EmbeddingCacheLookupStatusPartial,
+		DurationMs: 4, OccurredAt: now.Add(-time.Hour),
+	}).Error)
+	require.NoError(t, db.Create(&types.EmbeddingCacheLookupRecord{
+		ID: "cache-2", TenantID: 7, ModelID: "model-1", RequestedItems: 3, UniqueItems: 3,
+		BypassItems: 3, Status: types.EmbeddingCacheLookupStatusBypass,
+		DurationMs: 6, OccurredAt: now.Add(-time.Hour),
 	}).Error)
 
 	items, err := NewModelStatisticsRepository(db).QueryModelUsage(context.Background(), types.ModelUsageQuery{
@@ -47,6 +62,14 @@ func TestModelStatisticsSeparatesProviderAndApplicationCacheDenominators(t *test
 	require.Equal(t, int64(3), item.ApplicationCache.BypassItems)
 	require.NotNil(t, item.ApplicationCache.HitRate)
 	require.InDelta(t, 0.8, *item.ApplicationCache.HitRate, 0.0001)
+	require.Equal(t, int64(2), item.ApplicationCache.LookupCount)
+	require.Equal(t, int64(1), item.ApplicationCache.BypassLookupCount)
+	require.Equal(t, int64(13), item.ApplicationCache.RequestedItems)
+	require.InDelta(t, 5, item.ApplicationCache.AverageLookupDurationMs, 0.0001)
+	require.Equal(t, int64(3), item.Latency.ReportedCalls)
+	require.InDelta(t, 40, *item.Latency.P50Ms, 0.0001)
+	require.InDelta(t, 94, *item.Latency.P95Ms, 0.0001)
+	require.InDelta(t, 98.8, *item.Latency.P99Ms, 0.0001)
 	require.Equal(t, []types.ModelCostTotal{{Currency: "USD", CostMicrounits: 321}}, item.Costs)
 }
 
@@ -54,11 +77,12 @@ func TestModelStatisticsReturnsCacheOnlyModel(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:model-statistics-cache-only?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
-		&types.ModelCallRecord{}, &types.ModelPriceVersion{}, &types.EmbeddingCacheEvent{},
+		&types.ModelCallRecord{}, &types.ModelPriceVersion{}, &types.EmbeddingCacheLookupRecord{},
 	))
 	now := time.Now().UTC()
-	require.NoError(t, db.Create(&types.EmbeddingCacheEvent{
-		ID: "hot", TenantID: 7, ModelID: "embedding-1", HitItems: 4, OccurredAt: now.Add(-time.Minute),
+	require.NoError(t, db.Create(&types.EmbeddingCacheLookupRecord{
+		ID: "hot", TenantID: 7, ModelID: "embedding-1", RequestedItems: 4, UniqueItems: 4,
+		HitItems: 4, Status: types.EmbeddingCacheLookupStatusHit, OccurredAt: now.Add(-time.Minute),
 	}).Error)
 	items, err := NewModelStatisticsRepository(db).QueryModelUsage(context.Background(), types.ModelUsageQuery{
 		TenantID: 7, From: now.Add(-time.Hour), To: now,

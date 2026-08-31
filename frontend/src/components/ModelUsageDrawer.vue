@@ -38,7 +38,9 @@
           <div class="usage-metrics">
             <div><span>{{ t('modelSettings.usage.calls') }}</span><strong>{{ integer(row.call_count) }}</strong></div>
             <div><span>{{ t('modelSettings.usage.tokens') }}</span><strong>{{ integer(row.total_tokens) }}</strong></div>
-            <div><span>{{ t('modelSettings.usage.latency') }}</span><strong>{{ decimal(row.average_duration_ms) }} ms</strong></div>
+            <div><span>p50</span><strong>{{ latency(row.latency.p50_ms) }}</strong></div>
+            <div><span>p95</span><strong>{{ latency(row.latency.p95_ms) }}</strong></div>
+            <div><span>p99</span><strong>{{ latency(row.latency.p99_ms) }}</strong></div>
             <div><span>{{ t('modelSettings.usage.unpriced') }}</span><strong>{{ integer(row.unpriced_calls) }}</strong></div>
           </div>
           <div class="cache-grid">
@@ -182,6 +184,7 @@ const modelName = (id: string) => modelFor(id) ? modelLabel(modelFor(id)!) : id
 const modelType = (id: string) => modelFor(id)?.type || ''
 const integer = (value: number) => new Intl.NumberFormat().format(value || 0)
 const decimal = (value: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value || 0)
+const latency = (value: number | null) => value == null ? '—' : `${decimal(value)} ms`
 const percent = (value: number | null) => value == null ? '—' : `${(value * 100).toFixed(1)}%`
 const micros = (value: number) => (value / 1_000_000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')
 const formatCosts = (costs: ModelCostTotal[]) => costs?.length
@@ -199,7 +202,7 @@ const formatCosts = (costs: ModelCostTotal[]) => costs?.length
 .usage-card__header h4, .pricing-section h4 { margin: 0; font-size: 15px; }
 .usage-card__header span, .pricing-section p, .cache-grid p { color: var(--td-text-color-secondary); font-size: 12px; margin: 4px 0 0; }
 .usage-card__cost { font-weight: 600; color: var(--td-brand-color); }
-.usage-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.usage-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
 .usage-metrics div, .cache-grid section { padding: 10px 12px; border-radius: 8px; background: var(--td-bg-color-secondarycontainer); }
 .usage-metrics span { display: block; color: var(--td-text-color-secondary); font-size: 12px; }
 .usage-metrics strong { display: block; margin-top: 5px; font-size: 15px; }

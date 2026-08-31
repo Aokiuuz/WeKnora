@@ -32,7 +32,7 @@ var versionedSQLiteTables = []string{
 	"model_price_versions",
 	"model_call_records",
 	"embedding_cache_entries",
-	"embedding_cache_events",
+	"embedding_cache_lookup_records",
 	"evaluation_human_ratings",
 }
 
@@ -128,12 +128,15 @@ func assertSQLiteEmbeddingCacheSchema(t *testing.T, db *sql.DB) {
 
 func assertSQLiteModelStatisticsSchema(t *testing.T, db *sql.DB) {
 	t.Helper()
-	require.True(t, sqliteTableExists(t, db, "embedding_cache_events"))
-	for _, column := range []string{"tenant_id", "model_id", "hit_items", "miss_items", "bypass_items", "occurred_at"} {
-		require.Truef(t, sqliteColumnExists(t, db, "embedding_cache_events", column),
-			"SQLite embedding_cache_events must contain column %s", column)
+	require.True(t, sqliteTableExists(t, db, "embedding_cache_lookup_records"))
+	for _, column := range []string{
+		"tenant_id", "model_id", "requested_items", "unique_items", "hit_items", "miss_items",
+		"bypass_items", "status", "duration_ms", "occurred_at",
+	} {
+		require.Truef(t, sqliteColumnExists(t, db, "embedding_cache_lookup_records", column),
+			"SQLite embedding_cache_lookup_records must contain column %s", column)
 	}
-	require.False(t, sqliteColumnExists(t, db, "embedding_cache_events", "text_sha256"),
+	require.False(t, sqliteColumnExists(t, db, "embedding_cache_lookup_records", "text_sha256"),
 		"cache statistics must not persist cache keys")
 }
 
