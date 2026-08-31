@@ -297,6 +297,55 @@ func (e *EvaluationHandler) ReplaceEvaluationTaskLabels(c *gin.Context) {
 	})
 }
 
+// CompareEvaluationTasksRequest selects two to ten runs and an optional baseline.
+type CompareEvaluationTasksRequest struct {
+	TaskIDs        []string `json:"task_ids"`
+	BaselineTaskID string   `json:"baseline_task_id,omitempty"`
+}
+
+// CompareEvaluationTasks godoc
+// @Summary      对比评估运行
+// @Description  返回成功运行的冻结参数差异、指标绝对值和相对基线增减值
+// @Tags         评估
+// @Accept       json
+// @Produce      json
+// @Param        request  body      CompareEvaluationTasksRequest true "运行与基线"
+// @Success      200      {object}  map[string]interface{}        "对比结果"
+// @Failure      400      {object}  errors.AppError               "请求参数错误"
+// @Failure      404      {object}  errors.AppError               "运行不存在"
+// @Failure      409      {object}  errors.AppError               "运行不可对比"
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /evaluation/comparisons [post]
+func (e *EvaluationHandler) CompareEvaluationTasks(c *gin.Context) {
+	var request CompareEvaluationTasksRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		_ = c.Error(errors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
+		return
+	}
+	response, err := e.evaluationService.CompareEvaluations(
+		c.Request.Context(),
+		types.EvaluationComparisonRequest{
+			TaskIDs: request.TaskIDs, BaselineTaskID: request.BaselineTaskID,
+		},
+	)
+	if err != nil {
+		switch {
+		case stderrors.Is(err, types.ErrEvaluationComparisonInvalid):
+			_ = c.Error(errors.NewBadRequestError("Invalid evaluation comparison request").WithDetails(err.Error()))
+		case stderrors.Is(err, types.ErrEvaluationComparisonTaskNotFound):
+			_ = c.Error(errors.NewNotFoundError("Evaluation task not found"))
+		case stderrors.Is(err, types.ErrEvaluationComparisonConflict):
+			_ = c.Error(errors.NewConflictError("Evaluation runs are not comparable").WithDetails(err.Error()))
+		default:
+			logger.ErrorWithFields(c.Request.Context(), err, nil)
+			_ = c.Error(errors.NewInternalServerError(err.Error()))
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": response})
+}
+
 // CancelEvaluation godoc
 // @Summary      取消评估任务
 // @Description  持久化取消请求；运行实例处理取消并完成资源清理后任务进入 Canceled

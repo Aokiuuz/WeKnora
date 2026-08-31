@@ -29,6 +29,11 @@ type EvaluationService interface {
 	// ReplaceEvaluationTaskLabels atomically replaces the normalized labels
 	// without changing task execution version or updated_at.
 	ReplaceEvaluationTaskLabels(ctx context.Context, taskID string, labels []string) ([]string, error)
+	// CompareEvaluations returns a read-only comparison over frozen successful runs.
+	CompareEvaluations(
+		ctx context.Context,
+		request types.EvaluationComparisonRequest,
+	) (*types.EvaluationComparisonResponse, error)
 	// DeleteEvaluation soft-deletes one terminal task. Missing and already
 	// deleted tasks are idempotent successes; active tasks are rejected.
 	DeleteEvaluation(ctx context.Context, taskID string) error

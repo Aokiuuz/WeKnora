@@ -84,6 +84,14 @@ func TestEvaluationTaskRepositoryPostgresListMigrationAndKeyset(t *testing.T) {
 		task.ExperimentSnapshot = types.JSON(`{"models":{"chat":{"id":"chat-a"}}}`)
 		require.NoError(t, db.Create(task).Error)
 	}
+	hidden := newListTask(82, "pg-hidden", sharedStart, types.EvaluationStatueSuccess)
+	hidden.LeaseExpiresAt = nil
+	require.NoError(t, db.Create(hidden).Error)
+	comparisonRows, err := repo.GetTasksByIDs(ctx, 81, []string{
+		"pg-list-0", "pg-list-2", "pg-hidden", "pg-missing",
+	})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"pg-list-0", "pg-list-2"}, mapKeys(comparisonRows))
 	require.NoError(t, repo.ReplaceTaskLabels(
 		ctx,
 		81,

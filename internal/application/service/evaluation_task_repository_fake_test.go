@@ -218,6 +218,23 @@ func (r *fakeEvaluationTaskRepository) GetTask(
 	return cloneEvaluationTaskEntity(task), nil
 }
 
+func (r *fakeEvaluationTaskRepository) GetTasksByIDs(
+	_ context.Context,
+	tenantID uint64,
+	taskIDs []string,
+) (map[string]*types.EvaluationTaskEntity, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.recordLocked("GetTasksByIDs", tenantID, "")
+	result := make(map[string]*types.EvaluationTaskEntity, len(taskIDs))
+	for _, taskID := range taskIDs {
+		if task, ok := r.tasks[evaluationTaskRepositoryKey{tenantID: tenantID, taskID: taskID}]; ok {
+			result[taskID] = cloneEvaluationTaskEntity(task)
+		}
+	}
+	return result, nil
+}
+
 func (r *fakeEvaluationTaskRepository) TryStartTask(
 	_ context.Context,
 	command types.EvaluationTaskStartCommand,
@@ -804,7 +821,21 @@ func cloneEvaluationTaskEntity(task *types.EvaluationTaskEntity) *types.Evaluati
 	cloned := *task
 	cloned.Params = append(types.JSON(nil), task.Params...)
 	cloned.Metric = append(types.JSON(nil), task.Metric...)
+	cloned.ExperimentSnapshot = append(types.JSON(nil), task.ExperimentSnapshot...)
 	cloned.CleanupErrors = append(types.JSON(nil), task.CleanupErrors...)
+	cloned.Labels = append([]string(nil), task.Labels...)
+	if task.DatasetVersionID != nil {
+		value := *task.DatasetVersionID
+		cloned.DatasetVersionID = &value
+	}
+	if task.DatasetContentSHA256 != nil {
+		value := *task.DatasetContentSHA256
+		cloned.DatasetContentSHA256 = &value
+	}
+	if task.ExperimentSHA256 != nil {
+		value := *task.ExperimentSHA256
+		cloned.ExperimentSHA256 = &value
+	}
 	if task.EndTime != nil {
 		endTime := *task.EndTime
 		cloned.EndTime = &endTime

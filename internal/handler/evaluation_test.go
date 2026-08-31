@@ -17,8 +17,10 @@ import (
 )
 
 type stubEvaluationService struct {
-	lastOptions *types.EvaluationOptions
-	err         error
+	lastOptions       *types.EvaluationOptions
+	comparisonRequest *types.EvaluationComparisonRequest
+	comparisonResult  *types.EvaluationComparisonResponse
+	err               error
 }
 
 func (s *stubEvaluationService) Evaluation(
@@ -64,6 +66,13 @@ func (s *stubEvaluationService) ReplaceEvaluationTaskLabels(
 	context.Context, string, []string,
 ) ([]string, error) {
 	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *stubEvaluationService) CompareEvaluations(
+	_ context.Context, request types.EvaluationComparisonRequest,
+) (*types.EvaluationComparisonResponse, error) {
+	s.comparisonRequest = &request
+	return s.comparisonResult, s.err
 }
 
 func (s *stubEvaluationService) DeleteEvaluation(context.Context, string) error {

@@ -125,6 +125,28 @@ func (r *evaluationTaskRepository) GetTask(
 	return &task, nil
 }
 
+// GetTasksByIDs returns a tenant-scoped batch projection in one query.
+func (r *evaluationTaskRepository) GetTasksByIDs(
+	ctx context.Context,
+	tenantID uint64,
+	taskIDs []string,
+) (map[string]*types.EvaluationTaskEntity, error) {
+	tasksByID := make(map[string]*types.EvaluationTaskEntity, len(taskIDs))
+	if tenantID == 0 || len(taskIDs) == 0 {
+		return tasksByID, nil
+	}
+	var tasks []*types.EvaluationTaskEntity
+	if err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND id IN ?", tenantID, taskIDs).
+		Find(&tasks).Error; err != nil {
+		return nil, fmt.Errorf("get evaluation tasks by ids: %w", err)
+	}
+	for _, task := range tasks {
+		tasksByID[task.ID] = task
+	}
+	return tasksByID, nil
+}
+
 // TryStartTask moves one lease-valid pending task to Running for its current owner.
 func (r *evaluationTaskRepository) TryStartTask(
 	ctx context.Context,
