@@ -73,7 +73,7 @@ func startEvaluationQuestionTask(
 func TestEvaluationQuestionResultPublishesAtomically(t *testing.T) {
 	db := setupEvaluationTaskRepositoryTestDB(t)
 	taskRepo := NewEvaluationTaskRepository(db)
-	repo := NewEvaluationQuestionResultRepository(db, nil)
+	repo := NewEvaluationQuestionResultRepository(db)
 	ctx := context.Background()
 
 	task := newEvaluationTaskEntity(31, "question-atomic")
@@ -103,7 +103,7 @@ func TestEvaluationQuestionResultPublishesAtomically(t *testing.T) {
 func TestEvaluationQuestionResultIdempotentRetryAndConflict(t *testing.T) {
 	db := setupEvaluationTaskRepositoryTestDB(t)
 	taskRepo := NewEvaluationTaskRepository(db)
-	repo := NewEvaluationQuestionResultRepository(db, nil)
+	repo := NewEvaluationQuestionResultRepository(db)
 	ctx := context.Background()
 
 	task := newEvaluationTaskEntity(32, "question-idempotent")
@@ -136,7 +136,7 @@ func TestEvaluationQuestionResultIdempotentRetryAndConflict(t *testing.T) {
 func TestEvaluationQuestionResultRejectsStaleOwnerAndLease(t *testing.T) {
 	db := setupEvaluationTaskRepositoryTestDB(t)
 	taskRepo := NewEvaluationTaskRepository(db)
-	repo := NewEvaluationQuestionResultRepository(db, nil)
+	repo := NewEvaluationQuestionResultRepository(db)
 	ctx := context.Background()
 
 	task := newEvaluationTaskEntity(33, "question-stale")
@@ -169,23 +169,32 @@ func TestEvaluationQuestionResultRejectsStaleOwnerAndLease(t *testing.T) {
 func TestEvaluationQuestionResultRejectsCanceledTask(t *testing.T) {
 	db := setupEvaluationTaskRepositoryTestDB(t)
 	taskRepo := NewEvaluationTaskRepository(db)
-	// The narrow M2d checker stands in for the cancel_requested_at predicate.
-	checker := interfaces.EvaluationTaskCancellationChecker(
-		func(context.Context, uint64, string) (bool, error) { return true, nil })
-	repo := NewEvaluationQuestionResultRepository(db, checker)
+	repo := NewEvaluationQuestionResultRepository(db)
 	ctx := context.Background()
 
 	task := newEvaluationTaskEntity(34, "question-canceled")
 	started := startEvaluationQuestionTask(t, taskRepo, task)
-	_, _, err := repo.PublishQuestionResult(ctx,
+	canceled, err := taskRepo.RequestCancel(ctx, types.EvaluationTaskCancelCommand{
+		TenantID: task.TenantID,
+		TaskID:   task.ID,
+		Now:      time.Now().UTC(),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, canceled.CancelRequestedAt)
+	require.Equal(t, started.Version, canceled.Version)
+
+	_, _, err = repo.PublishQuestionResult(ctx,
 		newEvaluationQuestionCommandFixture(started, started.Version, 0))
 	require.ErrorIs(t, err, ErrEvaluationQuestionResultCanceled)
+	rows, listErr := repo.ListQuestionResults(ctx, task.TenantID, task.ID, 0, 10)
+	require.NoError(t, listErr)
+	require.Empty(t, rows)
 }
 
 func TestEvaluationQuestionResultKeysetPaginationAndTenantIsolation(t *testing.T) {
 	db := setupEvaluationTaskRepositoryTestDB(t)
 	taskRepo := NewEvaluationTaskRepository(db)
-	repo := NewEvaluationQuestionResultRepository(db, nil)
+	repo := NewEvaluationQuestionResultRepository(db)
 	ctx := context.Background()
 
 	task := newEvaluationTaskEntity(35, "question-paging")
@@ -228,7 +237,7 @@ func TestEvaluationQuestionResultKeysetPaginationAndTenantIsolation(t *testing.T
 func TestEvaluationQuestionResultConcurrentOrderDoesNotChangeOutcome(t *testing.T) {
 	db := setupEvaluationTaskRepositoryTestDB(t)
 	taskRepo := NewEvaluationTaskRepository(db)
-	repo := NewEvaluationQuestionResultRepository(db, nil)
+	repo := NewEvaluationQuestionResultRepository(db)
 	ctx := context.Background()
 
 	task := newEvaluationTaskEntity(36, "question-concurrent")
@@ -280,7 +289,7 @@ func TestEvaluationQuestionResultConcurrentOrderDoesNotChangeOutcome(t *testing.
 func TestEvaluationQuestionResultTerminalKeepsPartialRows(t *testing.T) {
 	db := setupEvaluationTaskRepositoryTestDB(t)
 	taskRepo := NewEvaluationTaskRepository(db)
-	repo := NewEvaluationQuestionResultRepository(db, nil)
+	repo := NewEvaluationQuestionResultRepository(db)
 	ctx := context.Background()
 
 	task := newEvaluationTaskEntity(37, "question-partial")

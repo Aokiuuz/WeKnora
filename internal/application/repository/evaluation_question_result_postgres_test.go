@@ -44,7 +44,7 @@ func TestEvaluationQuestionResultPostgresContract(t *testing.T) {
 	}
 
 	taskRepo := NewEvaluationTaskRepository(tx)
-	repo := NewEvaluationQuestionResultRepository(tx, nil)
+	repo := NewEvaluationQuestionResultRepository(tx)
 	ctx := context.Background()
 
 	task := newEvaluationTaskEntity(41, "postgres-questions")

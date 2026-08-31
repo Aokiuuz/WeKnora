@@ -185,7 +185,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(func(db *gorm.DB) interfaces.EvaluationQuestionResultRepository {
 		// The M2d cancellation predicate lands in its own slice; the narrow
 		// checker is wired then (see M3_INTEGRATION.md).
-		return repository.NewEvaluationQuestionResultRepository(db, nil)
+		return repository.NewEvaluationQuestionResultRepository(db)
 	}))
 
 	// MCP manager for managing MCP client connections

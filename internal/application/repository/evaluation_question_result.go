@@ -21,24 +21,17 @@ var (
 
 type evaluationQuestionResultRepository struct {
 	db *gorm.DB
-	// cancelChecker is the narrow M2d integration point; a nil checker means
-	// the cancellation column does not exist on this draft's schema yet.
-	cancelChecker interfaces.EvaluationTaskCancellationChecker
 }
 
 // NewEvaluationQuestionResultRepository constructs the per-question repository.
-func NewEvaluationQuestionResultRepository(
-	db *gorm.DB,
-	cancelChecker interfaces.EvaluationTaskCancellationChecker,
-) interfaces.EvaluationQuestionResultRepository {
-	return &evaluationQuestionResultRepository{db: db, cancelChecker: cancelChecker}
+func NewEvaluationQuestionResultRepository(db *gorm.DB) interfaces.EvaluationQuestionResultRepository {
+	return &evaluationQuestionResultRepository{db: db}
 }
 
 // PublishQuestionResult atomically inserts one per-question row and advances
 // the owning task's finished counter, aggregate metric, and version inside
-// one transaction. The task update keeps the M2b conditions (tenant, owner,
-// Running, version, unexpired lease); the M2d cancellation predicate plugs in
-// through the narrow checker until its column lands on this schema.
+// one transaction. The task update requires the tenant, owner, Running status,
+// version, unexpired lease, and absence of a cancellation request.
 func (r *evaluationQuestionResultRepository) PublishQuestionResult(
 	ctx context.Context,
 	command interfaces.EvaluationQuestionResultCommand,
@@ -61,17 +54,6 @@ func (r *evaluationQuestionResultRepository) PublishQuestionResult(
 	if command.Total < 1 || command.Finished < 1 || command.Finished > command.Total {
 		return nil, false, errors.New("publish evaluation question result: expected 1 <= finished <= total")
 	}
-	if r.cancelChecker != nil {
-		canceled, err := r.cancelChecker(ctx, command.TenantID, command.TaskID)
-		if err != nil {
-			return nil, false, fmt.Errorf("publish evaluation question result: cancellation check: %w", err)
-		}
-		if canceled {
-			return nil, false, fmt.Errorf("publish evaluation question result %s: %w",
-				command.TaskID, ErrEvaluationQuestionResultCanceled)
-		}
-	}
-
 	row, err := evaluationQuestionResultRowFrom(command)
 	if err != nil {
 		return nil, false, err
@@ -113,6 +95,7 @@ func (r *evaluationQuestionResultRepository) PublishQuestionResult(
 				command.TenantID, command.TaskID, command.OwnerID, command.ExpectedVersion).
 			Where("status = ?", types.EvaluationStatueRunning).
 			Where("lease_expires_at > ?", now).
+			Where("cancel_requested_at IS NULL").
 			Where("(total = 0 OR total = ?) AND finished < ?", command.Total, command.Finished).
 			Updates(map[string]any{
 				"total":    command.Total,
@@ -132,6 +115,14 @@ func (r *evaluationQuestionResultRepository) PublishQuestionResult(
 				command.TaskID, updateResult.Error)
 		}
 		if updateResult.RowsAffected != 1 {
+			var taskState types.EvaluationTaskEntity
+			stateErr := tx.Select("cancel_requested_at").
+				Where("tenant_id = ? AND id = ?", command.TenantID, command.TaskID).
+				First(&taskState).Error
+			if stateErr == nil && taskState.CancelRequestedAt != nil {
+				return fmt.Errorf("publish evaluation question result %s: %w",
+					command.TaskID, ErrEvaluationQuestionResultCanceled)
+			}
 			return fmt.Errorf("publish evaluation question result %s: task state conflict: %w",
 				command.TaskID, ErrEvaluationTaskStateConflict)
 		}

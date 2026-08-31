@@ -52,9 +52,3 @@ type EvaluationQuestionResultRepository interface {
 		limit int,
 	) ([]*types.EvaluationQuestionResultEntity, error)
 }
-
-// EvaluationTaskCancellationChecker is the narrow M2d integration point:
-// PublishQuestionResult consults it so a canceled worker stops writing. The
-// M3 draft ships a nil default (no cancellation column yet); M2d wiring
-// replaces it with the cancel_requested_at predicate.
-type EvaluationTaskCancellationChecker func(ctx context.Context, tenantID uint64, taskID string) (bool, error)
