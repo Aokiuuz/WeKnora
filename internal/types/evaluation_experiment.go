@@ -56,14 +56,14 @@ type EvaluationDatasetSnapshot struct {
 // configuration fingerprint. Config SHA-256 never covers API keys, app
 // secrets, custom authorization headers, or credentials embedded in URLs.
 type EvaluationModelSnapshot struct {
-	ID             string    `json:"id"`
-	UpstreamName   string    `json:"upstream_name"`
-	Type           string    `json:"type"`
-	Source         string    `json:"source"`
-	Provider       string    `json:"provider"`
-	InterfaceType  string    `json:"interface_type"`
-	ConfigSHA256   string    `json:"config_sha256"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID            string    `json:"id"`
+	UpstreamName  string    `json:"upstream_name"`
+	Type          string    `json:"type"`
+	Source        string    `json:"source"`
+	Provider      string    `json:"provider"`
+	InterfaceType string    `json:"interface_type"`
+	ConfigSHA256  string    `json:"config_sha256"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // EvaluationModelSetSnapshot pins the four model roles of one experiment.
@@ -164,11 +164,11 @@ type EvaluationExperimentSnapshot struct {
 	// it never carries the temporary evaluation KB ID.
 	SourceKnowledgeBaseID *string `json:"source_knowledge_base_id"`
 
-	Models        EvaluationModelSetSnapshot       `json:"models"`
-	Configuration EvaluationConfigurationSnapshot  `json:"configuration"`
-	MetricPlan    *EvaluationMetricPlanSnapshot    `json:"metric_plan"`
-	Code          EvaluationCodeSnapshot           `json:"code"`
-	Environment   EvaluationEnvironmentSnapshot    `json:"environment"`
+	Models          EvaluationModelSetSnapshot        `json:"models"`
+	Configuration   EvaluationConfigurationSnapshot   `json:"configuration"`
+	MetricPlan      *EvaluationMetricPlanSnapshot     `json:"metric_plan"`
+	Code            EvaluationCodeSnapshot            `json:"code"`
+	Environment     EvaluationEnvironmentSnapshot     `json:"environment"`
 	Reproducibility EvaluationReproducibilitySnapshot `json:"reproducibility"`
 }
 

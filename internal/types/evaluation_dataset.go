@@ -34,17 +34,17 @@ func (EvaluationDataset) TableName() string { return "evaluation_datasets" }
 // unique dataset_version_id used by APIs, task records, and metric plans;
 // VersionNumber is only a human-readable per-dataset sequence.
 type EvaluationDatasetVersion struct {
-	ID              string    `json:"id" gorm:"type:varchar(64);primaryKey"`
-	DatasetID       string    `json:"dataset_id" gorm:"type:varchar(64);not null"`
-	VersionNumber   int       `json:"version_number" gorm:"not null"`
-	SchemaVersion   int       `json:"schema_version" gorm:"not null"`
-	ArtifactSHA256  string    `json:"artifact_sha256" gorm:"type:char(64);not null"`
-	ContentSHA256   string    `json:"content_sha256" gorm:"type:char(64);not null"`
-	Manifest        JSON      `json:"manifest" gorm:"not null"`
-	PassageCount    int       `json:"passage_count" gorm:"not null"`
-	QuestionCount   int       `json:"question_count" gorm:"not null"`
-	RelevanceCount  int       `json:"relevance_count" gorm:"not null"`
-	CreatedAt       time.Time `json:"created_at" gorm:"not null"`
+	ID             string    `json:"id" gorm:"type:varchar(64);primaryKey"`
+	DatasetID      string    `json:"dataset_id" gorm:"type:varchar(64);not null"`
+	VersionNumber  int       `json:"version_number" gorm:"not null"`
+	SchemaVersion  int       `json:"schema_version" gorm:"not null"`
+	ArtifactSHA256 string    `json:"artifact_sha256" gorm:"type:char(64);not null"`
+	ContentSHA256  string    `json:"content_sha256" gorm:"type:char(64);not null"`
+	Manifest       JSON      `json:"manifest" gorm:"not null"`
+	PassageCount   int       `json:"passage_count" gorm:"not null"`
+	QuestionCount  int       `json:"question_count" gorm:"not null"`
+	RelevanceCount int       `json:"relevance_count" gorm:"not null"`
+	CreatedAt      time.Time `json:"created_at" gorm:"not null"`
 }
 
 // TableName binds EvaluationDatasetVersion to the version table.
@@ -109,8 +109,8 @@ type EvaluationDatasetRelevanceInput struct {
 
 // EvaluationDatasetVersionInput is the structured content of one new immutable version.
 type EvaluationDatasetVersionInput struct {
-	Passages  []EvaluationDatasetPassageInput  `json:"passages"`
-	Questions []EvaluationDatasetQuestionInput `json:"questions"`
+	Passages  []EvaluationDatasetPassageInput   `json:"passages"`
+	Questions []EvaluationDatasetQuestionInput  `json:"questions"`
 	Relevance []EvaluationDatasetRelevanceInput `json:"relevance"`
 }
 

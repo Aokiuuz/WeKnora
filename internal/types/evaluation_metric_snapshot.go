@@ -31,9 +31,9 @@ type EvaluationMetricSpecSnapshot struct {
 // creation. PlanHash covers the canonical specs so concurrent completion
 // order cannot change the stored bytes.
 type EvaluationMetricPlanSnapshot struct {
-	SchemaVersion int                             `json:"schema_version"`
-	PlanHash      string                          `json:"plan_hash"`
-	Metrics       []EvaluationMetricSpecSnapshot  `json:"metrics"`
+	SchemaVersion int                            `json:"schema_version"`
+	PlanHash      string                         `json:"plan_hash"`
+	Metrics       []EvaluationMetricSpecSnapshot `json:"metrics"`
 }
 
 // EvaluationMetricObservation states distinguish real zero values from

@@ -21,31 +21,31 @@ type EvaluationRankedResult struct {
 // EvaluationQuestionResult is one immutable per-question fact row. Nullable
 // runtime facts stay null instead of a fabricated zero.
 type EvaluationQuestionResult struct {
-	TenantID           uint64                     `json:"tenant_id"`
-	TaskID             string                     `json:"task_id"`
-	SampleIndex        int                        `json:"sample_index"`
-	QID                string                     `json:"qid"`
-	Question           string                     `json:"question"`
-	ReferenceAnswer    string                     `json:"reference_answer"`
-	GroundTruthPIDs    []int                      `json:"ground_truth_pids"`
-	SearchResults      []EvaluationRankedResult   `json:"search_results"`
-	RerankResults      []EvaluationRankedResult   `json:"rerank_results"`
-	GenerationPIDs     []int                      `json:"generation_pids"`
-	GeneratedText      string                     `json:"generated_text"`
-	ErrorCode          string                     `json:"error_code,omitempty"`
-	PerSampleMetrics   *EvaluationMetricResult    `json:"per_sample_metrics,omitempty"`
-	MetricObservations json.RawMessage            `json:"metric_observations,omitempty"`
-	RetrievalMs        *int64                     `json:"retrieval_ms,omitempty"`
-	RerankMs           *int64                     `json:"rerank_ms,omitempty"`
-	GenerationMs       *int64                     `json:"generation_ms,omitempty"`
-	TotalMs            *int64                     `json:"total_ms,omitempty"`
-	PromptTokens       *int                       `json:"prompt_tokens,omitempty"`
-	CompletionTokens   *int                       `json:"completion_tokens,omitempty"`
-	TotalTokens        *int                       `json:"total_tokens,omitempty"`
-	Status             string                     `json:"status"`
-	ResultHash         string                     `json:"result_hash"`
-	CreatedAt          time.Time                  `json:"created_at"`
-	UpdatedAt          time.Time                  `json:"updated_at"`
+	TenantID           uint64                   `json:"tenant_id"`
+	TaskID             string                   `json:"task_id"`
+	SampleIndex        int                      `json:"sample_index"`
+	QID                string                   `json:"qid"`
+	Question           string                   `json:"question"`
+	ReferenceAnswer    string                   `json:"reference_answer"`
+	GroundTruthPIDs    []int                    `json:"ground_truth_pids"`
+	SearchResults      []EvaluationRankedResult `json:"search_results"`
+	RerankResults      []EvaluationRankedResult `json:"rerank_results"`
+	GenerationPIDs     []int                    `json:"generation_pids"`
+	GeneratedText      string                   `json:"generated_text"`
+	ErrorCode          string                   `json:"error_code,omitempty"`
+	PerSampleMetrics   *EvaluationMetricResult  `json:"per_sample_metrics,omitempty"`
+	MetricObservations json.RawMessage          `json:"metric_observations,omitempty"`
+	RetrievalMs        *int64                   `json:"retrieval_ms,omitempty"`
+	RerankMs           *int64                   `json:"rerank_ms,omitempty"`
+	GenerationMs       *int64                   `json:"generation_ms,omitempty"`
+	TotalMs            *int64                   `json:"total_ms,omitempty"`
+	PromptTokens       *int                     `json:"prompt_tokens,omitempty"`
+	CompletionTokens   *int                     `json:"completion_tokens,omitempty"`
+	TotalTokens        *int                     `json:"total_tokens,omitempty"`
+	Status             string                   `json:"status"`
+	ResultHash         string                   `json:"result_hash"`
+	CreatedAt          time.Time                `json:"created_at"`
+	UpdatedAt          time.Time                `json:"updated_at"`
 }
 
 // EvaluationQuestionResultPage is one keyset page in ascending sample_index.
@@ -56,8 +56,8 @@ type EvaluationQuestionResultPage struct {
 
 // EvaluationQuestionResultPageResponse is the API envelope for one page.
 type EvaluationQuestionResultPageResponse struct {
-	Success bool                           `json:"success"`
-	Data    *EvaluationQuestionResultPage  `json:"data"`
+	Success bool                          `json:"success"`
+	Data    *EvaluationQuestionResultPage `json:"data"`
 }
 
 // ListEvaluationQuestionResults reads one per-question page; pass an empty

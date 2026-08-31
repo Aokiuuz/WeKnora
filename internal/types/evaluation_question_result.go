@@ -46,20 +46,20 @@ type EvaluationRankedResult struct {
 
 // EvaluationQuestionResultEntity is one immutable per-question fact row.
 type EvaluationQuestionResultEntity struct {
-	TenantID          uint64 `json:"tenant_id" gorm:"primaryKey"`
-	TaskID            string `json:"task_id" gorm:"type:varchar(128);primaryKey"`
-	SampleIndex       int    `json:"sample_index" gorm:"primaryKey"`
-	QID               string `json:"qid" gorm:"type:varchar(128);not null"`
-	Question          string `json:"question" gorm:"not null"`
-	ReferenceAnswer   string `json:"reference_answer" gorm:"not null;default:''"`
-	GroundTruthPIDs   JSON   `json:"ground_truth_pids" gorm:"not null"`
-	SearchResults     JSON   `json:"search_results" gorm:"not null"`
-	RerankResults     JSON   `json:"rerank_results" gorm:"not null"`
-	GenerationPIDs    JSON   `json:"generation_pids" gorm:"not null"`
-	GeneratedText     string `json:"generated_text" gorm:"not null;default:''"`
-	ErrorCode         string `json:"error_code,omitempty" gorm:"type:varchar(64);not null;default:''"`
-	PerSampleMetrics  JSON   `json:"per_sample_metrics" gorm:"not null"`
-	MetricObservations JSON  `json:"metric_observations" gorm:"not null"`
+	TenantID           uint64 `json:"tenant_id" gorm:"primaryKey"`
+	TaskID             string `json:"task_id" gorm:"type:varchar(128);primaryKey"`
+	SampleIndex        int    `json:"sample_index" gorm:"primaryKey"`
+	QID                string `json:"qid" gorm:"type:varchar(128);not null"`
+	Question           string `json:"question" gorm:"not null"`
+	ReferenceAnswer    string `json:"reference_answer" gorm:"not null;default:''"`
+	GroundTruthPIDs    JSON   `json:"ground_truth_pids" gorm:"not null"`
+	SearchResults      JSON   `json:"search_results" gorm:"not null"`
+	RerankResults      JSON   `json:"rerank_results" gorm:"not null"`
+	GenerationPIDs     JSON   `json:"generation_pids" gorm:"not null"`
+	GeneratedText      string `json:"generated_text" gorm:"not null;default:''"`
+	ErrorCode          string `json:"error_code,omitempty" gorm:"type:varchar(64);not null;default:''"`
+	PerSampleMetrics   JSON   `json:"per_sample_metrics" gorm:"not null"`
+	MetricObservations JSON   `json:"metric_observations" gorm:"not null"`
 
 	// Nullable runtime facts: missing values stay null (unavailable) instead
 	// of a fabricated zero.
@@ -84,26 +84,26 @@ func (EvaluationQuestionResultEntity) TableName() string { return "evaluation_qu
 // EvaluationQuestionResultInput carries one completed sample from the worker
 // to the transactional publisher.
 type EvaluationQuestionResultInput struct {
-	SampleIndex       int
-	QID               string
-	Question          string
-	ReferenceAnswer   string
-	GroundTruthPIDs   []int
-	SearchResults     []EvaluationRankedResult
-	RerankResults     []EvaluationRankedResult
-	GenerationPIDs    []int
-	GeneratedText     string
-	ErrorCode         string
-	PerSampleMetrics  *MetricResult
-	Observations      []EvaluationMetricObservationSnapshot
-	RetrievalMs       *int64
-	RerankMs          *int64
-	GenerationMs      *int64
-	TotalMs           *int64
-	PromptTokens      *int
-	CompletionTokens  *int
-	TotalTokens       *int
-	Status            string
+	SampleIndex      int
+	QID              string
+	Question         string
+	ReferenceAnswer  string
+	GroundTruthPIDs  []int
+	SearchResults    []EvaluationRankedResult
+	RerankResults    []EvaluationRankedResult
+	GenerationPIDs   []int
+	GeneratedText    string
+	ErrorCode        string
+	PerSampleMetrics *MetricResult
+	Observations     []EvaluationMetricObservationSnapshot
+	RetrievalMs      *int64
+	RerankMs         *int64
+	GenerationMs     *int64
+	TotalMs          *int64
+	PromptTokens     *int
+	CompletionTokens *int
+	TotalTokens      *int
+	Status           string
 }
 
 // EvaluationQuestionResultHash computes the canonical content hash used for

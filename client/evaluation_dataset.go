@@ -72,14 +72,14 @@ type CreateEvaluationDatasetRequest struct {
 
 // EvaluationDatasetResponse is the API envelope for one dataset.
 type EvaluationDatasetResponse struct {
-	Success bool                `json:"success"`
-	Data    *EvaluationDataset  `json:"data"`
+	Success bool               `json:"success"`
+	Data    *EvaluationDataset `json:"data"`
 }
 
 // EvaluationDatasetVersionResponse is the API envelope for one version.
 type EvaluationDatasetVersionResponse struct {
-	Success bool                       `json:"success"`
-	Data    *EvaluationDatasetVersion  `json:"data"`
+	Success bool                      `json:"success"`
+	Data    *EvaluationDatasetVersion `json:"data"`
 }
 
 // EvaluationDatasetListResponse is the API envelope for dataset lists.

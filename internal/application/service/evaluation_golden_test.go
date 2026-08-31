@@ -89,9 +89,9 @@ type goldenExpectedFixture struct {
 		ROUGEL    float64 `json:"rougel"`
 	} `json:"aggregate"`
 	ExperimentManifest struct {
-		SchemaVersion       int    `json:"schema_version"`
-		DatasetID           string `json:"dataset_id"`
-		MetricPlanMetrics   int    `json:"metric_plan_metrics"`
+		SchemaVersion        int    `json:"schema_version"`
+		DatasetID            string `json:"dataset_id"`
+		MetricPlanMetrics    int    `json:"metric_plan_metrics"`
 		ReproducibilityLevel string `json:"reproducibility_level"`
 	} `json:"experiment_manifest"`
 }
@@ -277,7 +277,7 @@ func TestGoldenTwelveMetricsMatchPinnedExpectations(t *testing.T) {
 	assert.InDelta(t, expected.Aggregate.ROUGEL, aggregate.GenerationMetrics.ROUGEL, tolerance)
 
 	// Retrieval IDs keep the raw ranking with -1 placeholders.
-	for i, sample := range dataset.Samples {
+	for _, sample := range dataset.Samples {
 		rerank := goldenSearchResults(sample.Rerank)
 		search := goldenSearchResults(sample.Search)
 		source := rerank
@@ -286,7 +286,6 @@ func TestGoldenTwelveMetricsMatchPinnedExpectations(t *testing.T) {
 		}
 		got := evaluationRetrievalIDsWithProvenance(source, dataset.KnowledgeID)
 		assert.Equal(t, expected.RetrievalIDs[sample.QID], got, "retrieval ids drifted for %s", sample.QID)
-		_ = i
 	}
 }
 
