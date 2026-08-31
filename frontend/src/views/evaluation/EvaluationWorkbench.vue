@@ -168,6 +168,12 @@
               <span v-if="run.is_baseline" class="baseline-badge">{{ t('evaluation.baseline') }}</span>
               <code>{{ shortTaskId(run.task_id) }}</code>
               <small>v{{ run.version_number }} · {{ run.dataset_id }}</small>
+              <small v-if="run.question_success_rate" class="confidence-copy">
+                {{ t('evaluation.questionSuccess') }} {{ formatConfidence(run.question_success_rate) }}
+              </small>
+              <small v-else-if="run.question_success_status" class="confidence-copy">
+                {{ t('evaluation.questionSuccess') }} · {{ run.question_success_status }} · n={{ run.question_n_valid }}
+              </small>
             </div>
           </div>
 
@@ -223,6 +229,12 @@
                   <div v-for="value in metric.values" :key="value.task_id" class="metric-value">
                     <span>{{ shortTaskId(value.task_id) }}</span>
                     <strong>{{ formatMetric(value.value) }}</strong>
+                    <em v-if="value.confidence" class="confidence-copy">
+                      {{ formatConfidence(value.confidence) }}
+                    </em>
+                    <em v-else class="confidence-copy">
+                      {{ value.confidence_status }} · n={{ value.n_valid }}/{{ value.n_total }}
+                    </em>
                     <small v-if="value.is_baseline">{{ t('evaluation.baseline') }}</small>
                     <small v-else-if="value.delta !== null">
                       Δ {{ signedNumber(value.delta) }} · {{ formatRelative(value.relative_delta) }}
@@ -352,6 +364,68 @@
                     #{{ rank.rank }} · PID {{ rank.pid }}
                   </span>
                 </div>
+                <section class="human-rating">
+                  <button
+                    type="button"
+                    class="human-rating__toggle"
+                    @click="toggleHumanRatings(question.sample_index)"
+                  >
+                    {{ t('evaluation.humanRating') }}
+                    <span v-if="ratingPanel(question.sample_index).items.length">
+                      {{ ratingPanel(question.sample_index).items[0].score }}/5 ·
+                      r{{ ratingPanel(question.sample_index).items[0].revision }}
+                    </span>
+                    <span v-else>{{ t('evaluation.viewRevisions') }}</span>
+                  </button>
+                  <div v-if="ratingPanel(question.sample_index).open" class="human-rating__panel">
+                    <div v-if="ratingPanel(question.sample_index).loading" class="muted">
+                      {{ t('evaluation.loadingRatings') }}
+                    </div>
+                    <template v-else>
+                      <form
+                        v-if="canManageLabels"
+                        class="human-rating__form"
+                        @submit.prevent="saveHumanRating(question.sample_index)"
+                      >
+                        <label>
+                          <span>{{ t('evaluation.score') }}</span>
+                          <select v-model.number="ratingPanel(question.sample_index).score">
+                            <option v-for="score in [1, 2, 3, 4, 5]" :key="score" :value="score">
+                              {{ score }} / 5
+                            </option>
+                          </select>
+                        </label>
+                        <label class="human-rating__comment">
+                          <span>{{ t('evaluation.ratingComment') }}</span>
+                          <input
+                            v-model="ratingPanel(question.sample_index).comment"
+                            maxlength="4000"
+                            :placeholder="t('evaluation.ratingCommentPlaceholder')"
+                          />
+                        </label>
+                        <button
+                          type="submit"
+                          class="button button--primary button--compact"
+                          :disabled="ratingPanel(question.sample_index).saving"
+                        >
+                          {{ ratingPanel(question.sample_index).saving ? t('evaluation.savingRating') : t('evaluation.appendRating') }}
+                        </button>
+                      </form>
+                      <p v-if="ratingPanel(question.sample_index).error" class="human-rating__error">
+                        {{ ratingPanel(question.sample_index).error }}
+                      </p>
+                      <ol v-if="ratingPanel(question.sample_index).items.length" class="human-rating__history">
+                        <li v-for="rating in ratingPanel(question.sample_index).items" :key="rating.id">
+                          <strong>{{ rating.score }}/5</strong>
+                          <span>r{{ rating.revision }} · {{ rating.rubric_key }}@{{ rating.rubric_version }}</span>
+                          <time>{{ formatDate(rating.created_at) }}</time>
+                          <p v-if="rating.comment">{{ rating.comment }}</p>
+                        </li>
+                      </ol>
+                      <p v-else class="muted">{{ t('evaluation.noRatings') }}</p>
+                    </template>
+                  </div>
+                </section>
               </div>
             </article>
             <button
@@ -388,15 +462,19 @@ import { useI18n } from 'vue-i18n'
 
 import {
   EVALUATION_STATUS,
+  appendEvaluationHumanRating,
   compareEvaluationTasks,
   downloadEvaluationArtifact,
   getEvaluationDetail,
   listEvaluationQuestions,
+  listEvaluationHumanRatings,
   listEvaluationTasks,
   replaceEvaluationLabels,
   type EvaluationComparisonResponse,
+  type EvaluationConfidenceInterval,
   type EvaluationDetail,
   type EvaluationQuestionResult,
+  type EvaluationHumanRatingRevision,
   type EvaluationTask,
   type EvaluationTaskFilters,
 } from '@/api/evaluation'
@@ -434,6 +512,19 @@ const comparisonLoading = ref(false)
 const exporting = ref<'json' | 'csv' | ''>('')
 const labelDraft = ref('')
 const savingLabels = ref(false)
+
+interface HumanRatingPanelState {
+  open: boolean
+  loading: boolean
+  saving: boolean
+  loaded: boolean
+  items: EvaluationHumanRatingRevision[]
+  score: number
+  comment: string
+  error: string
+}
+
+const humanRatingPanels = reactive<Record<number, HumanRatingPanelState>>({})
 
 const canManageLabels = computed(() => authStore.hasRole('admin'))
 
@@ -505,6 +596,7 @@ async function openTask(task: EvaluationTask) {
   detailError.value = ''
   activeTab.value = 'overview'
   questions.value = []
+  for (const key of Object.keys(humanRatingPanels)) delete humanRatingPanels[Number(key)]
   questionCursor.value = ''
   const requestedTaskId = task.id
   try {
@@ -649,6 +741,66 @@ function signedNumber(value: number) {
 
 function formatRelative(value: number | null) {
   return value === null ? '—' : `${(value * 100).toFixed(2)}%`
+}
+
+function formatConfidence(interval: EvaluationConfidenceInterval) {
+  const percent = (value: number) => `${(value * 100).toFixed(1)}%`
+  return `${percent(interval.lower)}–${percent(interval.upper)} · ${Math.round(interval.confidence * 100)}% CI · n=${interval.samples}`
+}
+
+function ratingPanel(sampleIndex: number): HumanRatingPanelState {
+  if (!humanRatingPanels[sampleIndex]) {
+    humanRatingPanels[sampleIndex] = {
+      open: false, loading: false, saving: false, loaded: false,
+      items: [], score: 3, comment: '', error: '',
+    }
+  }
+  return humanRatingPanels[sampleIndex]
+}
+
+async function toggleHumanRatings(sampleIndex: number) {
+  const panel = ratingPanel(sampleIndex)
+  panel.open = !panel.open
+  if (!panel.open || panel.loaded || !activeTaskId.value) return
+  panel.loading = true
+  panel.error = ''
+  try {
+    panel.items = await listEvaluationHumanRatings(activeTaskId.value, sampleIndex)
+    panel.loaded = true
+    if (panel.items[0]) panel.score = panel.items[0].score
+  } catch (error) {
+    panel.error = errorMessage(error)
+  } finally {
+    panel.loading = false
+  }
+}
+
+async function saveHumanRating(sampleIndex: number) {
+  const panel = ratingPanel(sampleIndex)
+  if (!activeTaskId.value || panel.saving) return
+  panel.saving = true
+  panel.error = ''
+  try {
+    const rating = await appendEvaluationHumanRating(activeTaskId.value, sampleIndex, {
+      rubric_key: 'answer-quality',
+      rubric_version: '1.0.0',
+      rubric_snapshot: {
+        title: 'Answer quality',
+        dimensions: ['correctness', 'relevance', 'grounding'],
+        scale: { 1: 'Incorrect', 2: 'Major issues', 3: 'Partially correct', 4: 'Mostly correct', 5: 'Fully correct' },
+      },
+      score: panel.score,
+      comment: panel.comment,
+    })
+    panel.items = [rating, ...panel.items]
+    panel.loaded = true
+    panel.comment = ''
+    MessagePlugin.success(t('evaluation.ratingSaved'))
+  } catch (error) {
+    panel.error = errorMessage(error)
+  } finally {
+    panel.saving = false
+  }
 }
 
 onMounted(() => {
@@ -814,6 +966,12 @@ onMounted(() => {
 .question-card__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; h3 { margin: 0; font-size: 13px; line-height: 1.45; } }
 .question-card dl { display: grid; gap: 7px; margin: 12px 0; div { display: grid; grid-template-columns: 105px minmax(0, 1fr); } dt { color: var(--eval-muted); font-size: 10px; } dd { margin: 0; color: #3d4d46; font-size: 11px; white-space: pre-wrap; } }
 .ranking-row { display: flex; flex-wrap: wrap; gap: 6px; span { padding: 3px 7px; border-radius: 5px; color: #456058; background: #edf4f1; font: 9px monospace; &.unknown { color: #955b2d; background: #fbefe5; } } }
+.human-rating { margin-top: 10px; border: 1px solid var(--eval-line); border-radius: 8px; overflow: hidden; }
+.human-rating__toggle { display: flex; width: 100%; align-items: center; justify-content: space-between; padding: 8px 10px; border: 0; color: #315c4d; background: #f6faf8; cursor: pointer; font-size: 10px; font-weight: 650; span { color: var(--eval-muted); font: 9px monospace; } }
+.human-rating__panel { padding: 10px; }
+.human-rating__form { display: grid; grid-template-columns: 100px minmax(160px, 1fr) auto; align-items: end; gap: 8px; label { display: grid; gap: 4px; color: var(--eval-muted); font-size: 9px; } select, input { height: 30px; padding: 0 8px; border: 1px solid var(--eval-line); border-radius: 7px; background: #fff; font-size: 10px; } }
+.human-rating__history { display: grid; gap: 6px; padding: 0; margin: 10px 0 0; list-style: none; li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 8px; padding: 7px 8px; border-radius: 6px; background: #f8faf9; font-size: 9px; } strong { color: var(--eval-green); } time { color: var(--eval-muted); } p { grid-column: 2 / -1; margin: 0; color: #45574f; line-height: 1.45; } }
+.human-rating__error { margin: 8px 0 0; color: #ad4141; font-size: 10px; }
 .load-more--questions { border: 1px solid var(--eval-line); border-radius: 8px; margin-top: 12px; }
 
 .detail-empty { display: flex; min-height: 100%; align-items: center; justify-content: center; flex-direction: column; color: var(--eval-muted); text-align: center; h2 { margin: 22px 0 6px; color: var(--eval-ink); font-size: 18px; } p { max-width: 360px; margin: 0; font-size: 12px; line-height: 1.6; } }
@@ -833,7 +991,8 @@ onMounted(() => {
 .compatibility { padding: 2px 6px; border-radius: 99px; color: #087552; background: #ddf5eb; font-size: 8px; font-weight: 700; }
 .compatibility--bad { color: #9a4b32; background: #f8e7df; }
 .metric-values { display: grid; gap: 5px; margin-top: 10px; }
-.metric-value { display: grid; grid-template-columns: minmax(80px, 1fr) auto minmax(90px, auto); align-items: baseline; gap: 8px; padding: 6px 8px; border-radius: 6px; background: #f8faf9; span { overflow: hidden; font: 9px monospace; text-overflow: ellipsis; } strong { font-size: 12px; font-variant-numeric: tabular-nums; } small { color: var(--eval-muted); font-size: 8px; text-align: right; } }
+.metric-value { display: grid; grid-template-columns: minmax(80px, 1fr) auto minmax(135px, auto) minmax(90px, auto); align-items: baseline; gap: 8px; padding: 6px 8px; border-radius: 6px; background: #f8faf9; span { overflow: hidden; font: 9px monospace; text-overflow: ellipsis; } strong { font-size: 12px; font-variant-numeric: tabular-nums; } small { color: var(--eval-muted); font-size: 8px; text-align: right; } }
+.confidence-copy { color: #356c58; font-size: 8px; font-style: normal; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 @media (max-width: 1180px) {
   .filter-panel { grid-template-columns: repeat(3, minmax(120px, 1fr)); }

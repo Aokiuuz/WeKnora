@@ -33,6 +33,7 @@ var versionedSQLiteTables = []string{
 	"model_call_records",
 	"embedding_cache_entries",
 	"embedding_cache_events",
+	"evaluation_human_ratings",
 }
 
 // versionedSQLiteColumns maps each existing table to the columns that the
@@ -55,7 +56,7 @@ var versionedSQLiteColumns = map[string][]string{
 	"evaluation_question_results": {"usage_reported"},
 }
 
-const expectedSQLiteMigrationVersion = 24
+const expectedSQLiteMigrationVersion = 25
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -92,6 +93,7 @@ func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	assertSQLiteModelObservabilitySchema(t, db)
 	assertSQLiteEmbeddingCacheSchema(t, db)
 	assertSQLiteModelStatisticsSchema(t, db)
+	assertSQLiteHumanRatingsSchema(t, db)
 	require.False(t, sqliteColumnExists(t, db, "knowledges", "tag_id"),
 		"SQLite migrations must drop legacy knowledges.tag_id after multi-tag migration")
 }
@@ -133,6 +135,18 @@ func assertSQLiteModelStatisticsSchema(t *testing.T, db *sql.DB) {
 	}
 	require.False(t, sqliteColumnExists(t, db, "embedding_cache_events", "text_sha256"),
 		"cache statistics must not persist cache keys")
+}
+
+func assertSQLiteHumanRatingsSchema(t *testing.T, db *sql.DB) {
+	t.Helper()
+	require.True(t, sqliteTableExists(t, db, "evaluation_human_ratings"))
+	for _, column := range []string{
+		"tenant_id", "task_id", "sample_index", "revision", "rater_id",
+		"rubric_key", "rubric_version", "rubric_snapshot", "score", "comment", "supersedes_id", "created_at",
+	} {
+		require.Truef(t, sqliteColumnExists(t, db, "evaluation_human_ratings", column),
+			"SQLite evaluation_human_ratings must contain column %s", column)
+	}
 }
 
 func TestSQLiteMigrationsUpgradeV4PreservesData(t *testing.T) {
@@ -197,6 +211,7 @@ func TestSQLiteMigrationsUpgradeV4PreservesData(t *testing.T) {
 	assertSQLiteEvaluationTaskSchema(t, db)
 	assertSQLiteEmbeddingCacheSchema(t, db)
 	assertSQLiteModelStatisticsSchema(t, db)
+	assertSQLiteHumanRatingsSchema(t, db)
 	require.False(t, sqliteColumnExists(t, db, "knowledges", "tag_id"))
 }
 

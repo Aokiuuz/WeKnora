@@ -189,6 +189,9 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(func(db *gorm.DB) interfaces.EvaluationQuestionResultRepository {
 		return repository.NewEvaluationQuestionResultRepository(db)
 	}))
+	must(container.Provide(func(db *gorm.DB) interfaces.EvaluationHumanRatingRepository {
+		return repository.NewEvaluationHumanRatingRepository(db)
+	}))
 	must(container.Provide(func(db *gorm.DB) modelobs.Store {
 		return repository.NewModelObservabilityRepository(db)
 	}))

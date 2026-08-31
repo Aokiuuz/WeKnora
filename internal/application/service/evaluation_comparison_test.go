@@ -91,6 +91,59 @@ func TestCompareEvaluationsBuildsStableParameterAndMetricDeltas(t *testing.T) {
 	require.InDelta(t, 0.2, *precision.Values[1].RelativeDelta, 1e-12)
 }
 
+func TestCompareEvaluationsIncludesDeterministicMetricAndSuccessIntervals(t *testing.T) {
+	total20, total40 := int64(20), int64(40)
+	tokens10, tokens30 := 10, 30
+	prompt4, prompt12 := 4, 12
+	completion6, completion18 := 6, 18
+	taskRepo := newFakeEvaluationTaskRepository()
+	taskRepo.register(comparisonTaskFixture(t, "task-a", 5, 0.5))
+	taskRepo.register(comparisonTaskFixture(t, "task-b", 5, 0.6))
+	questionRepo := &fakeEvaluationExportQuestionRepository{rows: []*types.EvaluationQuestionResultEntity{
+		{TenantID: 7, TaskID: "task-a", SampleIndex: 0, Status: types.EvaluationQuestionStatusSuccess,
+			PerSampleMetrics: types.JSON(`{"retrieval_metrics":{"precision":0.25}}`), TotalMs: &total20,
+			TotalTokens: &tokens10, PromptTokens: &prompt4, CompletionTokens: &completion6},
+		{TenantID: 7, TaskID: "task-a", SampleIndex: 1, Status: types.EvaluationQuestionStatusSuccess,
+			PerSampleMetrics: types.JSON(`{"retrieval_metrics":{"precision":0.75}}`), TotalMs: &total40,
+			TotalTokens: &tokens30, PromptTokens: &prompt12, CompletionTokens: &completion18},
+		{TenantID: 7, TaskID: "task-a", SampleIndex: 2, Status: types.EvaluationQuestionStatusFailed,
+			PerSampleMetrics: types.JSON(`{}`)},
+		{TenantID: 7, TaskID: "task-b", SampleIndex: 0, Status: types.EvaluationQuestionStatusSuccess,
+			PerSampleMetrics: types.JSON(`{"retrieval_metrics":{"precision":0.6}}`)},
+	}}
+	svc := &EvaluationService{evaluationTaskRepository: taskRepo, questionResultRepository: questionRepo}
+
+	request := types.EvaluationComparisonRequest{TaskIDs: []string{"task-a", "task-b"}}
+	first, err := svc.CompareEvaluations(comparisonServiceContext(), request)
+	require.NoError(t, err)
+	second, err := svc.CompareEvaluations(comparisonServiceContext(), request)
+	require.NoError(t, err)
+
+	require.NotNil(t, first.Runs[0].QuestionSuccessRate)
+	require.Equal(t, "wilson_score", first.Runs[0].QuestionSuccessRate.Method)
+	require.Equal(t, 3, first.Runs[0].QuestionSuccessRate.Samples)
+	require.Equal(t, types.EvaluationStatisticsValid, first.Runs[0].QuestionSuccessStatus)
+	require.Equal(t, 3, first.Runs[0].QuestionNTotal)
+	require.InDelta(t, 2.0/3.0, first.Runs[0].QuestionSuccessRate.Estimate, 1e-12)
+	require.NotNil(t, first.Runs[0].TotalLatency)
+	require.InDelta(t, 30, first.Runs[0].TotalLatency.P50, 1e-12)
+	require.EqualValues(t, 40, first.Runs[0].TokenTotals.Total)
+	require.Nil(t, first.Runs[1].QuestionSuccessRate)
+	require.Equal(t, types.EvaluationStatisticsInsufficientSample, first.Runs[1].QuestionSuccessStatus)
+	metric := comparisonMetricByPointer(t, first, "/retrieval_metrics/precision")
+	require.NotNil(t, metric.Values[0].Confidence)
+	require.Equal(t, "percentile_bootstrap", metric.Values[0].Confidence.Method)
+	require.Equal(t, 2, metric.Values[0].Confidence.Samples)
+	require.Equal(t, 3, metric.Values[0].NTotal)
+	require.Equal(t, 2, metric.Values[0].NValid)
+	require.Equal(t, 1, metric.Values[0].NMissing)
+	require.Nil(t, metric.Values[1].Confidence)
+	require.Equal(t, types.EvaluationStatisticsInsufficientSample, metric.Values[1].ConfidenceStatus)
+	require.Equal(t, metric.Values[0].Confidence, comparisonMetricByPointer(
+		t, second, "/retrieval_metrics/precision",
+	).Values[0].Confidence)
+}
+
 func TestCompareEvaluationsKeepsRelativeDeltaNullForZeroBaseline(t *testing.T) {
 	repo := newFakeEvaluationTaskRepository()
 	repo.register(comparisonTaskFixture(t, "task-a", 5, 0))

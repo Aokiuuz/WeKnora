@@ -48,6 +48,16 @@ func TestEvaluationTaskRepositoryPostgresContract(t *testing.T) {
 	snapshotMigrationSQL, err := os.ReadFile(snapshotMigrationPath)
 	require.NoError(t, err)
 	require.NoError(t, tx.Exec(string(snapshotMigrationSQL)).Error)
+	questionMigrationPath := filepath.Join(
+		"..", "..", "..", "migrations", "versioned", "000096_evaluation_question_results.up.sql")
+	questionMigrationSQL, err := os.ReadFile(questionMigrationPath)
+	require.NoError(t, err)
+	require.NoError(t, tx.Exec(string(questionMigrationSQL)).Error)
+	runtimeMigrationPath := filepath.Join(
+		"..", "..", "..", "migrations", "versioned", "000098_evaluation_runtime_metrics.up.sql")
+	runtimeMigrationSQL, err := os.ReadFile(runtimeMigrationPath)
+	require.NoError(t, err)
+	require.NoError(t, tx.Exec(string(runtimeMigrationSQL)).Error)
 
 	now := time.Date(2026, 8, 28, 8, 0, 0, 0, time.UTC)
 	leaseExpiresAt := now.Add(time.Minute)

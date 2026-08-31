@@ -49,6 +49,8 @@ func TestEvaluationTaskRepositoryPostgresRetentionMigrationAndPlan(t *testing.T)
 		"000092_evaluation_task_list.up.sql",
 		"000093_evaluation_task_retention.up.sql",
 		"000095_evaluation_experiment_snapshot.up.sql",
+		"000096_evaluation_question_results.up.sql",
+		"000098_evaluation_runtime_metrics.up.sql",
 	} {
 		migrationSQL, err := os.ReadFile(filepath.Join(migrationDir, name))
 		require.NoError(t, err)

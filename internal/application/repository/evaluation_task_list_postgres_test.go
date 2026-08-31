@@ -52,6 +52,7 @@ func TestEvaluationTaskRepositoryPostgresListMigrationAndKeyset(t *testing.T) {
 		"000095_evaluation_experiment_snapshot.up.sql",
 		"000096_evaluation_question_results.up.sql",
 		"000097_evaluation_task_labels.up.sql",
+		"000098_evaluation_runtime_metrics.up.sql",
 	} {
 		migrationSQL, err := os.ReadFile(filepath.Join(migrationDir, name))
 		require.NoError(t, err)

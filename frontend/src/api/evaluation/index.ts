@@ -92,6 +92,26 @@ export interface EvaluationComparisonRequest {
   baseline_task_id?: string
 }
 
+export interface EvaluationConfidenceInterval {
+  estimate: number
+  lower: number
+  upper: number
+  confidence: number
+  method: string
+  samples: number
+  iterations?: number
+  seed?: number
+}
+
+export interface EvaluationPercentiles {
+  p50: number
+  p95: number
+  p99: number
+  n_total: number
+  n_valid: number
+  n_missing: number
+}
+
 export interface EvaluationComparisonParameterValue {
   task_id: string
   missing: boolean
@@ -113,6 +133,11 @@ export interface EvaluationComparisonMetricValue {
   relative_delta: number | null
   relative_reason?: string
   reason?: string
+  confidence?: EvaluationConfidenceInterval
+  confidence_status: string
+  n_total: number
+  n_valid: number
+  n_missing: number
 }
 
 export interface EvaluationComparisonMetric {
@@ -137,9 +162,47 @@ export interface EvaluationComparisonResponse {
     version_number: number
     dataset_content_sha256: string
     provenance_complete: boolean
+    question_success_rate?: EvaluationConfidenceInterval
+    question_success_status: string
+    question_n_total: number
+    question_n_valid: number
+    question_n_missing: number
+    total_latency_ms?: EvaluationPercentiles
+    token_totals: {
+      prompt: number
+      completion: number
+      total: number
+      n_total: number
+      n_valid: number
+      n_missing: number
+    }
   }>
   parameters: EvaluationComparisonParameter[]
   metrics: EvaluationComparisonMetric[]
+}
+
+export interface EvaluationHumanRatingRevision {
+  id: string
+  tenant_id: number
+  task_id: string
+  sample_index: number
+  revision: number
+  rater_id: string
+  rubric_key: string
+  rubric_version: string
+  rubric_snapshot: Record<string, unknown>
+  score: number
+  comment?: string
+  supersedes_id?: string
+  created_at: string
+}
+
+export interface AppendEvaluationHumanRatingRequest {
+  rubric_key: string
+  rubric_version: string
+  rubric_snapshot: Record<string, unknown>
+  score: number
+  comment?: string
 }
 
 interface Envelope<T> {
@@ -187,6 +250,30 @@ export async function listEvaluationQuestions(
     throw new Error('List evaluation questions returned an incomplete page')
   }
   return data
+}
+
+export async function listEvaluationHumanRatings(
+  taskId: string,
+  sampleIndex: number,
+): Promise<EvaluationHumanRatingRevision[]> {
+  const response = await get<Envelope<{ items: EvaluationHumanRatingRevision[] }>>(
+    `/api/v1/evaluation/tasks/${encodeURIComponent(taskId)}/questions/${sampleIndex}/ratings`,
+  )
+  const data = requireEvaluationData(response, 'List evaluation human ratings')
+  if (!Array.isArray(data.items)) throw new Error('List evaluation human ratings returned no items')
+  return data.items
+}
+
+export async function appendEvaluationHumanRating(
+  taskId: string,
+  sampleIndex: number,
+  request: AppendEvaluationHumanRatingRequest,
+): Promise<EvaluationHumanRatingRevision> {
+  const response = await post<Envelope<EvaluationHumanRatingRevision>>(
+    `/api/v1/evaluation/tasks/${encodeURIComponent(taskId)}/questions/${sampleIndex}/ratings`,
+    request,
+  )
+  return requireEvaluationData(response, 'Append evaluation human rating')
 }
 
 export async function replaceEvaluationLabels(taskId: string, labels: string[]): Promise<string[]> {

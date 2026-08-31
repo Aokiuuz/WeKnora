@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,15 +11,22 @@ import (
 	"sort"
 	"strings"
 
+	evaluationstats "github.com/Tencent/WeKnora/internal/evaluation/statistics"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 )
 
 type evaluationComparisonInput struct {
-	entity     *types.EvaluationTaskEntity
-	experiment *types.EvaluationExperimentSnapshot
-	parameters map[string]json.RawMessage
-	metrics    map[string]float64
+	entity          *types.EvaluationTaskEntity
+	experiment      *types.EvaluationExperimentSnapshot
+	parameters      map[string]json.RawMessage
+	metrics         map[string]float64
+	metricSamples   map[string][]float64
+	questionSuccess *types.EvaluationConfidenceInterval
+	questionStatus  string
+	questionTotal   int
+	totalLatencies  []float64
+	tokenTotals     types.EvaluationTokenTotals
 }
 
 // CompareEvaluations aligns stable parameters and compatible numeric metrics across frozen runs.
@@ -86,7 +95,15 @@ func (e *EvaluationService) CompareEvaluations(
 		}
 		inputs = append(inputs, evaluationComparisonInput{
 			entity: entity, experiment: experiment, parameters: parameters, metrics: metrics,
+			metricSamples: map[string][]float64{},
 		})
+	}
+	if e.questionResultRepository != nil {
+		for index := range inputs {
+			if err := e.loadEvaluationComparisonStatistics(ctx, tenantID, &inputs[index]); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if err := validateEvaluationComparisonContent(inputs); err != nil {
 		return nil, err
@@ -95,14 +112,21 @@ func (e *EvaluationService) CompareEvaluations(
 	runs := make([]types.EvaluationComparisonRun, 0, len(inputs))
 	for _, input := range inputs {
 		runs = append(runs, types.EvaluationComparisonRun{
-			TaskID:               input.entity.ID,
-			Status:               input.entity.Status,
-			IsBaseline:           input.entity.ID == baselineID,
-			DatasetID:            input.entity.DatasetID,
-			DatasetVersionID:     *input.entity.DatasetVersionID,
-			VersionNumber:        input.experiment.Dataset.VersionNumber,
-			DatasetContentSHA256: *input.entity.DatasetContentSHA256,
-			ProvenanceComplete:   true,
+			TaskID:                input.entity.ID,
+			Status:                input.entity.Status,
+			IsBaseline:            input.entity.ID == baselineID,
+			DatasetID:             input.entity.DatasetID,
+			DatasetVersionID:      *input.entity.DatasetVersionID,
+			VersionNumber:         input.experiment.Dataset.VersionNumber,
+			DatasetContentSHA256:  *input.entity.DatasetContentSHA256,
+			ProvenanceComplete:    true,
+			QuestionSuccessRate:   input.questionSuccess,
+			QuestionSuccessStatus: input.questionStatus,
+			QuestionNTotal:        input.questionTotal,
+			QuestionNValid:        input.questionTotal,
+			QuestionNMissing:      0,
+			TotalLatency:          evaluationLatencyPercentiles(input.totalLatencies, input.questionTotal),
+			TokenTotals:           input.tokenTotals,
 		})
 	}
 	return &types.EvaluationComparisonResponse{
@@ -216,7 +240,8 @@ func buildEvaluationComparisonMetrics(
 			value, exists := input.metrics[pointer]
 			wire := types.EvaluationComparisonMetricValue{
 				TaskID: input.entity.ID, IsBaseline: input.entity.ID == baselineID,
-				Status: types.EvaluationComparisonValueMissing,
+				Status: types.EvaluationComparisonValueMissing, ConfidenceStatus: types.EvaluationStatisticsInsufficientSample,
+				NTotal: input.questionTotal,
 			}
 			if exists {
 				wire.Value = &value
@@ -225,6 +250,20 @@ func buildEvaluationComparisonMetrics(
 					wire.Status = types.EvaluationComparisonValueIncompatible
 					wire.Reason = reason
 				}
+				samples := input.metricSamples[pointer]
+				wire.NValid = len(samples)
+				wire.NMissing = wire.NTotal - wire.NValid
+				if len(samples) >= 2 {
+					interval, intervalErr := evaluationstats.BootstrapMean(
+						samples, 0.95, 2000, evaluationStatisticsSeed(input.entity.ID, pointer),
+					)
+					if intervalErr == nil {
+						wire.Confidence = evaluationConfidenceInterval(interval)
+						wire.ConfidenceStatus = types.EvaluationStatisticsValid
+					}
+				}
+			} else {
+				wire.NMissing = wire.NTotal
 			}
 			metric.Values = append(metric.Values, wire)
 		}
@@ -234,6 +273,97 @@ func buildEvaluationComparisonMetrics(
 		metrics = append(metrics, metric)
 	}
 	return metrics
+}
+
+func (e *EvaluationService) loadEvaluationComparisonStatistics(
+	ctx context.Context,
+	tenantID uint64,
+	input *evaluationComparisonInput,
+) error {
+	from := 0
+	successes := 0
+	trials := 0
+	for {
+		rows, err := e.questionResultRepository.ListQuestionResults(
+			ctx, tenantID, input.entity.ID, from, types.EvaluationQuestionPageMaxSize,
+		)
+		if err != nil {
+			return fmt.Errorf("load comparison statistics for task %s: %w", input.entity.ID, err)
+		}
+		for _, row := range rows {
+			trials++
+			if row.TotalMs != nil {
+				input.totalLatencies = append(input.totalLatencies, float64(*row.TotalMs))
+			}
+			if row.TotalTokens != nil {
+				input.tokenTotals.NValid++
+				input.tokenTotals.Total += int64(*row.TotalTokens)
+				if row.PromptTokens != nil {
+					input.tokenTotals.Prompt += int64(*row.PromptTokens)
+				}
+				if row.CompletionTokens != nil {
+					input.tokenTotals.Completion += int64(*row.CompletionTokens)
+				}
+			}
+			if row.Status != types.EvaluationQuestionStatusSuccess {
+				continue
+			}
+			successes++
+			metrics, flattenErr := types.FlattenEvaluationNumericMetrics(row.PerSampleMetrics)
+			if flattenErr != nil {
+				return fmt.Errorf("task %s sample %d metrics: %w", input.entity.ID, row.SampleIndex, flattenErr)
+			}
+			for pointer, value := range metrics {
+				input.metricSamples[pointer] = append(input.metricSamples[pointer], value)
+			}
+		}
+		if len(rows) < types.EvaluationQuestionPageMaxSize {
+			break
+		}
+		from = rows[len(rows)-1].SampleIndex + 1
+	}
+	input.questionTotal = trials
+	input.tokenTotals.NTotal = trials
+	input.tokenTotals.NMissing = trials - input.tokenTotals.NValid
+	input.questionStatus = types.EvaluationStatisticsInsufficientSample
+	if trials >= 2 {
+		interval, err := evaluationstats.Wilson(successes, trials, 0.95)
+		if err == nil {
+			input.questionSuccess = evaluationConfidenceInterval(interval)
+			input.questionStatus = types.EvaluationStatisticsValid
+		}
+	}
+	return nil
+}
+
+func evaluationLatencyPercentiles(values []float64, total int) *types.EvaluationPercentiles {
+	if len(values) == 0 {
+		return nil
+	}
+	p50, p95, p99, err := evaluationstats.Percentiles(values)
+	if err != nil {
+		return nil
+	}
+	return &types.EvaluationPercentiles{
+		P50: p50, P95: p95, P99: p99,
+		NTotal: total, NValid: len(values), NMissing: total - len(values),
+	}
+}
+
+func evaluationStatisticsSeed(taskID, pointer string) int64 {
+	digest := sha256.Sum256([]byte(taskID + "\x00" + pointer))
+	return int64(binary.BigEndian.Uint64(digest[:8]) & ((1 << 63) - 1))
+}
+
+func evaluationConfidenceInterval(interval *evaluationstats.Interval) *types.EvaluationConfidenceInterval {
+	if interval == nil {
+		return nil
+	}
+	return &types.EvaluationConfidenceInterval{
+		Estimate: interval.Estimate, Lower: interval.Lower, Upper: interval.Upper,
+		Confidence: interval.Confidence, Method: interval.Method, Samples: interval.Samples,
+		Iterations: interval.Iterations, Seed: interval.Seed,
+	}
 }
 
 func firstEvaluationMetricIdentity(

@@ -13,14 +13,51 @@ type EvaluationComparisonRequest struct {
 }
 
 type EvaluationComparisonRun struct {
-	TaskID               string           `json:"task_id"`
-	Status               EvaluationStatus `json:"status"`
-	IsBaseline           bool             `json:"is_baseline"`
-	DatasetID            string           `json:"dataset_id"`
-	DatasetVersionID     string           `json:"dataset_version_id"`
-	VersionNumber        int              `json:"version_number"`
-	DatasetContentSHA256 string           `json:"dataset_content_sha256"`
-	ProvenanceComplete   bool             `json:"provenance_complete"`
+	TaskID                string                        `json:"task_id"`
+	Status                EvaluationStatus              `json:"status"`
+	IsBaseline            bool                          `json:"is_baseline"`
+	DatasetID             string                        `json:"dataset_id"`
+	DatasetVersionID      string                        `json:"dataset_version_id"`
+	VersionNumber         int                           `json:"version_number"`
+	DatasetContentSHA256  string                        `json:"dataset_content_sha256"`
+	ProvenanceComplete    bool                          `json:"provenance_complete"`
+	QuestionSuccessRate   *EvaluationConfidenceInterval `json:"question_success_rate,omitempty"`
+	QuestionSuccessStatus string                        `json:"question_success_status"`
+	QuestionNTotal        int                           `json:"question_n_total"`
+	QuestionNValid        int                           `json:"question_n_valid"`
+	QuestionNMissing      int                           `json:"question_n_missing"`
+	TotalLatency          *EvaluationPercentiles        `json:"total_latency_ms,omitempty"`
+	TokenTotals           EvaluationTokenTotals         `json:"token_totals"`
+}
+
+type EvaluationPercentiles struct {
+	P50      float64 `json:"p50"`
+	P95      float64 `json:"p95"`
+	P99      float64 `json:"p99"`
+	NTotal   int     `json:"n_total"`
+	NValid   int     `json:"n_valid"`
+	NMissing int     `json:"n_missing"`
+}
+
+type EvaluationTokenTotals struct {
+	Prompt     int64 `json:"prompt"`
+	Completion int64 `json:"completion"`
+	Total      int64 `json:"total"`
+	NTotal     int   `json:"n_total"`
+	NValid     int   `json:"n_valid"`
+	NMissing   int   `json:"n_missing"`
+}
+
+// EvaluationConfidenceInterval is a deterministic two-sided estimate interval.
+type EvaluationConfidenceInterval struct {
+	Estimate   float64 `json:"estimate"`
+	Lower      float64 `json:"lower"`
+	Upper      float64 `json:"upper"`
+	Confidence float64 `json:"confidence"`
+	Method     string  `json:"method"`
+	Samples    int     `json:"samples"`
+	Iterations int     `json:"iterations,omitempty"`
+	Seed       int64   `json:"seed,omitempty"`
 }
 
 type EvaluationComparisonParameterValue struct {
@@ -36,14 +73,19 @@ type EvaluationComparisonParameter struct {
 }
 
 type EvaluationComparisonMetricValue struct {
-	TaskID         string   `json:"task_id"`
-	IsBaseline     bool     `json:"is_baseline"`
-	Status         string   `json:"status"`
-	Value          *float64 `json:"value"`
-	Delta          *float64 `json:"delta"`
-	RelativeDelta  *float64 `json:"relative_delta"`
-	RelativeReason string   `json:"relative_reason,omitempty"`
-	Reason         string   `json:"reason,omitempty"`
+	TaskID           string                        `json:"task_id"`
+	IsBaseline       bool                          `json:"is_baseline"`
+	Status           string                        `json:"status"`
+	Value            *float64                      `json:"value"`
+	Delta            *float64                      `json:"delta"`
+	RelativeDelta    *float64                      `json:"relative_delta"`
+	RelativeReason   string                        `json:"relative_reason,omitempty"`
+	Reason           string                        `json:"reason,omitempty"`
+	Confidence       *EvaluationConfidenceInterval `json:"confidence,omitempty"`
+	ConfidenceStatus string                        `json:"confidence_status"`
+	NTotal           int                           `json:"n_total"`
+	NValid           int                           `json:"n_valid"`
+	NMissing         int                           `json:"n_missing"`
 }
 
 type EvaluationComparisonMetric struct {

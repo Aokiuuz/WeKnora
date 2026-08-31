@@ -38,6 +38,7 @@ func TestEvaluationQuestionResultPostgresContract(t *testing.T) {
 		"000091_evaluation_task_cancellation.up.sql",
 		"000095_evaluation_experiment_snapshot.up.sql",
 		"000096_evaluation_question_results.up.sql",
+		"000098_evaluation_runtime_metrics.up.sql",
 	} {
 		migrationSQL, err := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "versioned", name))
 		require.NoError(t, err)
