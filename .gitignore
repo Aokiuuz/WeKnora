@@ -21,6 +21,7 @@ node_modules/
 /dist/
 /build/
 /artifacts/evaluation-regression/
+/artifacts/evaluation-performance/
 *.log
 
 # 临时文件

@@ -1,4 +1,4 @@
-.PHONY: help build run test evaluation-reproduce clean docker-build-app docker-build-docreader docker-build-frontend docker-build-all docker-run migrate-up migrate-down docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-docreader build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend docs install-swagger build-lite run-lite package-lite anydoc-lib build-anydoc
+.PHONY: help build run test evaluation-reproduce evaluation-benchmark clean docker-build-app docker-build-docreader docker-build-frontend docker-build-all docker-run migrate-up migrate-down docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-docreader build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend docs install-swagger build-lite run-lite package-lite anydoc-lib build-anydoc
 
 # Show help
 help:
@@ -115,6 +115,14 @@ evaluation-reproduce:
 		--dataset dataset/golden/v1/dataset.json \
 		--thresholds evaluation/regression/thresholds.json \
 		--output-dir "$(EVALUATION_REPORT_DIR)"
+
+EVALUATION_PERFORMANCE_DIR ?= artifacts/evaluation-performance
+
+# Run the isolated keyless performance matrix; results are informational.
+evaluation-benchmark:
+	go run ./cmd/evaluation-benchmark \
+		--dataset dataset/golden/v1/dataset.json \
+		--output-dir "$(EVALUATION_PERFORMANCE_DIR)"
 
 # Clean build artifacts
 clean:
