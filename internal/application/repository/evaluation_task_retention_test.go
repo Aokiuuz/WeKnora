@@ -114,6 +114,41 @@ func TestEvaluationTaskRepositoryDeleteExpiredTerminalTasksBatchesOldestFirst(t 
 	require.Error(t, err)
 }
 
+func TestEvaluationTaskRepositoryRetentionCascadesQuestionResults(t *testing.T) {
+	db := setupEvaluationTaskRepositoryTestDB(t)
+	repo := NewEvaluationTaskRepository(db)
+	ctx := context.Background()
+	cutoff := time.Date(2026, 8, 28, 0, 0, 0, 0, time.UTC)
+	endTime := cutoff.Add(-time.Hour)
+	task := newRetentionTask(99, "retention-question-results", types.EvaluationStatueSuccess, &endTime)
+	require.NoError(t, db.Create(task).Error)
+	require.NoError(t, db.Create(&types.EvaluationQuestionResultEntity{
+		TenantID:           task.TenantID,
+		TaskID:             task.ID,
+		SampleIndex:        0,
+		QID:                "q1",
+		Question:           "question?",
+		GroundTruthPIDs:    types.JSON(`[]`),
+		SearchResults:      types.JSON(`[]`),
+		RerankResults:      types.JSON(`[]`),
+		GenerationPIDs:     types.JSON(`[]`),
+		PerSampleMetrics:   types.JSON(`{}`),
+		MetricObservations: types.JSON(`[]`),
+		Status:             types.EvaluationQuestionStatusSuccess,
+		ResultHash:         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+	}).Error)
+
+	deleted, err := repo.DeleteExpiredTerminalTasks(ctx, cutoff, 10)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted)
+	var rows int64
+	require.NoError(t, db.Raw(
+		"SELECT COUNT(*) FROM evaluation_question_results WHERE tenant_id = ? AND task_id = ?",
+		task.TenantID, task.ID,
+	).Scan(&rows).Error)
+	require.Zero(t, rows)
+}
+
 func TestEvaluationTaskRepositoryRetentionQueryUsesRetentionIndex(t *testing.T) {
 	db := setupEvaluationTaskRepositoryTestDB(t)
 	sqlDB, err := db.DB()
