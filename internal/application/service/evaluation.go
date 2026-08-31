@@ -348,6 +348,13 @@ func (e *EvaluationService) CancelEvaluation(ctx context.Context, taskID string)
 	logger.Infof(ctx, "Requesting evaluation task cancel, task ID: %s", taskID)
 
 	tenantID := types.MustTenantIDFromContext(ctx)
+	current, err := e.evaluationTaskRepository.GetTask(ctx, tenantID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if err := AuthorizeEvaluationTaskForAPIKey(ctx, current); err != nil {
+		return nil, err
+	}
 	entity, err := e.evaluationTaskRepository.RequestCancel(ctx, types.EvaluationTaskCancelCommand{
 		TenantID: tenantID,
 		TaskID:   taskID,
@@ -396,6 +403,9 @@ func (e *EvaluationService) EvaluationResult(ctx context.Context, taskID string)
 		logger.Errorf(ctx, "Failed to get evaluation task: %v", err)
 		return nil, err
 	}
+	if err := AuthorizeEvaluationTaskForAPIKey(ctx, entity); err != nil {
+		return nil, err
+	}
 	detail, err := evaluationEntityToDetail(entity)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to decode evaluation task: %v", err)
@@ -431,6 +441,9 @@ func (e *EvaluationService) EvaluationWithOptions(
 ) (*types.EvaluationDetail, error) {
 	if options == nil {
 		return nil, errors.New("start evaluation: options are required")
+	}
+	if err := authorizeEvaluationSourceKnowledgeBaseForAPIKey(ctx, options.KnowledgeBaseID); err != nil {
+		return nil, err
 	}
 	datasetID := options.DatasetID
 	knowledgeBaseID := options.KnowledgeBaseID

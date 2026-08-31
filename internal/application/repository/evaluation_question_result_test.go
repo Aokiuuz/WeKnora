@@ -234,6 +234,43 @@ func TestEvaluationQuestionResultKeysetPaginationAndTenantIsolation(t *testing.T
 	require.Error(t, err)
 }
 
+func TestEvaluationQuestionResultsApplyFrozenSourceAllowList(t *testing.T) {
+	db := setupEvaluationTaskRepositoryTestDB(t)
+	taskRepo := NewEvaluationTaskRepository(db)
+	repo := NewEvaluationQuestionResultRepository(db)
+	ctx := context.Background()
+
+	task := newEvaluationTaskEntity(36, "question-api-key-scope")
+	source := "kb-allowed"
+	experiment, err := json.Marshal(types.EvaluationExperimentSnapshot{SourceKnowledgeBaseID: &source})
+	require.NoError(t, err)
+	datasetVersionID := "version-1"
+	contentHash := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	experimentHash := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	task.ExperimentSnapshot = experiment
+	task.DatasetVersionID = &datasetVersionID
+	task.DatasetContentSHA256 = &contentHash
+	task.ExperimentSHA256 = &experimentHash
+	started := startEvaluationQuestionTask(t, taskRepo, task)
+	_, inserted, err := repo.PublishQuestionResult(ctx,
+		newEvaluationQuestionCommandFixture(started, started.Version, 0))
+	require.NoError(t, err)
+	require.True(t, inserted)
+
+	denied := types.WithTenantAPIKeyScope(ctx, types.TenantAPIKeyScope{
+		KnowledgeBaseIDs: types.StringArray{"kb-denied"},
+	})
+	_, err = repo.ListQuestionResults(denied, task.TenantID, task.ID, 0, 10)
+	require.ErrorIs(t, err, interfaces.ErrEvaluationTaskNotFound)
+
+	allowed := types.WithTenantAPIKeyScope(ctx, types.TenantAPIKeyScope{
+		KnowledgeBaseIDs: types.StringArray{"kb-allowed"},
+	})
+	rows, err := repo.ListQuestionResults(allowed, task.TenantID, task.ID, 0, 10)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+}
+
 func TestEvaluationQuestionResultConcurrentOrderDoesNotChangeOutcome(t *testing.T) {
 	db := setupEvaluationTaskRepositoryTestDB(t)
 	taskRepo := NewEvaluationTaskRepository(db)

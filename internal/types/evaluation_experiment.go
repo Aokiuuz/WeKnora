@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -170,6 +171,20 @@ type EvaluationExperimentSnapshot struct {
 	Code            EvaluationCodeSnapshot            `json:"code"`
 	Environment     EvaluationEnvironmentSnapshot     `json:"environment"`
 	Reproducibility EvaluationReproducibilitySnapshot `json:"reproducibility"`
+}
+
+// EvaluationSourceKnowledgeBaseID reads the immutable authorization source
+// from a persisted experiment snapshot.
+func EvaluationSourceKnowledgeBaseID(snapshot JSON) (string, bool) {
+	if len(bytes.TrimSpace(snapshot)) == 0 {
+		return "", false
+	}
+	var experiment EvaluationExperimentSnapshot
+	if err := json.Unmarshal(snapshot, &experiment); err != nil || experiment.SourceKnowledgeBaseID == nil {
+		return "", false
+	}
+	source := strings.TrimSpace(*experiment.SourceKnowledgeBaseID)
+	return source, source != ""
 }
 
 // CanonicalJSON serializes the snapshot with deterministic bytes: fixed field

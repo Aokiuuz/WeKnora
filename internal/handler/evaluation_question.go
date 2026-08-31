@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -68,6 +69,10 @@ func (h *EvaluationQuestionHandler) ListQuestionResults(c *gin.Context) {
 	// Read one extra row to decide whether another page exists.
 	rows, err := h.questionResults.ListQuestionResults(ctx, tenantID, taskID, sampleIndexFrom, pageSize+1)
 	if err != nil {
+		if errors.Is(err, interfaces.ErrEvaluationTaskNotFound) {
+			c.Error(apperrors.NewNotFoundError("Evaluation task not found"))
+			return
+		}
 		c.Error(apperrors.NewInternalServerError(err.Error()))
 		return
 	}

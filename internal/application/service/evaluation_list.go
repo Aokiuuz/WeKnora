@@ -118,9 +118,28 @@ func (e *EvaluationService) ListEvaluations(
 		query.IDBefore = cursor.ID
 	}
 
-	tasks, err := e.evaluationTaskRepository.ListTasks(ctx, tenantID, query)
-	if err != nil {
-		return nil, err
+	tasks := make([]*types.EvaluationTaskEntity, 0, pageSize+1)
+	scanQuery := query
+	for len(tasks) <= pageSize {
+		batch, err := e.evaluationTaskRepository.ListTasks(ctx, tenantID, scanQuery)
+		if err != nil {
+			return nil, err
+		}
+		for _, task := range batch {
+			if AuthorizeEvaluationTaskForAPIKey(ctx, task) == nil {
+				tasks = append(tasks, task)
+				if len(tasks) > pageSize {
+					break
+				}
+			}
+		}
+		if len(tasks) > pageSize || len(batch) < scanQuery.Limit || len(batch) == 0 {
+			break
+		}
+		lastScanned := batch[len(batch)-1]
+		startBefore := lastScanned.StartTime.UTC()
+		scanQuery.StartBefore = &startBefore
+		scanQuery.IDBefore = lastScanned.ID
 	}
 
 	page := &types.EvaluationTaskListPage{Items: tasks}

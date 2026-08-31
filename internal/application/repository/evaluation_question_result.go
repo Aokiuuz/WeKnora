@@ -151,6 +151,9 @@ func (r *evaluationQuestionResultRepository) ListQuestionResults(
 	sampleIndexFrom int,
 	limit int,
 ) ([]*types.EvaluationQuestionResultEntity, error) {
+	if err := r.authorizeQuestionResultRead(ctx, tenantID, taskID); err != nil {
+		return nil, err
+	}
 	if limit < 1 {
 		limit = types.EvaluationQuestionPageDefaultSize
 	}
@@ -167,6 +170,36 @@ func (r *evaluationQuestionResultRepository) ListQuestionResults(
 		return nil, fmt.Errorf("list evaluation question results %s: %w", taskID, err)
 	}
 	return rows, nil
+}
+
+func (r *evaluationQuestionResultRepository) authorizeQuestionResultRead(
+	ctx context.Context,
+	tenantID uint64,
+	taskID string,
+) error {
+	scope, ok := types.TenantAPIKeyScopeFromContext(ctx)
+	if !ok || !scope.IsKnowledgeBaseRestricted() {
+		return nil
+	}
+	var task types.EvaluationTaskEntity
+	err := r.db.WithContext(ctx).
+		Select("dataset_version_id", "dataset_content_sha256", "experiment_snapshot", "experiment_sha256").
+		Where("tenant_id = ? AND id = ?", tenantID, taskID).
+		First(&task).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return interfaces.ErrEvaluationTaskNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("authorize evaluation question results %s: %w", taskID, err)
+	}
+	complete := task.DatasetVersionID != nil && *task.DatasetVersionID != "" &&
+		task.DatasetContentSHA256 != nil && len(*task.DatasetContentSHA256) == 64 &&
+		task.ExperimentSHA256 != nil && len(*task.ExperimentSHA256) == 64
+	source, sourceOK := types.EvaluationSourceKnowledgeBaseID(task.ExperimentSnapshot)
+	if !complete || !sourceOK || !scope.AllowsKnowledgeBase(source) {
+		return interfaces.ErrEvaluationTaskNotFound
+	}
+	return nil
 }
 
 func evaluationQuestionResultRowFrom(

@@ -59,6 +59,43 @@ func TestListEvaluationsPaginatesWithoutDuplicateOrGap(t *testing.T) {
 	)
 }
 
+func TestListEvaluationsFiltersFrozenSourcesForRestrictedAPIKey(t *testing.T) {
+	repository := newFakeEvaluationTaskRepository()
+	entities := registerListFixtures(repository, 91, 5)
+	for index, entity := range entities {
+		source := "kb-denied"
+		if index == 0 || index == 1 || index == 3 {
+			source = "kb-allowed"
+		}
+		frozen := evaluationTaskWithSourceKnowledgeBase(t, source)
+		entity.ExperimentSnapshot = frozen.ExperimentSnapshot
+		entity.DatasetVersionID = frozen.DatasetVersionID
+		entity.DatasetContentSHA256 = frozen.DatasetContentSHA256
+		entity.ExperimentSHA256 = frozen.ExperimentSHA256
+		repository.register(entity)
+	}
+	service := &EvaluationService{evaluationTaskRepository: repository, ownerID: "list-owner"}
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(91))
+	ctx = types.WithTenantAPIKeyScope(ctx, types.TenantAPIKeyScope{
+		KnowledgeBaseIDs: types.StringArray{"kb-allowed"},
+	})
+
+	first, err := service.ListEvaluations(ctx, types.EvaluationTaskListInput{PageSize: 2})
+	require.NoError(t, err)
+	require.Len(t, first.Items, 2)
+	assert.Equal(t, []string{"list-03", "list-01"},
+		[]string{first.Items[0].ID, first.Items[1].ID})
+	require.NotEmpty(t, first.NextCursor)
+
+	second, err := service.ListEvaluations(ctx, types.EvaluationTaskListInput{
+		PageSize: 2, Cursor: first.NextCursor,
+	})
+	require.NoError(t, err)
+	require.Len(t, second.Items, 1)
+	assert.Equal(t, "list-00", second.Items[0].ID)
+	assert.Empty(t, second.NextCursor)
+}
+
 func TestListEvaluationsDefaultsAndClampsPageSize(t *testing.T) {
 	repository := newFakeEvaluationTaskRepository()
 	service := &EvaluationService{evaluationTaskRepository: repository, ownerID: "list-owner"}

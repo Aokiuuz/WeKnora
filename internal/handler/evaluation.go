@@ -97,6 +97,8 @@ func (e *EvaluationHandler) Evaluation(c *gin.Context) {
 		case stderrors.Is(err, interfaces.ErrEvaluationDatasetNotFound),
 			stderrors.Is(err, interfaces.ErrEvaluationDatasetVersionNotFound):
 			c.Error(errors.NewNotFoundError("Evaluation dataset not found").WithDetails(err.Error()))
+		case stderrors.Is(err, service.ErrEvaluationSourceKnowledgeBaseNotFound):
+			c.Error(errors.NewNotFoundError("Evaluation source knowledge base not found"))
 		default:
 			c.Error(errors.NewInternalServerError(err.Error()))
 		}
@@ -281,6 +283,10 @@ func (e *EvaluationHandler) GetEvaluationResult(c *gin.Context) {
 
 	result, err := e.evaluationService.EvaluationResult(ctx, secutils.SanitizeForLog(request.TaskID))
 	if err != nil {
+		if stderrors.Is(err, interfaces.ErrEvaluationTaskNotFound) {
+			c.Error(errors.NewNotFoundError("Evaluation task not found"))
+			return
+		}
 		logger.ErrorWithFields(ctx, err, nil)
 		c.Error(errors.NewInternalServerError(err.Error()))
 		return
