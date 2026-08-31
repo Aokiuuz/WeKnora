@@ -25,19 +25,26 @@ CREATE TABLE IF NOT EXISTS evaluation_tasks_backup_000018 (
     created_at             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at             DATETIME,
+    cancel_requested_at    DATETIME,
     CONSTRAINT evaluation_tasks_active_lease_check
-        CHECK (status NOT IN (0, 1) OR lease_expires_at IS NOT NULL)
+        CHECK (status NOT IN (0, 1) OR lease_expires_at IS NOT NULL),
+    CONSTRAINT evaluation_tasks_canceled_requires_request
+        CHECK (status <> 6 OR cancel_requested_at IS NOT NULL),
+    CONSTRAINT evaluation_tasks_terminal_without_cancel
+        CHECK (status NOT IN (2, 3, 4, 5) OR cancel_requested_at IS NULL)
 );
 
 INSERT INTO evaluation_tasks_backup_000018 (
     id, tenant_id, dataset_id, status, start_time, end_time, total, finished, err_msg,
     cleanup_errors, params, metric, temporary_kb_id, temporary_knowledge_id, owner_id,
-    lease_expires_at, heartbeat_at, version, created_at, updated_at, deleted_at
+    lease_expires_at, heartbeat_at, version, created_at, updated_at, deleted_at,
+    cancel_requested_at
 )
 SELECT
     id, tenant_id, dataset_id, status, start_time, end_time, total, finished, err_msg,
     cleanup_errors, params, metric, temporary_kb_id, temporary_knowledge_id, owner_id,
-    lease_expires_at, heartbeat_at, version, created_at, updated_at, deleted_at
+    lease_expires_at, heartbeat_at, version, created_at, updated_at, deleted_at,
+    cancel_requested_at
 FROM evaluation_tasks;
 
 DROP TABLE evaluation_tasks;
@@ -47,10 +54,14 @@ CREATE INDEX IF NOT EXISTS idx_evaluation_tasks_tenant_started
     ON evaluation_tasks (tenant_id, start_time DESC, id DESC)
     WHERE deleted_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS idx_evaluation_tasks_tenant_status
-    ON evaluation_tasks (tenant_id, status, start_time DESC)
+CREATE INDEX IF NOT EXISTS idx_evaluation_tasks_tenant_status_started
+    ON evaluation_tasks (tenant_id, status, start_time DESC, id DESC)
     WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_evaluation_tasks_active_lease
     ON evaluation_tasks (status, lease_expires_at)
     WHERE deleted_at IS NULL AND status IN (0, 1);
+
+CREATE INDEX IF NOT EXISTS idx_evaluation_tasks_retention
+    ON evaluation_tasks (end_time)
+    WHERE status IN (2, 3, 4, 5, 6) AND end_time IS NOT NULL;
