@@ -59,11 +59,12 @@ func startEvaluationQuestionTask(
 	task *types.EvaluationTaskEntity,
 ) *types.EvaluationTaskEntity {
 	t.Helper()
-	require.NoError(t, repo.CreateTask(context.Background(), task.TenantID, task))
 	now := time.Now().UTC()
+	task.LeaseExpiresAt = ptrToTime(now.Add(time.Minute))
+	require.NoError(t, repo.CreateTask(context.Background(), task.TenantID, task))
 	started, err := repo.TryStartTask(context.Background(), types.EvaluationTaskStartCommand{
 		TenantID: task.TenantID, TaskID: task.ID, OwnerID: task.OwnerID,
-		ExpectedVersion: 1, Now: now, LeaseExpiresAt: now.Add(time.Minute),
+		ExpectedVersion: task.Version, Now: now, LeaseExpiresAt: now.Add(time.Minute),
 	})
 	require.NoError(t, err)
 	return started
@@ -241,6 +242,7 @@ func TestEvaluationQuestionResultConcurrentOrderDoesNotChangeOutcome(t *testing.
 	errs := make(chan error, len(samples))
 	versionMu := sync.Mutex{}
 	version := started.Version
+	finished := 0
 	for _, sample := range samples {
 		sample := sample
 		waiters.Add(1)
@@ -248,9 +250,11 @@ func TestEvaluationQuestionResultConcurrentOrderDoesNotChangeOutcome(t *testing.
 			defer waiters.Done()
 			versionMu.Lock()
 			command := newEvaluationQuestionCommandFixture(started, version, sample)
+			command.Finished = finished + 1
 			updated, _, err := repo.PublishQuestionResult(ctx, command)
 			if err == nil {
 				version = updated.Version
+				finished = command.Finished
 			}
 			versionMu.Unlock()
 			errs <- err

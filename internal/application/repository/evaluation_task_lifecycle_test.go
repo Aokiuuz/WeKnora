@@ -495,8 +495,10 @@ func TestEvaluationTaskLifecycleNeverModifiesExperimentSnapshot(t *testing.T) {
 	db := setupEvaluationTaskRepositoryTestDB(t)
 	repo := NewEvaluationTaskRepository(db)
 	ctx := context.Background()
+	now := time.Date(2026, 8, 28, 9, 0, 0, 0, time.UTC)
 
 	task := newEvaluationTaskEntity(23, "experiment-frozen")
+	task.LeaseExpiresAt = ptrToTime(now.Add(time.Minute))
 	datasetVersionID := "dataset-version-1"
 	contentSHA256 := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	experimentSHA256 := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -519,7 +521,6 @@ func TestEvaluationTaskLifecycleNeverModifiesExperimentSnapshot(t *testing.T) {
 		assert.Equal(t, experimentSHA256, *entity.ExperimentSHA256, stage)
 	}
 
-	now := time.Date(2026, 8, 28, 9, 0, 0, 0, time.UTC)
 	started, err := repo.TryStartTask(ctx, types.EvaluationTaskStartCommand{
 		TenantID: task.TenantID, TaskID: task.ID, OwnerID: task.OwnerID,
 		ExpectedVersion: task.Version, Now: now, LeaseExpiresAt: now.Add(time.Minute),
@@ -531,7 +532,7 @@ func TestEvaluationTaskLifecycleNeverModifiesExperimentSnapshot(t *testing.T) {
 		TenantID: task.TenantID, TaskID: task.ID, OwnerID: task.OwnerID,
 		ExpectedVersion: started.Version, Total: 2, Finished: 1,
 		Metric: types.JSON(`{"retrieval_metrics":{"precision":0.5}}`),
-		Now: now.Add(10 * time.Second), LeaseExpiresAt: now.Add(time.Minute),
+		Now:    now.Add(10 * time.Second), LeaseExpiresAt: now.Add(time.Minute),
 	})
 	require.NoError(t, err)
 	assertFrozen("PublishProgress", progress)
