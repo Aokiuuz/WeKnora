@@ -1,0 +1,853 @@
+<template>
+  <div class="evaluation-page">
+    <header class="evaluation-header" style="--wails-draggable: drag">
+      <div>
+        <div class="eyebrow">M4 · {{ t('evaluation.eyebrow') }}</div>
+        <h1>{{ t('evaluation.title') }}</h1>
+        <p>{{ t('evaluation.subtitle') }}</p>
+      </div>
+      <div class="header-stat" aria-live="polite">
+        <span>{{ t('evaluation.selected') }}</span>
+        <strong>{{ selectedTaskIds.length }}</strong>
+        <span>/ 10</span>
+      </div>
+    </header>
+
+    <form class="filter-panel" @submit.prevent="applyFilters">
+      <label class="filter-field">
+        <span>{{ t('evaluation.statusLabel') }}</span>
+        <select v-model="filters.status">
+          <option value="">{{ t('evaluation.allStatuses') }}</option>
+          <option v-for="option in statusOptions" :key="option.value" :value="String(option.value)">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+      <label class="filter-field">
+        <span>{{ t('evaluation.dataset') }}</span>
+        <input v-model.trim="filters.datasetId" :placeholder="t('evaluation.datasetPlaceholder')" />
+      </label>
+      <label class="filter-field">
+        <span>{{ t('evaluation.datasetVersion') }}</span>
+        <input v-model.trim="filters.datasetVersionId" :placeholder="t('evaluation.versionPlaceholder')" />
+      </label>
+      <label class="filter-field">
+        <span>{{ t('evaluation.model') }}</span>
+        <input v-model.trim="filters.modelId" :placeholder="t('evaluation.modelPlaceholder')" />
+      </label>
+      <label class="filter-field filter-field--time">
+        <span>{{ t('evaluation.startedFrom') }}</span>
+        <input v-model="filters.startedFrom" type="datetime-local" />
+      </label>
+      <label class="filter-field filter-field--time">
+        <span>{{ t('evaluation.startedTo') }}</span>
+        <input v-model="filters.startedTo" type="datetime-local" />
+      </label>
+      <label class="filter-field filter-field--labels">
+        <span>{{ t('evaluation.labels') }}</span>
+        <input v-model="filters.labels" :placeholder="t('evaluation.labelsPlaceholder')" />
+      </label>
+      <div class="filter-actions">
+        <button type="button" class="button button--quiet" @click="resetFilters">
+          {{ t('evaluation.reset') }}
+        </button>
+        <button type="submit" class="button button--primary" :disabled="listLoading">
+          {{ t('evaluation.apply') }}
+        </button>
+      </div>
+    </form>
+
+    <div class="workbench">
+      <aside class="run-browser">
+        <div class="panel-heading">
+          <div>
+            <span class="section-kicker">{{ t('evaluation.runs') }}</span>
+            <strong>{{ tasks.length }}</strong>
+          </div>
+          <button class="icon-button" type="button" :title="t('evaluation.refresh')" @click="applyFilters">
+            <t-icon name="refresh" size="16px" />
+          </button>
+        </div>
+
+        <div v-if="selectedTaskIds.length" class="selection-bar">
+          <div class="selection-copy">
+            <strong>{{ selectedTaskIds.length }}</strong>
+            <span>{{ t('evaluation.selectedRuns') }}</span>
+          </div>
+          <label v-if="selectedTaskIds.length >= 2" class="baseline-select">
+            <span>{{ t('evaluation.baseline') }}</span>
+            <select v-model="baselineTaskId">
+              <option v-for="taskId in selectedTaskIds" :key="taskId" :value="taskId">
+                {{ shortTaskId(taskId) }}
+              </option>
+            </select>
+          </label>
+          <button
+            type="button"
+            class="button button--primary button--compact"
+            :disabled="selectedTaskIds.length < 2 || comparisonLoading"
+            @click="runComparison"
+          >
+            {{ comparisonLoading ? t('evaluation.comparing') : t('evaluation.compare') }}
+          </button>
+        </div>
+
+        <div v-if="listLoading && tasks.length === 0" class="state-block">
+          <t-loading size="small" />
+          <span>{{ t('evaluation.loading') }}</span>
+        </div>
+        <div v-else-if="listError" class="state-block state-block--error">
+          <t-icon name="error-circle" />
+          <span>{{ listError }}</span>
+        </div>
+        <div v-else-if="tasks.length === 0" class="state-block">
+          <div class="empty-orbit"><span /></div>
+          <span>{{ t('evaluation.noRuns') }}</span>
+        </div>
+        <div v-else class="run-list">
+          <article
+            v-for="task in tasks"
+            :key="task.id"
+            class="run-row"
+            :class="{ 'run-row--active': activeTaskId === task.id }"
+            @click="openTask(task)"
+          >
+            <label class="run-checkbox" @click.stop>
+              <input
+                type="checkbox"
+                :checked="selectedTaskIds.includes(task.id)"
+                :aria-label="t('evaluation.selectRun', { id: task.id })"
+                @change="onComparisonCheckbox(task.id, $event)"
+              />
+              <span />
+            </label>
+            <div class="run-row__body">
+              <div class="run-row__top">
+                <code :title="task.id">{{ shortTaskId(task.id) }}</code>
+                <span class="status-pill" :class="`status-pill--${statusMeta(task.status).tone}`">
+                  {{ statusMeta(task.status).label }}
+                </span>
+              </div>
+              <div class="run-row__dataset" :title="task.dataset_id">{{ task.dataset_id }}</div>
+              <div class="run-row__meta">
+                <span>{{ formatDate(task.start_time) }}</span>
+                <span>{{ task.finished ?? 0 }}/{{ task.total ?? 0 }}</span>
+              </div>
+              <div v-if="task.labels?.length" class="label-row">
+                <span v-for="label in task.labels.slice(0, 3)" :key="label" class="label-chip">{{ label }}</span>
+                <span v-if="task.labels.length > 3" class="label-chip">+{{ task.labels.length - 3 }}</span>
+              </div>
+            </div>
+          </article>
+          <button
+            v-if="nextCursor"
+            type="button"
+            class="load-more"
+            :disabled="listLoading"
+            @click="loadTasks(true)"
+          >
+            {{ listLoading ? t('evaluation.loading') : t('evaluation.loadMore') }}
+          </button>
+        </div>
+      </aside>
+
+      <main class="inspection-panel">
+        <div v-if="comparisonResult" class="comparison-view">
+          <div class="inspection-heading">
+            <div>
+              <span class="section-kicker">{{ t('evaluation.comparison') }}</span>
+              <h2>{{ comparisonResult.runs.length }} {{ t('evaluation.runsCompared') }}</h2>
+            </div>
+            <button type="button" class="button button--quiet button--compact" @click="comparisonResult = null">
+              {{ t('evaluation.backToDetail') }}
+            </button>
+          </div>
+
+          <div class="comparison-run-strip">
+            <div v-for="run in comparisonResult.runs" :key="run.task_id" class="comparison-run">
+              <span v-if="run.is_baseline" class="baseline-badge">{{ t('evaluation.baseline') }}</span>
+              <code>{{ shortTaskId(run.task_id) }}</code>
+              <small>v{{ run.version_number }} · {{ run.dataset_id }}</small>
+            </div>
+          </div>
+
+          <section class="data-section">
+            <div class="data-section__heading">
+              <h3>{{ t('evaluation.parameterDifferences') }}</h3>
+              <span>{{ comparisonResult.parameters.filter(parameter => parameter.differ).length }}</span>
+            </div>
+            <div class="table-scroll">
+              <table class="comparison-table">
+                <thead>
+                  <tr>
+                    <th>{{ t('evaluation.parameter') }}</th>
+                    <th v-for="run in comparisonResult.runs" :key="run.task_id">
+                      {{ shortTaskId(run.task_id) }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="parameter in comparisonResult.parameters"
+                    :key="parameter.pointer"
+                    :class="{ 'row-differs': parameter.differ }"
+                  >
+                    <td><code>{{ parameter.pointer }}</code></td>
+                    <td v-for="value in parameter.values" :key="value.task_id">
+                      <span v-if="value.missing" class="missing-value">{{ t('evaluation.missing') }}</span>
+                      <code v-else>{{ formatValue(value.value) }}</code>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="data-section">
+            <div class="data-section__heading">
+              <h3>{{ t('evaluation.metricDifferences') }}</h3>
+              <span>{{ comparisonResult.metrics.length }}</span>
+            </div>
+            <div class="metric-grid">
+              <article v-for="metric in comparisonResult.metrics" :key="metric.pointer" class="metric-card">
+                <div class="metric-card__heading">
+                  <div>
+                    <code>{{ metric.key }}</code>
+                    <small>{{ metric.version }} · {{ metric.pointer }}</small>
+                  </div>
+                  <span class="compatibility" :class="{ 'compatibility--bad': !metric.compatible }">
+                    {{ metric.compatible ? t('evaluation.compatible') : t('evaluation.incompatible') }}
+                  </span>
+                </div>
+                <div class="metric-values">
+                  <div v-for="value in metric.values" :key="value.task_id" class="metric-value">
+                    <span>{{ shortTaskId(value.task_id) }}</span>
+                    <strong>{{ formatMetric(value.value) }}</strong>
+                    <small v-if="value.is_baseline">{{ t('evaluation.baseline') }}</small>
+                    <small v-else-if="value.delta !== null">
+                      Δ {{ signedNumber(value.delta) }} · {{ formatRelative(value.relative_delta) }}
+                    </small>
+                    <small v-else>{{ value.reason || value.relative_reason || t('evaluation.missing') }}</small>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+
+        <div v-else-if="detailLoading" class="state-block state-block--detail">
+          <t-loading />
+          <span>{{ t('evaluation.loadingDetail') }}</span>
+        </div>
+        <div v-else-if="detailError" class="state-block state-block--detail state-block--error">
+          <t-icon name="error-circle" />
+          <span>{{ detailError }}</span>
+        </div>
+        <div v-else-if="detail" class="detail-view">
+          <div class="inspection-heading">
+            <div>
+              <span class="section-kicker">{{ t('evaluation.runDetails') }}</span>
+              <h2>{{ shortTaskId(detail.task.id) }}</h2>
+              <code class="full-task-id">{{ detail.task.id }}</code>
+            </div>
+            <div class="export-actions">
+              <button
+                type="button"
+                class="button button--quiet button--compact"
+                :disabled="Boolean(exporting)"
+                @click="download('json')"
+              >
+                <t-icon name="download" /> JSON
+              </button>
+              <button
+                type="button"
+                class="button button--quiet button--compact"
+                :disabled="Boolean(exporting)"
+                @click="download('csv')"
+              >
+                <t-icon name="download" /> CSV
+              </button>
+            </div>
+          </div>
+
+          <div class="fact-grid">
+            <div class="fact-card">
+              <span>{{ t('evaluation.statusLabel') }}</span>
+              <strong>{{ statusMeta(detail.task.status).label }}</strong>
+            </div>
+            <div class="fact-card">
+              <span>{{ t('evaluation.progress') }}</span>
+              <strong>{{ detail.task.finished ?? 0 }} / {{ detail.task.total ?? 0 }}</strong>
+            </div>
+            <div class="fact-card">
+              <span>{{ t('evaluation.datasetVersion') }}</span>
+              <strong>{{ detail.task.dataset_version_id || '—' }}</strong>
+            </div>
+            <div class="fact-card">
+              <span>{{ t('evaluation.provenance') }}</span>
+              <strong :class="detail.provenance_complete ? 'text-success' : 'text-warning'">
+                {{ detail.provenance_complete ? t('evaluation.complete') : t('evaluation.incomplete') }}
+              </strong>
+            </div>
+          </div>
+
+          <section class="label-editor">
+            <div>
+              <h3>{{ t('evaluation.labels') }}</h3>
+              <div class="label-row">
+                <span v-for="label in detail.task.labels || []" :key="label" class="label-chip">{{ label }}</span>
+                <span v-if="!detail.task.labels?.length" class="muted">{{ t('evaluation.noLabels') }}</span>
+              </div>
+            </div>
+            <div v-if="canManageLabels" class="label-editor__control">
+              <input v-model="labelDraft" :placeholder="t('evaluation.labelsPlaceholder')" />
+              <button type="button" class="button button--quiet button--compact" :disabled="savingLabels" @click="saveLabels">
+                {{ t('evaluation.saveLabels') }}
+              </button>
+            </div>
+          </section>
+
+          <nav class="detail-tabs">
+            <button :class="{ active: activeTab === 'overview' }" @click="activeTab = 'overview'">
+              {{ t('evaluation.overview') }}
+            </button>
+            <button :class="{ active: activeTab === 'questions' }" @click="activeTab = 'questions'">
+              {{ t('evaluation.questions') }} <span>{{ questions.length }}</span>
+            </button>
+          </nav>
+
+          <div v-if="activeTab === 'overview'" class="overview-grid">
+            <section class="json-panel">
+              <div class="data-section__heading"><h3>{{ t('evaluation.experiment') }}</h3></div>
+              <pre>{{ prettyJSON(detail.experiment) }}</pre>
+            </section>
+            <section class="json-panel">
+              <div class="data-section__heading"><h3>{{ t('evaluation.aggregateMetrics') }}</h3></div>
+              <pre>{{ prettyJSON(detail.metric) }}</pre>
+            </section>
+          </div>
+
+          <section v-else class="question-section">
+            <div v-if="questionLoading && questions.length === 0" class="state-block">
+              <t-loading size="small" />
+              <span>{{ t('evaluation.loadingQuestions') }}</span>
+            </div>
+            <div v-else-if="questions.length === 0" class="state-block">{{ t('evaluation.noQuestions') }}</div>
+            <article v-for="question in questions" :key="question.sample_index" class="question-card">
+              <div class="question-card__index">{{ String(question.sample_index + 1).padStart(2, '0') }}</div>
+              <div class="question-card__body">
+                <div class="question-card__heading">
+                  <h3>{{ question.question }}</h3>
+                  <span class="status-pill" :class="question.status === 'success' ? 'status-pill--success' : 'status-pill--danger'">
+                    {{ question.status }}
+                  </span>
+                </div>
+                <dl>
+                  <div><dt>QID</dt><dd>{{ question.qid }}</dd></div>
+                  <div><dt>{{ t('evaluation.referenceAnswer') }}</dt><dd>{{ question.reference_answer || '—' }}</dd></div>
+                  <div><dt>{{ t('evaluation.generatedText') }}</dt><dd>{{ question.generated_text || '—' }}</dd></div>
+                </dl>
+                <div class="ranking-row">
+                  <span v-for="rank in question.search_results" :key="rank.rank" :class="{ unknown: rank.pid === -1 }">
+                    #{{ rank.rank }} · PID {{ rank.pid }}
+                  </span>
+                </div>
+              </div>
+            </article>
+            <button
+              v-if="questionCursor"
+              type="button"
+              class="load-more load-more--questions"
+              :disabled="questionLoading"
+              @click="loadQuestions(true)"
+            >
+              {{ questionLoading ? t('evaluation.loading') : t('evaluation.loadMoreQuestions') }}
+            </button>
+          </section>
+        </div>
+        <div v-else class="detail-empty">
+          <div class="detail-empty__visual">
+            <span class="axis axis--x" />
+            <span class="axis axis--y" />
+            <span class="point point--one" />
+            <span class="point point--two" />
+            <span class="point point--three" />
+          </div>
+          <h2>{{ t('evaluation.detailEmpty') }}</h2>
+          <p>{{ t('evaluation.detailEmptyHint') }}</p>
+        </div>
+      </main>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from 'vue'
+import { MessagePlugin } from 'tdesign-vue-next'
+import { useI18n } from 'vue-i18n'
+
+import {
+  EVALUATION_STATUS,
+  compareEvaluationTasks,
+  downloadEvaluationArtifact,
+  getEvaluationDetail,
+  listEvaluationQuestions,
+  listEvaluationTasks,
+  replaceEvaluationLabels,
+  type EvaluationComparisonResponse,
+  type EvaluationDetail,
+  type EvaluationQuestionResult,
+  type EvaluationTask,
+  type EvaluationTaskFilters,
+} from '@/api/evaluation'
+import { useAuthStore } from '@/stores/auth'
+
+const { t } = useI18n()
+const authStore = useAuthStore()
+
+const filters = reactive({
+  status: '',
+  datasetId: '',
+  datasetVersionId: '',
+  modelId: '',
+  startedFrom: '',
+  startedTo: '',
+  labels: '',
+})
+
+const tasks = ref<EvaluationTask[]>([])
+const nextCursor = ref('')
+const listLoading = ref(false)
+const listError = ref('')
+const activeTaskId = ref('')
+const detail = ref<EvaluationDetail | null>(null)
+const detailLoading = ref(false)
+const detailError = ref('')
+const questions = ref<EvaluationQuestionResult[]>([])
+const questionCursor = ref('')
+const questionLoading = ref(false)
+const activeTab = ref<'overview' | 'questions'>('overview')
+const selectedTaskIds = ref<string[]>([])
+const baselineTaskId = ref('')
+const comparisonResult = ref<EvaluationComparisonResponse | null>(null)
+const comparisonLoading = ref(false)
+const exporting = ref<'json' | 'csv' | ''>('')
+const labelDraft = ref('')
+const savingLabels = ref(false)
+
+const canManageLabels = computed(() => authStore.hasRole('admin'))
+
+const statusOptions = computed(() => [
+  { value: EVALUATION_STATUS.pending, label: t('evaluation.status.pending') },
+  { value: EVALUATION_STATUS.running, label: t('evaluation.status.running') },
+  { value: EVALUATION_STATUS.success, label: t('evaluation.status.success') },
+  { value: EVALUATION_STATUS.failed, label: t('evaluation.status.failed') },
+  { value: EVALUATION_STATUS.timedOut, label: t('evaluation.status.timedOut') },
+  { value: EVALUATION_STATUS.interrupted, label: t('evaluation.status.interrupted') },
+  { value: EVALUATION_STATUS.canceled, label: t('evaluation.status.canceled') },
+])
+
+function errorMessage(error: unknown): string {
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    return error.message
+  }
+  return t('evaluation.unknownError')
+}
+
+function filterInput(cursor = ''): EvaluationTaskFilters {
+  return {
+    status: filters.status === '' ? undefined : Number(filters.status),
+    datasetId: filters.datasetId,
+    datasetVersionId: filters.datasetVersionId,
+    modelId: filters.modelId,
+    startedFrom: filters.startedFrom ? new Date(filters.startedFrom).toISOString() : undefined,
+    startedTo: filters.startedTo ? new Date(filters.startedTo).toISOString() : undefined,
+    labels: filters.labels.split(',').map(label => label.trim()).filter(Boolean),
+    pageSize: 30,
+    cursor,
+  }
+}
+
+async function loadTasks(append = false) {
+  if (listLoading.value) return
+  listLoading.value = true
+  listError.value = ''
+  try {
+    const page = await listEvaluationTasks(filterInput(append ? nextCursor.value : ''))
+    tasks.value = append ? [...tasks.value, ...page.items] : page.items
+    nextCursor.value = page.next_cursor
+  } catch (error) {
+    listError.value = errorMessage(error)
+  } finally {
+    listLoading.value = false
+  }
+}
+
+function applyFilters() {
+  selectedTaskIds.value = []
+  baselineTaskId.value = ''
+  comparisonResult.value = null
+  void loadTasks(false)
+}
+
+function resetFilters() {
+  Object.assign(filters, {
+    status: '', datasetId: '', datasetVersionId: '', modelId: '', startedFrom: '', startedTo: '', labels: '',
+  })
+  applyFilters()
+}
+
+async function openTask(task: EvaluationTask) {
+  if (activeTaskId.value === task.id && detail.value) return
+  activeTaskId.value = task.id
+  comparisonResult.value = null
+  detailLoading.value = true
+  detailError.value = ''
+  activeTab.value = 'overview'
+  questions.value = []
+  questionCursor.value = ''
+  const requestedTaskId = task.id
+  try {
+    const result = await getEvaluationDetail(task.id)
+    if (activeTaskId.value !== requestedTaskId) return
+    result.task.labels = task.labels ?? []
+    detail.value = result
+    labelDraft.value = result.task.labels.join(', ')
+  } catch (error) {
+    if (activeTaskId.value === requestedTaskId) detailError.value = errorMessage(error)
+  } finally {
+    if (activeTaskId.value === requestedTaskId) detailLoading.value = false
+  }
+  if (activeTaskId.value === requestedTaskId) void loadQuestions(false)
+}
+
+async function loadQuestions(append: boolean) {
+  if (!activeTaskId.value || questionLoading.value) return
+  questionLoading.value = true
+  try {
+    const page = await listEvaluationQuestions(
+      activeTaskId.value,
+      append ? questionCursor.value : '',
+      100,
+    )
+    questions.value = append ? [...questions.value, ...page.items] : page.items
+    questionCursor.value = page.next_cursor
+  } catch (error) {
+    MessagePlugin.error(errorMessage(error))
+  } finally {
+    questionLoading.value = false
+  }
+}
+
+function onComparisonCheckbox(taskId: string, event: Event) {
+  const checked = (event.target as HTMLInputElement).checked
+  if (checked) {
+    if (selectedTaskIds.value.length >= 10) {
+      ;(event.target as HTMLInputElement).checked = false
+      MessagePlugin.warning(t('evaluation.selectAtMostTen'))
+      return
+    }
+    if (!selectedTaskIds.value.includes(taskId)) selectedTaskIds.value.push(taskId)
+  } else {
+    selectedTaskIds.value = selectedTaskIds.value.filter(id => id !== taskId)
+  }
+  if (!selectedTaskIds.value.includes(baselineTaskId.value)) {
+    baselineTaskId.value = selectedTaskIds.value[0] ?? ''
+  }
+}
+
+async function runComparison() {
+  if (selectedTaskIds.value.length < 2) {
+    MessagePlugin.warning(t('evaluation.selectAtLeastTwo'))
+    return
+  }
+  comparisonLoading.value = true
+  try {
+    comparisonResult.value = await compareEvaluationTasks({
+      task_ids: selectedTaskIds.value,
+      baseline_task_id: baselineTaskId.value || selectedTaskIds.value[0],
+    })
+  } catch (error) {
+    MessagePlugin.error(errorMessage(error))
+  } finally {
+    comparisonLoading.value = false
+  }
+}
+
+async function saveLabels() {
+  if (!detail.value) return
+  savingLabels.value = true
+  try {
+    const labels = labelDraft.value.split(',').map(label => label.trim()).filter(Boolean)
+    const saved = await replaceEvaluationLabels(detail.value.task.id, labels)
+    detail.value.task.labels = saved
+    const listed = tasks.value.find(task => task.id === detail.value?.task.id)
+    if (listed) listed.labels = saved
+    labelDraft.value = saved.join(', ')
+    MessagePlugin.success(t('evaluation.labelsSaved'))
+  } catch (error) {
+    MessagePlugin.error(errorMessage(error))
+  } finally {
+    savingLabels.value = false
+  }
+}
+
+async function download(format: 'json' | 'csv') {
+  if (!detail.value || exporting.value) return
+  exporting.value = format
+  try {
+    await downloadEvaluationArtifact(detail.value.task.id, format)
+  } catch (error) {
+    MessagePlugin.error(errorMessage(error))
+  } finally {
+    exporting.value = ''
+  }
+}
+
+function statusMeta(status: number) {
+  const byStatus: Record<number, { label: string; tone: string }> = {
+    [EVALUATION_STATUS.pending]: { label: t('evaluation.status.pending'), tone: 'neutral' },
+    [EVALUATION_STATUS.running]: { label: t('evaluation.status.running'), tone: 'running' },
+    [EVALUATION_STATUS.success]: { label: t('evaluation.status.success'), tone: 'success' },
+    [EVALUATION_STATUS.failed]: { label: t('evaluation.status.failed'), tone: 'danger' },
+    [EVALUATION_STATUS.timedOut]: { label: t('evaluation.status.timedOut'), tone: 'danger' },
+    [EVALUATION_STATUS.interrupted]: { label: t('evaluation.status.interrupted'), tone: 'warning' },
+    [EVALUATION_STATUS.canceled]: { label: t('evaluation.status.canceled'), tone: 'warning' },
+  }
+  return byStatus[status] ?? { label: String(status), tone: 'neutral' }
+}
+
+function shortTaskId(taskId: string) {
+  if (taskId.length <= 22) return taskId
+  return `${taskId.slice(0, 11)}…${taskId.slice(-8)}`
+}
+
+function formatDate(value?: string) {
+  if (!value) return '—'
+  return new Intl.DateTimeFormat(undefined, {
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).format(new Date(value))
+}
+
+function prettyJSON(value: unknown) {
+  return JSON.stringify(value ?? null, null, 2)
+}
+
+function formatValue(value: unknown) {
+  if (typeof value === 'string') return value
+  return JSON.stringify(value)
+}
+
+function formatMetric(value: number | null) {
+  return value === null ? '—' : value.toLocaleString(undefined, { maximumFractionDigits: 6 })
+}
+
+function signedNumber(value: number) {
+  const formatted = Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 6 })
+  return `${value >= 0 ? '+' : '−'}${formatted}`
+}
+
+function formatRelative(value: number | null) {
+  return value === null ? '—' : `${(value * 100).toFixed(2)}%`
+}
+
+onMounted(() => {
+  void loadTasks(false)
+})
+</script>
+
+<style scoped lang="less">
+.evaluation-page {
+  --eval-ink: #17211d;
+  --eval-muted: #66756e;
+  --eval-line: #e3e9e6;
+  --eval-green: #078a63;
+  --eval-green-soft: #e9f7f1;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  padding: 28px 30px 24px;
+  overflow: hidden;
+  color: var(--eval-ink);
+  background:
+    radial-gradient(circle at 92% 0%, rgba(7, 168, 114, 0.08), transparent 28%),
+    #f7f9f8;
+}
+
+.evaluation-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  h1 { margin: 3px 0 5px; font-size: 30px; line-height: 1.1; letter-spacing: -0.035em; }
+  p { margin: 0; color: var(--eval-muted); font-size: 13px; }
+}
+
+.eyebrow, .section-kicker {
+  color: var(--eval-green);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.header-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--eval-muted);
+  font-size: 12px;
+  strong { color: var(--eval-ink); font-size: 24px; font-variant-numeric: tabular-nums; }
+}
+
+.filter-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr)) auto;
+  gap: 10px;
+  padding: 14px;
+  margin-bottom: 14px;
+  border: 1px solid var(--eval-line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 8px 30px rgba(32, 60, 48, 0.04);
+}
+
+.filter-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  span { color: var(--eval-muted); font-size: 10px; font-weight: 650; letter-spacing: 0.04em; }
+  input, select {
+    width: 100%; height: 34px; padding: 0 10px; border: 1px solid #dce4e0; border-radius: 8px;
+    outline: none; color: var(--eval-ink); background: #fff; font-size: 12px;
+    &:focus { border-color: #54b999; box-shadow: 0 0 0 3px rgba(7, 168, 114, 0.09); }
+  }
+}
+
+.filter-field--labels { grid-column: span 2; }
+.filter-actions { display: flex; align-items: flex-end; justify-content: flex-end; gap: 8px; }
+
+.button {
+  display: inline-flex; height: 34px; align-items: center; justify-content: center; gap: 6px;
+  padding: 0 14px; border: 1px solid transparent; border-radius: 8px; cursor: pointer;
+  font-size: 12px; font-weight: 650; transition: 0.18s ease;
+  &:disabled { cursor: not-allowed; opacity: 0.48; }
+}
+.button--primary { color: #fff; background: var(--eval-green); &:hover:not(:disabled) { background: #067b59; } }
+.button--quiet { border-color: var(--eval-line); color: #35443e; background: #fff; &:hover:not(:disabled) { border-color: #a9cfc1; } }
+.button--compact { height: 30px; padding: 0 10px; }
+
+.workbench {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.34fr) minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--eval-line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 18px 54px rgba(26, 55, 43, 0.07);
+}
+
+.run-browser { display: flex; min-height: 0; flex-direction: column; border-right: 1px solid var(--eval-line); background: #fbfcfb; }
+.panel-heading, .inspection-heading {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px;
+  border-bottom: 1px solid var(--eval-line);
+}
+.panel-heading > div { display: flex; align-items: baseline; gap: 8px; }
+.panel-heading strong { font-size: 18px; }
+.icon-button { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid var(--eval-line); border-radius: 8px; color: var(--eval-muted); background: #fff; cursor: pointer; }
+
+.selection-bar { padding: 12px 14px; border-bottom: 1px solid #cae6da; background: var(--eval-green-soft); }
+.selection-copy { display: flex; align-items: baseline; gap: 5px; margin-bottom: 9px; color: var(--eval-muted); font-size: 11px; strong { color: var(--eval-green); font-size: 18px; } }
+.baseline-select { display: flex; align-items: center; gap: 6px; margin-bottom: 9px; font-size: 10px; color: var(--eval-muted); select { min-width: 0; flex: 1; height: 28px; border: 1px solid #b9d9cd; border-radius: 7px; background: #fff; font: 11px monospace; } }
+
+.run-list { min-height: 0; overflow: auto; }
+.run-row { display: flex; gap: 11px; padding: 15px 14px; border-bottom: 1px solid #edf1ef; cursor: pointer; transition: background 0.16s ease; &:hover { background: #f5f9f7; } }
+.run-row--active { background: #edf8f3; box-shadow: inset 3px 0 0 var(--eval-green); }
+.run-checkbox { padding-top: 2px; input { position: absolute; opacity: 0; } span { display: block; width: 16px; height: 16px; border: 1px solid #b8c5bf; border-radius: 5px; background: #fff; } input:checked + span { border-color: var(--eval-green); background: var(--eval-green); box-shadow: inset 0 0 0 3px #fff; } }
+.run-row__body { min-width: 0; flex: 1; }
+.run-row__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; code { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; } }
+.run-row__dataset { margin: 7px 0 5px; overflow: hidden; font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.run-row__meta { display: flex; justify-content: space-between; color: var(--eval-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+
+.status-pill { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 99px; color: #5d6964; background: #edf1ef; font-size: 9px; font-weight: 700; white-space: nowrap; }
+.status-pill--success { color: #087552; background: #ddf5eb; }
+.status-pill--running { color: #1767a2; background: #e3f1fb; }
+.status-pill--danger { color: #a33a3a; background: #fbe7e7; }
+.status-pill--warning { color: #8b6421; background: #fbf0d8; }
+.label-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.label-chip { padding: 2px 7px; border: 1px solid #cfe4db; border-radius: 99px; color: #34735d; background: #f4faf7; font-size: 9px; }
+
+.load-more { width: 100%; padding: 12px; border: 0; border-top: 1px solid var(--eval-line); color: var(--eval-green); background: #fff; cursor: pointer; font-size: 11px; }
+.inspection-panel { min-width: 0; min-height: 0; overflow: auto; background: #fff; }
+.inspection-heading { position: sticky; top: 0; z-index: 3; background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(12px); h2 { margin: 3px 0 0; font-size: 20px; letter-spacing: -0.02em; } }
+.full-task-id { display: block; max-width: 520px; margin-top: 6px; overflow: hidden; color: var(--eval-muted); font-size: 10px; text-overflow: ellipsis; }
+.export-actions { display: flex; gap: 7px; }
+
+.state-block { display: flex; min-height: 150px; align-items: center; justify-content: center; gap: 8px; color: var(--eval-muted); font-size: 12px; }
+.state-block--detail { min-height: 100%; flex-direction: column; }
+.state-block--error { color: #ad4141; }
+.empty-orbit { position: relative; width: 28px; height: 28px; border: 1px solid #bbd8cd; border-radius: 50%; span { position: absolute; top: 5px; left: 15px; width: 6px; height: 6px; border-radius: 50%; background: var(--eval-green); } }
+
+.fact-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 18px 20px 0; }
+.fact-card { padding: 13px 14px; border: 1px solid var(--eval-line); border-radius: 11px; background: #fafcfb; span { display: block; margin-bottom: 6px; color: var(--eval-muted); font-size: 9px; text-transform: uppercase; } strong { font-size: 13px; } }
+.text-success { color: var(--eval-green); }
+.text-warning { color: #a16d17; }
+
+.label-editor { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 14px 20px 0; padding: 13px 15px; border: 1px solid var(--eval-line); border-radius: 11px; h3 { margin: 0; font-size: 12px; } .label-row { margin-top: 6px; } }
+.label-editor__control { display: flex; gap: 7px; input { width: 230px; height: 30px; padding: 0 9px; border: 1px solid var(--eval-line); border-radius: 7px; outline: 0; } }
+.muted { color: var(--eval-muted); font-size: 11px; }
+
+.detail-tabs { display: flex; gap: 20px; padding: 20px 20px 0; border-bottom: 1px solid var(--eval-line); button { padding: 0 0 10px; border: 0; border-bottom: 2px solid transparent; color: var(--eval-muted); background: none; cursor: pointer; font-size: 12px; font-weight: 650; &.active { border-color: var(--eval-green); color: var(--eval-green); } span { margin-left: 4px; color: #9aa7a1; } } }
+.overview-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 12px; padding: 18px 20px 24px; }
+.json-panel, .data-section { min-width: 0; border: 1px solid var(--eval-line); border-radius: 12px; overflow: hidden; }
+.json-panel pre { max-height: 430px; margin: 0; padding: 14px; overflow: auto; color: #2d4139; background: #f8faf9; font-size: 10px; line-height: 1.65; }
+.data-section__heading { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--eval-line); h3 { margin: 0; font-size: 12px; } span { color: var(--eval-muted); font-size: 10px; } }
+
+.question-section { padding: 16px 20px 24px; }
+.question-card { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 12px; padding: 15px 0; border-bottom: 1px solid var(--eval-line); }
+.question-card__index { color: #9db2a9; font: 700 18px/1 monospace; }
+.question-card__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; h3 { margin: 0; font-size: 13px; line-height: 1.45; } }
+.question-card dl { display: grid; gap: 7px; margin: 12px 0; div { display: grid; grid-template-columns: 105px minmax(0, 1fr); } dt { color: var(--eval-muted); font-size: 10px; } dd { margin: 0; color: #3d4d46; font-size: 11px; white-space: pre-wrap; } }
+.ranking-row { display: flex; flex-wrap: wrap; gap: 6px; span { padding: 3px 7px; border-radius: 5px; color: #456058; background: #edf4f1; font: 9px monospace; &.unknown { color: #955b2d; background: #fbefe5; } } }
+.load-more--questions { border: 1px solid var(--eval-line); border-radius: 8px; margin-top: 12px; }
+
+.detail-empty { display: flex; min-height: 100%; align-items: center; justify-content: center; flex-direction: column; color: var(--eval-muted); text-align: center; h2 { margin: 22px 0 6px; color: var(--eval-ink); font-size: 18px; } p { max-width: 360px; margin: 0; font-size: 12px; line-height: 1.6; } }
+.detail-empty__visual { position: relative; width: 150px; height: 90px; border-bottom: 1px solid #c9d9d2; border-left: 1px solid #c9d9d2; .point { position: absolute; width: 11px; height: 11px; border: 3px solid #fff; border-radius: 50%; background: var(--eval-green); box-shadow: 0 0 0 1px #7ec7ae; } .point--one { bottom: 18px; left: 24px; } .point--two { bottom: 45px; left: 70px; } .point--three { right: 18px; bottom: 67px; } &::after { position: absolute; right: 21px; bottom: 23px; width: 112px; height: 48px; border-top: 2px solid #71bda4; transform: skewY(-22deg); content: ''; } }
+
+.comparison-view { padding-bottom: 28px; }
+.comparison-run-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 8px; padding: 16px 20px; }
+.comparison-run { position: relative; display: flex; min-width: 0; flex-direction: column; gap: 5px; padding: 12px; border: 1px solid var(--eval-line); border-radius: 10px; background: #fafcfb; code { overflow: hidden; font-size: 10px; text-overflow: ellipsis; } small { overflow: hidden; color: var(--eval-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; } }
+.baseline-badge { position: absolute; top: -7px; right: 8px; padding: 2px 6px; border-radius: 99px; color: #fff; background: var(--eval-green); font-size: 8px; font-weight: 700; }
+.comparison-view .data-section { margin: 0 20px 14px; }
+.table-scroll { overflow: auto; }
+.comparison-table { width: 100%; border-collapse: collapse; font-size: 10px; th, td { min-width: 135px; padding: 10px 12px; border-bottom: 1px solid #edf1ef; text-align: left; vertical-align: top; } th { position: sticky; top: 0; color: var(--eval-muted); background: #f8faf9; font-size: 9px; } th:first-child, td:first-child { min-width: 220px; } .row-differs { background: #fffaf1; } code { font-size: 9px; overflow-wrap: anywhere; } }
+.missing-value { color: #a06d28; font-style: italic; }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 10px; padding: 12px; }
+.metric-card { padding: 12px; border: 1px solid #e7ece9; border-radius: 9px; }
+.metric-card__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; code { font-size: 10px; font-weight: 700; } small { display: block; max-width: 220px; margin-top: 4px; overflow: hidden; color: var(--eval-muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; } }
+.compatibility { padding: 2px 6px; border-radius: 99px; color: #087552; background: #ddf5eb; font-size: 8px; font-weight: 700; }
+.compatibility--bad { color: #9a4b32; background: #f8e7df; }
+.metric-values { display: grid; gap: 5px; margin-top: 10px; }
+.metric-value { display: grid; grid-template-columns: minmax(80px, 1fr) auto minmax(90px, auto); align-items: baseline; gap: 8px; padding: 6px 8px; border-radius: 6px; background: #f8faf9; span { overflow: hidden; font: 9px monospace; text-overflow: ellipsis; } strong { font-size: 12px; font-variant-numeric: tabular-nums; } small { color: var(--eval-muted); font-size: 8px; text-align: right; } }
+
+@media (max-width: 1180px) {
+  .filter-panel { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+  .filter-field--labels { grid-column: span 1; }
+  .workbench { grid-template-columns: 300px minmax(0, 1fr); }
+  .fact-grid { grid-template-columns: repeat(2, 1fr); }
+  .overview-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 820px) {
+  .evaluation-page { padding: 18px; overflow: auto; }
+  .filter-panel { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+  .workbench { display: flex; min-height: 900px; flex-direction: column; overflow: visible; }
+  .run-browser { max-height: 420px; border-right: 0; border-bottom: 1px solid var(--eval-line); }
+  .inspection-panel { min-height: 500px; }
+}
+</style>
