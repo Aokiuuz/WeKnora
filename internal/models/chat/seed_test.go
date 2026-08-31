@@ -9,12 +9,20 @@ import (
 	"testing"
 
 	"github.com/Tencent/WeKnora/internal/types"
+	secutils "github.com/Tencent/WeKnora/internal/utils"
 )
 
+func allowSeedTestLoopback(t *testing.T) {
+	t.Helper()
+	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
+	secutils.ResetSSRFWhitelistForTest()
+	t.Cleanup(secutils.ResetSSRFWhitelistForTest)
+}
+
 // TestOpenAICompatibleRequestForwardsExplicitSeed proves the request that
-// reaches an OpenAI-compatible provider carries the seed. Before the fix the
-// seed stayed in ChatOptions and never entered the wire request.
+// reaches an OpenAI-compatible provider carries the seed.
 func TestOpenAICompatibleRequestForwardsExplicitSeed(t *testing.T) {
+	allowSeedTestLoopback(t)
 	var captured map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
@@ -55,6 +63,7 @@ func TestOpenAICompatibleRequestForwardsExplicitSeed(t *testing.T) {
 // TestOpenAICompatibleRequestOmitsUnprovidedSeed keeps the no-seed path
 // byte-identical: nothing is sent when the caller did not ask for a seed.
 func TestOpenAICompatibleRequestOmitsUnprovidedSeed(t *testing.T) {
+	allowSeedTestLoopback(t)
 	var captured map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
@@ -117,6 +126,7 @@ func TestOllamaRequestForwardsExplicitSeed(t *testing.T) {
 // TestAnthropicRejectsExplicitSeed proves the unsupported provider fails with
 // the typed error before any HTTP request is made.
 func TestAnthropicRejectsExplicitSeed(t *testing.T) {
+	allowSeedTestLoopback(t)
 	called := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
