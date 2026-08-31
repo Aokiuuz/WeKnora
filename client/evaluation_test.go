@@ -37,12 +37,21 @@ func TestEvaluationStatusValuesMatchHTTPContract(t *testing.T) {
 
 func TestEvaluationMethodSignaturesRemainCompatible(t *testing.T) {
 	client := NewClient("http://example.test")
-	var start func(context.Context, *EvaluationRequest) (*EvaluationTask, error) = client.StartEvaluation
-	var get func(context.Context, string) (*EvaluationResult, error) = client.GetEvaluationResult
-	var cancel func(context.Context, string) (*EvaluationResult, error) = client.CancelEvaluation
-	if start == nil || get == nil || cancel == nil {
+	if !evaluationMethodSignaturesAvailable(
+		client.StartEvaluation,
+		client.GetEvaluationResult,
+		client.CancelEvaluation,
+	) {
 		t.Fatal("evaluation methods must remain available")
 	}
+}
+
+func evaluationMethodSignaturesAvailable(
+	start func(context.Context, *EvaluationRequest) (*EvaluationTask, error),
+	get func(context.Context, string) (*EvaluationResult, error),
+	cancel func(context.Context, string) (*EvaluationResult, error),
+) bool {
+	return start != nil && get != nil && cancel != nil
 }
 
 func TestCancelEvaluationUsesPostPathAndNestedContract(t *testing.T) {
@@ -78,7 +87,7 @@ func TestCancelEvaluationUsesPostPathAndNestedContract(t *testing.T) {
 }
 
 func TestCancelEvaluationDecodesCanceledTerminalStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		task := evaluationTaskFixture(6)
 		task["cancel_requested_at"] = "2026-08-28T09:30:00Z"
 		task["end_time"] = "2026-08-28T09:31:00Z"
@@ -139,7 +148,7 @@ func TestListEvaluationsSendsFiltersAndDecodesNestedPage(t *testing.T) {
 }
 
 func TestListEvaluationsRejectsMissingNestedData(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"success": true})
 	}))
@@ -151,7 +160,7 @@ func TestListEvaluationsRejectsMissingNestedData(t *testing.T) {
 }
 
 func TestListEvaluationsRejectsUnsuccessfulEnvelope(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"success": false,
@@ -183,7 +192,7 @@ func TestDeleteEvaluationUsesDeletePathAndAccepts204(t *testing.T) {
 }
 
 func TestDeleteEvaluationSurfacesActiveTaskConflict(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
 		_ = json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "active"})
