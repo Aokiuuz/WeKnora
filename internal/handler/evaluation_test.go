@@ -24,6 +24,10 @@ type stubEvaluationService struct {
 	err               error
 }
 
+func (s *stubEvaluationService) EvaluationMetricDefinitions() []types.EvaluationMetricDefinition {
+	return nil
+}
+
 func (s *stubEvaluationService) Evaluation(
 	context.Context, string, string, string, string,
 ) (*types.EvaluationDetail, error) {

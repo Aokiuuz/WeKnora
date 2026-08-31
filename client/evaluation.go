@@ -168,8 +168,16 @@ type EvaluationExperimentConfig struct {
 
 // EvaluationMetricResult contains retrieval and generation metrics.
 type EvaluationMetricResult struct {
-	RetrievalMetrics  EvaluationRetrievalMetrics  `json:"retrieval_metrics"`
-	GenerationMetrics EvaluationGenerationMetrics `json:"generation_metrics"`
+	RetrievalMetrics  EvaluationRetrievalMetrics       `json:"retrieval_metrics"`
+	GenerationMetrics EvaluationGenerationMetrics      `json:"generation_metrics"`
+	Scores            map[string]EvaluationMetricScore `json:"scores,omitempty"`
+}
+
+// EvaluationMetricScore is one dynamic registry score.
+type EvaluationMetricScore struct {
+	Value     *float64 `json:"value"`
+	Status    string   `json:"status"`
+	ErrorCode string   `json:"error_code,omitempty"`
 }
 
 // EvaluationRetrievalMetrics contains retrieval quality metrics.

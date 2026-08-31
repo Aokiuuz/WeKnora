@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Tencent/WeKnora/internal/buildinfo"
+	"github.com/Tencent/WeKnora/internal/evaluation/metricregistry"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
@@ -25,6 +26,7 @@ type EvaluationExperimentInput struct {
 	SeedProvided          bool
 	SeedSupport           string
 	DBDriver              string
+	MetricRegistry        *metricregistry.Registry
 }
 
 // SelectEvaluationDefaultModel deterministically picks the default model of
@@ -63,10 +65,19 @@ func BuildEvaluationExperimentSnapshot(
 		return nil, "", errors.New("build evaluation experiment: dataset version and content hash are required")
 	}
 
-	metricPlan, err := types.DefaultEvaluationMetricPlan()
+	registry := input.MetricRegistry
+	if registry == nil {
+		var err error
+		registry, err = metricregistry.NewDefaultRegistry()
+		if err != nil {
+			return nil, "", fmt.Errorf("build evaluation experiment: metric registry: %w", err)
+		}
+	}
+	resolvedPlan, err := registry.Resolve(metricregistry.DefaultSpecs())
 	if err != nil {
 		return nil, "", fmt.Errorf("build evaluation experiment: metric plan: %w", err)
 	}
+	metricPlan := resolvedPlan.Snapshot.Clone()
 
 	seed := input.Params.SummaryConfig.Seed
 	var seedValue *int

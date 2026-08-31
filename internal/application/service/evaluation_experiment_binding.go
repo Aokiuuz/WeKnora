@@ -131,6 +131,7 @@ func (e *EvaluationService) buildExperimentForTask(
 		SeedProvided:          options.Seed != nil,
 		SeedSupport:           seedSupport,
 		DBDriver:              dbDriver,
+		MetricRegistry:        e.metricRegistry,
 	})
 }
 

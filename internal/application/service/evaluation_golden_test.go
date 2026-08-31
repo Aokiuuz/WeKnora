@@ -176,8 +176,8 @@ func runGoldenPipeline(dataset *goldenDatasetFixture) (*HookMetric, []*types.Met
 		hook.recordRerankResult(index, goldenSearchResults(sample.Rerank))
 		hook.recordChatResponse(index, &types.ChatResponse{Content: sample.GeneratedText})
 		hook.recordFinish(index)
-		if count := len(hook.metricResults.results); count > 0 {
-			perSample = append(perSample, hook.metricResults.results[count-1])
+		if hook.metricResults.results[index] != nil {
+			perSample = append(perSample, hook.metricResults.results[index])
 		}
 	}
 	return hook, perSample

@@ -28,6 +28,14 @@ func NewEvaluationHandler(evaluationService interfaces.EvaluationService) *Evalu
 	return &EvaluationHandler{evaluationService: evaluationService}
 }
 
+// ListEvaluationMetrics returns the versioned registry catalog.
+func (e *EvaluationHandler) ListEvaluationMetrics(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    gin.H{"items": e.evaluationService.EvaluationMetricDefinitions()},
+	})
+}
+
 // EvaluationRequest contains parameters for evaluation request
 type EvaluationRequest struct {
 	DatasetID       string `json:"dataset_id"`        // ID of dataset to evaluate

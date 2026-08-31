@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Tencent/WeKnora/internal/config"
+	"github.com/Tencent/WeKnora/internal/evaluation/metricregistry"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
@@ -50,6 +51,7 @@ type EvaluationService struct {
 	evaluationTaskRepository interfaces.EvaluationTaskRepository
 	datasetRegistry          interfaces.EvaluationDatasetRegistryService
 	questionResultRepository interfaces.EvaluationQuestionResultRepository
+	metricRegistry           *metricregistry.Registry
 	ownerID                  string
 	heartbeatInterval        time.Duration
 	heartbeatTimeout         time.Duration
@@ -76,6 +78,64 @@ func NewEvaluationService(
 	datasetRegistry interfaces.EvaluationDatasetRegistryService,
 	questionResultRepository interfaces.EvaluationQuestionResultRepository,
 ) interfaces.EvaluationService {
+	registry, err := metricregistry.NewDefaultRegistry()
+	if err != nil {
+		panic(err)
+	}
+	return newEvaluationService(
+		config,
+		dataset,
+		knowledgeBaseService,
+		knowledgeService,
+		sessionService,
+		modelService,
+		evaluationTaskRepository,
+		datasetRegistry,
+		questionResultRepository,
+		registry,
+	)
+}
+
+// NewEvaluationServiceWithRegistry is the container constructor. The
+// registry provider can fail startup before any task accepts work.
+func NewEvaluationServiceWithRegistry(
+	config *config.Config,
+	dataset interfaces.DatasetService,
+	knowledgeBaseService interfaces.KnowledgeBaseService,
+	knowledgeService interfaces.KnowledgeService,
+	sessionService interfaces.SessionService,
+	modelService interfaces.ModelService,
+	evaluationTaskRepository interfaces.EvaluationTaskRepository,
+	datasetRegistry interfaces.EvaluationDatasetRegistryService,
+	questionResultRepository interfaces.EvaluationQuestionResultRepository,
+	registry *metricregistry.Registry,
+) interfaces.EvaluationService {
+	return newEvaluationService(
+		config,
+		dataset,
+		knowledgeBaseService,
+		knowledgeService,
+		sessionService,
+		modelService,
+		evaluationTaskRepository,
+		datasetRegistry,
+		questionResultRepository,
+		registry,
+	)
+}
+
+func newEvaluationService(
+	config *config.Config,
+	dataset interfaces.DatasetService,
+	knowledgeBaseService interfaces.KnowledgeBaseService,
+	knowledgeService interfaces.KnowledgeService,
+	sessionService interfaces.SessionService,
+	modelService interfaces.ModelService,
+	evaluationTaskRepository interfaces.EvaluationTaskRepository,
+	datasetRegistry interfaces.EvaluationDatasetRegistryService,
+	questionResultRepository interfaces.EvaluationQuestionResultRepository,
+	registry *metricregistry.Registry,
+) interfaces.EvaluationService {
 	return &EvaluationService{
 		config:                   config,
 		dataset:                  dataset,
@@ -86,6 +146,7 @@ func NewEvaluationService(
 		evaluationTaskRepository: evaluationTaskRepository,
 		datasetRegistry:          datasetRegistry,
 		questionResultRepository: questionResultRepository,
+		metricRegistry:           registry,
 		ownerID:                  uuid.NewString(),
 	}
 }
@@ -799,7 +860,19 @@ func (e *EvaluationService) evalDataset(
 	var finished int
 	var publishMu sync.Mutex
 	g, workerCtx := errgroup.WithContext(ctx)
-	metricHook := NewHookMetric(len(dataset), knowledge.ID)
+	var metricPlan *types.EvaluationMetricPlanSnapshot
+	if detail.Experiment != nil {
+		metricPlan = detail.Experiment.MetricPlan
+	}
+	metricHook, err := NewHookMetricWithRegistry(
+		len(dataset),
+		knowledge.ID,
+		e.metricRegistry,
+		metricPlan,
+	)
+	if err != nil {
+		return fmt.Errorf("resolve evaluation metric plan: %w", err)
+	}
 
 	// Set worker limit based on available CPUs
 	g.SetLimit(max(runtime.GOMAXPROCS(0)-1, 1))
@@ -851,7 +924,10 @@ func (e *EvaluationService) evalDataset(
 				publishMu.Unlock()
 				return err
 			}
-			metricHook.recordFinish(i)
+			if err := metricHook.recordFinishWithContext(workerCtx, i); err != nil {
+				publishMu.Unlock()
+				return fmt.Errorf("compute metrics for QA pair %d: %w", i, err)
+			}
 			finished += 1
 			finishedSnapshot := finished
 			metricResult := metricHook.MetricResult()

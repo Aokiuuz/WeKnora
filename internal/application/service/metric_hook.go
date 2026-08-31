@@ -5,81 +5,39 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/Tencent/WeKnora/internal/application/service/metric"
+	"github.com/Tencent/WeKnora/internal/evaluation/metricregistry"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/types"
-	"github.com/Tencent/WeKnora/internal/types/interfaces"
 )
 
 // MetricList stores and aggregates metric results
 type MetricList struct {
-	results []*types.MetricResult
+	results  []*types.MetricResult
+	resolved *metricregistry.ResolvedPlan
 }
 
-// metricCalculators defines all metrics to be calculated
-var metricCalculators = []struct {
-	calc     interfaces.Metrics                 // Metric calculator implementation
-	getField func(*types.MetricResult) *float64 // Field accessor for result
-}{
-	// Retrieval Metrics
-	{metric.NewPrecisionMetric(), func(r *types.MetricResult) *float64 { return &r.RetrievalMetrics.Precision }},
-	{metric.NewRecallMetric(), func(r *types.MetricResult) *float64 { return &r.RetrievalMetrics.Recall }},
-	{metric.NewNDCGMetric(3), func(r *types.MetricResult) *float64 { return &r.RetrievalMetrics.NDCG3 }},
-	{metric.NewNDCGMetric(10), func(r *types.MetricResult) *float64 { return &r.RetrievalMetrics.NDCG10 }},
-	{metric.NewMRRMetric(), func(r *types.MetricResult) *float64 { return &r.RetrievalMetrics.MRR }},
-	{metric.NewMAPMetric(), func(r *types.MetricResult) *float64 { return &r.RetrievalMetrics.MAP }},
-
-	// Generation Metrics
-	{metric.NewBLEUMetric(true, metric.BLEU1Gram), func(r *types.MetricResult) *float64 {
-		return &r.GenerationMetrics.BLEU1
-	}},
-	{metric.NewBLEUMetric(true, metric.BLEU2Gram), func(r *types.MetricResult) *float64 {
-		return &r.GenerationMetrics.BLEU2
-	}},
-	{metric.NewBLEUMetric(true, metric.BLEU4Gram), func(r *types.MetricResult) *float64 {
-		return &r.GenerationMetrics.BLEU4
-	}},
-	{metric.NewRougeMetric(true, "rouge-1", "f"), func(r *types.MetricResult) *float64 {
-		return &r.GenerationMetrics.ROUGE1
-	}},
-	{metric.NewRougeMetric(true, "rouge-2", "f"), func(r *types.MetricResult) *float64 {
-		return &r.GenerationMetrics.ROUGE2
-	}},
-	{metric.NewRougeMetric(true, "rouge-l", "f"), func(r *types.MetricResult) *float64 {
-		return &r.GenerationMetrics.ROUGEL
-	}},
+func newMetricList(size int, resolved *metricregistry.ResolvedPlan) *MetricList {
+	return &MetricList{results: make([]*types.MetricResult, size), resolved: resolved}
 }
 
-// Append calculates and stores metrics for given input
-func (m *MetricList) Append(metricInput *types.MetricInput) {
-	result := &types.MetricResult{}
-	// Calculate all configured metrics
-	for _, c := range metricCalculators {
-		score := c.calc.Compute(metricInput)
-		*c.getField(result) = score
+// AppendAt calculates and stores one sample by stable sample index.
+func (m *MetricList) AppendAt(
+	ctx context.Context,
+	index int,
+	metricInput *types.MetricInput,
+) ([]types.EvaluationMetricObservationSnapshot, error) {
+	result, observations, err := m.resolved.Compute(ctx, metricInput)
+	if err != nil {
+		return observations, err
 	}
 	logger.Infof(context.Background(), "metric: %v", result)
-	m.results = append(m.results, result)
+	m.results[index] = result
+	return observations, nil
 }
 
 // Avg calculates average of all stored metric results
 func (m *MetricList) Avg() *types.MetricResult {
-	if len(m.results) == 0 {
-		return &types.MetricResult{}
-	}
-
-	avgResult := &types.MetricResult{}
-	count := float64(len(m.results))
-
-	// Calculate average for each metric
-	for _, config := range metricCalculators {
-		sum := 0.0
-		for _, r := range m.results {
-			sum += *config.getField(r)
-		}
-		*config.getField(avgResult) = sum / count
-	}
-	return avgResult
+	return m.resolved.Aggregate(m.results)
 }
 
 // HookMetric tracks evaluation metrics for QA pairs
@@ -98,16 +56,62 @@ type qaPairMetric struct {
 	searchResult []*types.SearchResult
 	rerankResult []*types.SearchResult
 	chatResponse *types.ChatResponse
+	metricResult *types.MetricResult
+	observations []types.EvaluationMetricObservationSnapshot
 }
 
 // NewHookMetric creates a new HookMetric with given capacity
 func NewHookMetric(capacity int, knowledgeID string) *HookMetric {
+	registry, err := metricregistry.NewDefaultRegistry()
+	if err != nil {
+		panic(err)
+	}
+	plan, err := registry.Resolve(metricregistry.DefaultSpecs())
+	if err != nil {
+		panic(err)
+	}
+	return newHookMetric(capacity, knowledgeID, plan)
+}
+
+func newHookMetric(
+	capacity int,
+	knowledgeID string,
+	resolved *metricregistry.ResolvedPlan,
+) *HookMetric {
 	return &HookMetric{
-		metricResults:    &MetricList{},
+		metricResults:    newMetricList(capacity, resolved),
 		qaPairMetricList: make([]*qaPairMetric, capacity),
 		knowledgeID:      knowledgeID,
 		mu:               &sync.RWMutex{},
 	}
+}
+
+// NewHookMetricWithRegistry binds the task's frozen M3 plan to the registry.
+func NewHookMetricWithRegistry(
+	capacity int,
+	knowledgeID string,
+	registry *metricregistry.Registry,
+	plan *types.EvaluationMetricPlanSnapshot,
+) (*HookMetric, error) {
+	if registry == nil {
+		var err error
+		registry, err = metricregistry.NewDefaultRegistry()
+		if err != nil {
+			return nil, err
+		}
+	}
+	if plan == nil {
+		resolved, err := registry.Resolve(metricregistry.DefaultSpecs())
+		if err != nil {
+			return nil, err
+		}
+		return newHookMetric(capacity, knowledgeID, resolved), nil
+	}
+	resolved, err := registry.ResolveSnapshot(plan)
+	if err != nil {
+		return nil, err
+	}
+	return newHookMetric(capacity, knowledgeID, resolved), nil
 }
 
 // recordInit initializes metric tracking for a QA pair
@@ -137,6 +141,12 @@ func (h *HookMetric) recordChatResponse(index int, chatResponse *types.ChatRespo
 
 // recordFinish finalizes metrics for a QA pair
 func (h *HookMetric) recordFinish(index int) {
+	if err := h.recordFinishWithContext(context.Background(), index); err != nil {
+		panic(err)
+	}
+}
+
+func (h *HookMetric) recordFinishWithContext(ctx context.Context, index int) error {
 	// Prepare retrieval source: prefer rerank results, fall back to search results
 	retrievalSource := h.qaPairMetricList[index].rerankResult
 	if len(retrievalSource) == 0 {
@@ -168,7 +178,13 @@ func (h *HookMetric) recordFinish(index int) {
 	// Thread-safe append of metrics
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.metricResults.Append(metricInput)
+	observations, err := h.metricResults.AppendAt(ctx, index, metricInput)
+	if err != nil {
+		return err
+	}
+	h.qaPairMetricList[index].metricResult = h.metricResults.results[index]
+	h.qaPairMetricList[index].observations = observations
+	return nil
 }
 
 // MetricResult returns the averaged metric results
@@ -284,11 +300,9 @@ func (h *HookMetric) questionResultInput(
 		totalTokens = &total
 	}
 
-	var perSample *types.MetricResult
 	h.mu.RLock()
-	if count := len(h.metricResults.results); count > 0 {
-		perSample = h.metricResults.results[count-1]
-	}
+	perSample := tracked.metricResult
+	observations := append([]types.EvaluationMetricObservationSnapshot(nil), tracked.observations...)
 	h.mu.RUnlock()
 
 	qid := qaPair.DatasetQID
@@ -306,7 +320,7 @@ func (h *HookMetric) questionResultInput(
 		GenerationPIDs:   evaluationGenerationPIDOrder(effectiveRanked, rerankTopK),
 		GeneratedText:    generatedText,
 		PerSampleMetrics: perSample,
-		Observations:     types.EvaluationMetricObservationsFromResult(plan, perSample),
+		Observations:     observations,
 		PromptTokens:     promptTokens,
 		CompletionTokens: completionTokens,
 		TotalTokens:      totalTokens,

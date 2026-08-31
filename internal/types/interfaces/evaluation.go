@@ -8,6 +8,8 @@ import (
 
 // EvaluationService defines operations for evaluation tasks
 type EvaluationService interface {
+	// EvaluationMetricDefinitions lists the versioned metric registry catalog.
+	EvaluationMetricDefinitions() []types.EvaluationMetricDefinition
 	// Evaluation starts a new evaluation task
 	Evaluation(ctx context.Context, datasetID string, knowledgeBaseID string,
 		chatModelID string, rerankModelID string,

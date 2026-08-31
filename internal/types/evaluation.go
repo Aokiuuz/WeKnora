@@ -78,6 +78,16 @@ type EvaluationDetail struct {
 	ProvenanceComplete bool `json:"provenance_complete"`
 }
 
+// EvaluationMetricDefinition is the public registry catalog DTO.
+type EvaluationMetricDefinition struct {
+	Key           string          `json:"key"`
+	Version       string          `json:"version"`
+	Kind          string          `json:"kind"`
+	Description   string          `json:"description"`
+	DefaultConfig json.RawMessage `json:"default_config"`
+	ConfigSchema  json.RawMessage `json:"config_schema"`
+}
+
 // String returns JSON representation of EvaluationTask
 func (e *EvaluationTask) String() string {
 	b, _ := json.Marshal(e)
@@ -97,6 +107,17 @@ type MetricInput struct {
 type MetricResult struct {
 	RetrievalMetrics  RetrievalMetrics  `json:"retrieval_metrics"`  // Retrieval performance metrics
 	GenerationMetrics GenerationMetrics `json:"generation_metrics"` // Text generation quality metrics
+	// Scores is the additive registry result keyed by the frozen metric
+	// instance ID. Existing fixed fields remain populated for compatibility.
+	Scores map[string]EvaluationMetricScore `json:"scores,omitempty"`
+}
+
+// EvaluationMetricScore preserves the state of one dynamic aggregate or
+// per-sample score. Value remains nullable so zero and unavailable differ.
+type EvaluationMetricScore struct {
+	Value     *float64 `json:"value"`
+	Status    string   `json:"status"`
+	ErrorCode string   `json:"error_code,omitempty"`
 }
 
 // RetrievalMetrics contains metrics for retrieval evaluation

@@ -63,6 +63,7 @@ import (
 	notionConnector "github.com/Tencent/WeKnora/internal/datasource/connector/notion"
 	rssConnector "github.com/Tencent/WeKnora/internal/datasource/connector/rss"
 	yuqueConnector "github.com/Tencent/WeKnora/internal/datasource/connector/yuque"
+	"github.com/Tencent/WeKnora/internal/evaluation/metricregistry"
 	"github.com/Tencent/WeKnora/internal/event"
 	"github.com/Tencent/WeKnora/internal/handler"
 	"github.com/Tencent/WeKnora/internal/handler/session"
@@ -221,7 +222,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewModelService))
 	must(container.Provide(service.NewDatasetService))
 	must(container.Provide(service.NewEvaluationDatasetRegistryService))
-	must(container.Provide(service.NewEvaluationService))
+	must(container.Provide(metricregistry.NewDefaultRegistry))
+	must(container.Provide(service.NewEvaluationServiceWithRegistry))
 	must(container.Provide(service.NewEvaluationTaskRecoveryRunner))
 	must(container.Provide(service.NewUserService))
 	must(container.Provide(service.NewSystemSettingService))
