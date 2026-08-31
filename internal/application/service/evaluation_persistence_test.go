@@ -29,6 +29,11 @@ func TestNewEvaluationServiceRequiresPersistentTaskRepository(t *testing.T) {
 
 func TestEvaluationDetailEntityRoundTrip(t *testing.T) {
 	detail := newPersistenceEvaluationDetail()
+	detail.RuntimeMetrics = &types.EvaluationRuntimeMetrics{
+		SchemaVersion: 1,
+		StartedAt:     time.Date(2026, 8, 28, 11, 0, 0, 0, time.UTC),
+		Samples:       types.EvaluationRuntimeSamples{Total: 2, Started: 2, Success: 2},
+	}
 	leaseExpiresAt := time.Date(2026, time.August, 28, 12, 30, 0, 0, time.UTC)
 
 	entity, err := evaluationDetailToEntity(detail, "temporary-kb-1", "owner-1", leaseExpiresAt)
@@ -43,6 +48,7 @@ func TestEvaluationDetailEntityRoundTrip(t *testing.T) {
 	assert.Equal(t, detail.Task.Total, entity.Total)
 	assert.Equal(t, detail.Task.Finished, entity.Finished)
 	assert.Equal(t, detail.Task.ErrMsg, entity.ErrMsg)
+	require.JSONEq(t, `{"schema_version":1,"started_at":"2026-08-28T11:00:00Z","durations":{},"samples":{"total":2,"started":2,"success":2,"failed":0,"canceled":0,"interrupted":0,"not_started":0},"failure":{"numerator":0,"denominator":0},"tokens":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0,"reported_samples":0,"unreported_samples":0}}`, entity.RuntimeMetrics.ToString())
 	assert.Equal(t, "temporary-kb-1", entity.TemporaryKnowledgeBaseID)
 	assert.Equal(t, "owner-1", entity.OwnerID)
 	require.NotNil(t, entity.LeaseExpiresAt)

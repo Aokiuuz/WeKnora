@@ -54,6 +54,12 @@ func (r *evaluationQuestionResultRepository) PublishQuestionResult(
 	if command.Total < 1 || command.Finished < 1 || command.Finished > command.Total {
 		return nil, false, errors.New("publish evaluation question result: expected 1 <= finished <= total")
 	}
+	if err := validateEvaluationTaskJSONObject(command.Metric, true); err != nil {
+		return nil, false, fmt.Errorf("publish evaluation question result: metric: %w", err)
+	}
+	if err := validateEvaluationTaskJSONObject(command.RuntimeMetrics, true); err != nil {
+		return nil, false, fmt.Errorf("publish evaluation question result: runtime_metrics: %w", err)
+	}
 	row, err := evaluationQuestionResultRowFrom(command)
 	if err != nil {
 		return nil, false, err
@@ -98,9 +104,10 @@ func (r *evaluationQuestionResultRepository) PublishQuestionResult(
 			Where("cancel_requested_at IS NULL").
 			Where("(total = 0 OR total = ?) AND finished < ?", command.Total, command.Finished).
 			Updates(map[string]any{
-				"total":    command.Total,
-				"finished": command.Finished,
-				"metric":   command.Metric,
+				"total":           command.Total,
+				"finished":        command.Finished,
+				"metric":          command.Metric,
+				"runtime_metrics": command.RuntimeMetrics,
 				"heartbeat_at": gorm.Expr(
 					"CASE WHEN heartbeat_at > ? THEN heartbeat_at ELSE ? END", now, now),
 				"lease_expires_at": gorm.Expr(
@@ -277,6 +284,7 @@ func evaluationQuestionResultRowFrom(
 		PromptTokens:       input.PromptTokens,
 		CompletionTokens:   input.CompletionTokens,
 		TotalTokens:        input.TotalTokens,
+		UsageReported:      input.UsageReported,
 		Status:             status,
 		ResultHash:         types.EvaluationQuestionResultHash(input),
 		CreatedAt:          now,

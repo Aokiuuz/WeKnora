@@ -70,6 +70,7 @@ type EvaluationQuestionResultEntity struct {
 	PromptTokens     *int   `json:"prompt_tokens,omitempty"`
 	CompletionTokens *int   `json:"completion_tokens,omitempty"`
 	TotalTokens      *int   `json:"total_tokens,omitempty"`
+	UsageReported    bool   `json:"usage_reported" gorm:"not null;default:false"`
 
 	Status     string         `json:"status" gorm:"type:varchar(16);not null"`
 	ResultHash string         `json:"result_hash" gorm:"type:char(64);not null"`
@@ -103,6 +104,7 @@ type EvaluationQuestionResultInput struct {
 	PromptTokens     *int
 	CompletionTokens *int
 	TotalTokens      *int
+	UsageReported    bool
 	Status           string
 }
 
@@ -110,20 +112,42 @@ type EvaluationQuestionResultInput struct {
 // idempotent retries and conflict detection.
 func EvaluationQuestionResultHash(input *EvaluationQuestionResultInput) string {
 	canonical := canonicalEvaluationJSONBytes(map[string]any{
-		"sample_index":      input.SampleIndex,
-		"qid":               input.QID,
-		"question":          input.Question,
-		"reference_answer":  input.ReferenceAnswer,
-		"ground_truth_pids": evaluationIntSliceToAny(input.GroundTruthPIDs),
-		"search_results":    evaluationRankedSliceToAny(input.SearchResults),
-		"rerank_results":    evaluationRankedSliceToAny(input.RerankResults),
-		"generation_pids":   evaluationIntSliceToAny(input.GenerationPIDs),
-		"generated_text":    input.GeneratedText,
-		"error_code":        input.ErrorCode,
-		"status":            input.Status,
+		"sample_index":        input.SampleIndex,
+		"qid":                 input.QID,
+		"question":            input.Question,
+		"reference_answer":    input.ReferenceAnswer,
+		"ground_truth_pids":   evaluationIntSliceToAny(input.GroundTruthPIDs),
+		"search_results":      evaluationRankedSliceToAny(input.SearchResults),
+		"rerank_results":      evaluationRankedSliceToAny(input.RerankResults),
+		"generation_pids":     evaluationIntSliceToAny(input.GenerationPIDs),
+		"generated_text":      input.GeneratedText,
+		"error_code":          input.ErrorCode,
+		"per_sample_metrics":  evaluationJSONValue(input.PerSampleMetrics),
+		"metric_observations": evaluationJSONValue(input.Observations),
+		"status":              input.Status,
+		"retrieval_ms":        input.RetrievalMs,
+		"rerank_ms":           input.RerankMs,
+		"generation_ms":       input.GenerationMs,
+		"total_ms":            input.TotalMs,
+		"prompt_tokens":       input.PromptTokens,
+		"completion_tokens":   input.CompletionTokens,
+		"total_tokens":        input.TotalTokens,
+		"usage_reported":      input.UsageReported,
 	})
 	sum := sha256.Sum256(canonical)
 	return hex.EncodeToString(sum[:])
+}
+
+func evaluationJSONValue(value any) any {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil
+	}
+	var decoded any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		return nil
+	}
+	return decoded
 }
 
 func evaluationIntSliceToAny(values []int) []any {

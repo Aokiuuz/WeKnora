@@ -46,11 +46,12 @@ var versionedSQLiteColumns = map[string][]string{
 		"cleanup_errors", "params", "metric", "temporary_kb_id", "temporary_knowledge_id", "owner_id",
 		"lease_expires_at", "heartbeat_at", "version", "created_at", "updated_at", "deleted_at",
 		"cancel_requested_at", "dataset_version_id", "dataset_content_sha256", "experiment_snapshot",
-		"experiment_sha256",
+		"experiment_sha256", "runtime_metrics",
 	},
+	"evaluation_question_results": {"usage_reported"},
 }
 
-const expectedSQLiteMigrationVersion = 20
+const expectedSQLiteMigrationVersion = 21
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)

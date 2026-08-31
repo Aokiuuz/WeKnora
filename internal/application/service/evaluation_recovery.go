@@ -302,6 +302,15 @@ func (r *EvaluationTaskRecoveryRunner) recoverTask(
 		terminalStatus = types.EvaluationStatueCanceled
 		terminalMessage = evaluationTaskCanceledMessage
 	}
+	runtimeMetricsJSON, err := finalizeRecoveredEvaluationRuntime(
+		task.RuntimeMetrics,
+		task.StartTime,
+		endTime,
+		terminalStatus == types.EvaluationStatueCanceled,
+	)
+	if err != nil {
+		return fmt.Errorf("finalize recovered evaluation runtime metrics %s: %w", task.ID, err)
+	}
 	_, err = r.evaluationTaskRepository.PublishTerminal(
 		publicationCtx,
 		types.EvaluationTaskTerminalCommand{
@@ -314,6 +323,7 @@ func (r *EvaluationTaskRecoveryRunner) recoverTask(
 			ErrMsg:          terminalMessage,
 			CleanupErrors:   cleanupJSON,
 			Metric:          append(types.JSON(nil), task.Metric...),
+			RuntimeMetrics:  runtimeMetricsJSON,
 		},
 	)
 	if err != nil {

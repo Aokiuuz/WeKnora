@@ -16,6 +16,7 @@ type evaluationRunState struct {
 	ownerID        string
 	version        uint64
 	metric         types.JSON
+	runtimeMetrics types.JSON
 	leaseExpiresAt time.Time
 }
 
@@ -35,6 +36,7 @@ func newEvaluationRunState(entity *types.EvaluationTaskEntity) (*evaluationRunSt
 		ownerID:        entity.OwnerID,
 		version:        entity.Version,
 		metric:         append(types.JSON(nil), entity.Metric...),
+		runtimeMetrics: append(types.JSON(nil), entity.RuntimeMetrics...),
 		leaseExpiresAt: leaseExpiresAt,
 	}, nil
 }
@@ -81,6 +83,14 @@ func evaluationDetailToEntity(
 		}
 		metricJSON = types.JSON(encodedMetric)
 	}
+	var runtimeMetricsJSON types.JSON
+	if detail.RuntimeMetrics != nil {
+		encodedRuntimeMetrics, marshalErr := json.Marshal(detail.RuntimeMetrics)
+		if marshalErr != nil {
+			return nil, fmt.Errorf("persist evaluation runtime metrics: %w", marshalErr)
+		}
+		runtimeMetricsJSON = types.JSON(encodedRuntimeMetrics)
+	}
 
 	startTime := detail.Task.StartTime.UTC()
 	leaseExpiresAt = leaseExpiresAt.UTC()
@@ -107,6 +117,7 @@ func evaluationDetailToEntity(
 		CleanupErrors:            types.JSON(cleanupJSON),
 		Params:                   types.JSON(params),
 		Metric:                   metricJSON,
+		RuntimeMetrics:           runtimeMetricsJSON,
 		TemporaryKnowledgeBaseID: temporaryKnowledgeBaseID,
 		OwnerID:                  ownerID,
 		LeaseExpiresAt:           &leaseExpiresAt,
@@ -134,6 +145,10 @@ func evaluationEntityToDetail(entity *types.EvaluationTaskEntity) (*types.Evalua
 		return nil, err
 	}
 	metric, err := decodeEvaluationMetric(entity.Metric)
+	if err != nil {
+		return nil, err
+	}
+	runtimeMetrics, err := decodeEvaluationRuntimeMetrics(entity.RuntimeMetrics)
 	if err != nil {
 		return nil, err
 	}
@@ -170,6 +185,7 @@ func evaluationEntityToDetail(entity *types.EvaluationTaskEntity) (*types.Evalua
 		},
 		Params:             params,
 		Metric:             metric,
+		RuntimeMetrics:     runtimeMetrics,
 		Experiment:         experiment,
 		ProvenanceComplete: provenanceComplete,
 	}, nil
@@ -262,6 +278,36 @@ func encodeEvaluationMetric(metric *types.MetricResult) (types.JSON, error) {
 	encoded, err := json.Marshal(metric)
 	if err != nil {
 		return nil, fmt.Errorf("encode evaluation metric: %w", err)
+	}
+	return types.JSON(encoded), nil
+}
+
+func decodeEvaluationRuntimeMetrics(value types.JSON) (*types.EvaluationRuntimeMetrics, error) {
+	trimmed := bytes.TrimSpace(value)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, nil
+	}
+	var shape map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &shape); err != nil || shape == nil {
+		return nil, errors.New("decode evaluation runtime metrics: invalid JSON object")
+	}
+	var runtimeMetrics types.EvaluationRuntimeMetrics
+	if err := json.Unmarshal(trimmed, &runtimeMetrics); err != nil {
+		return nil, fmt.Errorf("decode evaluation runtime metrics: %w", err)
+	}
+	if runtimeMetrics.SchemaVersion != 1 || runtimeMetrics.StartedAt.IsZero() {
+		return nil, errors.New("decode evaluation runtime metrics: schema_version=1 and started_at are required")
+	}
+	return &runtimeMetrics, nil
+}
+
+func encodeEvaluationRuntimeMetrics(runtimeMetrics *types.EvaluationRuntimeMetrics) (types.JSON, error) {
+	if runtimeMetrics == nil {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(runtimeMetrics)
+	if err != nil {
+		return nil, fmt.Errorf("encode evaluation runtime metrics: %w", err)
 	}
 	return types.JSON(encoded), nil
 }

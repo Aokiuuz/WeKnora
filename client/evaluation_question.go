@@ -42,6 +42,7 @@ type EvaluationQuestionResult struct {
 	PromptTokens       *int                     `json:"prompt_tokens,omitempty"`
 	CompletionTokens   *int                     `json:"completion_tokens,omitempty"`
 	TotalTokens        *int                     `json:"total_tokens,omitempty"`
+	UsageReported      bool                     `json:"usage_reported"`
 	Status             string                   `json:"status"`
 	ResultHash         string                   `json:"result_hash"`
 	CreatedAt          time.Time                `json:"created_at"`

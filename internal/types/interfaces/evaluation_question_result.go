@@ -28,6 +28,7 @@ type EvaluationQuestionResultCommand struct {
 	Total           int
 	Finished        int
 	Metric          types.JSON
+	RuntimeMetrics  types.JSON
 	Now             time.Time
 	LeaseExpiresAt  time.Time
 	Result          *types.EvaluationQuestionResultInput

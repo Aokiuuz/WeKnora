@@ -323,6 +323,14 @@ func TestGetEvaluationResultParsesNestedDetail(t *testing.T) {
 				"retrieval_metrics":  map[string]any{"precision": 0.5},
 				"generation_metrics": map[string]any{"bleu1": 0.25},
 			},
+			"runtime_metrics": map[string]any{
+				"schema_version": 1,
+				"started_at":     "2026-08-28T08:00:00Z",
+				"durations":      map[string]any{"total_ms": 125},
+				"samples":        map[string]any{"total": 1, "started": 1, "success": 1},
+				"failure":        map[string]any{"numerator": 0, "denominator": 1},
+				"tokens":         map[string]any{"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14, "reported_samples": 1, "unreported_samples": 0},
+			},
 		})
 	}))
 	defer srv.Close()
@@ -347,6 +355,10 @@ func TestGetEvaluationResultParsesNestedDetail(t *testing.T) {
 	}
 	if result.Metric == nil {
 		t.Fatal("EvaluationResult.Metric must preserve the nested response")
+	}
+	if result.RuntimeMetrics == nil || result.RuntimeMetrics.Durations.TotalMs == nil ||
+		*result.RuntimeMetrics.Durations.TotalMs != 125 {
+		t.Fatalf("EvaluationResult.RuntimeMetrics = %#v, want total_ms=125", result.RuntimeMetrics)
 	}
 }
 

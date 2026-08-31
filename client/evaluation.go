@@ -114,15 +114,58 @@ func (s EvaluationStatus) valid() bool {
 
 // EvaluationResult contains the task, request parameters, and optional metrics.
 type EvaluationResult struct {
-	Task   *EvaluationTask         `json:"task"`
-	Params json.RawMessage         `json:"params"`
-	Metric *EvaluationMetricResult `json:"metric,omitempty"`
+	Task           *EvaluationTask           `json:"task"`
+	Params         json.RawMessage           `json:"params"`
+	Metric         *EvaluationMetricResult   `json:"metric,omitempty"`
+	RuntimeMetrics *EvaluationRuntimeMetrics `json:"runtime_metrics,omitempty"`
 
 	// Experiment is the frozen schema-version-1 experiment manifest; null
 	// for pre-M3 tasks. ProvenanceComplete distinguishes full provenance
 	// from legacy tasks without a snapshot.
 	Experiment         *EvaluationExperimentSnapshot `json:"experiment"`
 	ProvenanceComplete bool                          `json:"provenance_complete"`
+}
+
+// EvaluationRuntimeMetrics is the task-level execution observability snapshot.
+type EvaluationRuntimeMetrics struct {
+	SchemaVersion int                        `json:"schema_version"`
+	StartedAt     time.Time                  `json:"started_at"`
+	EndedAt       *time.Time                 `json:"ended_at,omitempty"`
+	Durations     EvaluationRuntimeDurations `json:"durations"`
+	Samples       EvaluationRuntimeSamples   `json:"samples"`
+	Failure       EvaluationRuntimeFailure   `json:"failure"`
+	Tokens        EvaluationRuntimeTokens    `json:"tokens"`
+}
+
+type EvaluationRuntimeDurations struct {
+	DatasetLoadMs *int64 `json:"dataset_load_ms,omitempty"`
+	IndexingMs    *int64 `json:"indexing_ms,omitempty"`
+	ExecutionMs   *int64 `json:"execution_ms,omitempty"`
+	PersistenceMs *int64 `json:"persistence_ms,omitempty"`
+	CleanupMs     *int64 `json:"cleanup_ms,omitempty"`
+	TotalMs       *int64 `json:"total_ms,omitempty"`
+}
+
+type EvaluationRuntimeSamples struct {
+	Total       int `json:"total"`
+	Started     int `json:"started"`
+	Success     int `json:"success"`
+	Failed      int `json:"failed"`
+	Canceled    int `json:"canceled"`
+	Interrupted int `json:"interrupted"`
+	NotStarted  int `json:"not_started"`
+}
+
+type EvaluationRuntimeFailure struct {
+	Numerator   int `json:"numerator"`
+	Denominator int `json:"denominator"`
+}
+type EvaluationRuntimeTokens struct {
+	PromptTokens      int `json:"prompt_tokens"`
+	CompletionTokens  int `json:"completion_tokens"`
+	TotalTokens       int `json:"total_tokens"`
+	ReportedSamples   int `json:"reported_samples"`
+	UnreportedSamples int `json:"unreported_samples"`
 }
 
 // EvaluationDatasetRef pins the dataset identity inside an experiment snapshot.

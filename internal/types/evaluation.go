@@ -66,9 +66,10 @@ type EvaluationTask struct {
 
 // EvaluationDetail contains detailed evaluation information
 type EvaluationDetail struct {
-	Task   *EvaluationTask `json:"task"`             // Evaluation task info
-	Params *ChatManage     `json:"params"`           // Evaluation parameters
-	Metric *MetricResult   `json:"metric,omitempty"` // Evaluation metrics
+	Task           *EvaluationTask           `json:"task"`             // Evaluation task info
+	Params         *ChatManage               `json:"params"`           // Evaluation parameters
+	Metric         *MetricResult             `json:"metric,omitempty"` // Evaluation metrics
+	RuntimeMetrics *EvaluationRuntimeMetrics `json:"runtime_metrics,omitempty"`
 
 	// Experiment is the frozen schema-version-1 experiment manifest; it is
 	// null for pre-M3 tasks instead of an empty fabricated object.

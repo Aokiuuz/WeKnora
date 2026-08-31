@@ -38,12 +38,21 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 
 	version, dirty, err := migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(20), version)
+	require.Equal(t, uint(21), version)
 	require.False(t, dirty)
 	inspectionDB := openSQLiteDB(t, dbPath)
 	assertSQLiteEvaluationTaskSchema(t, inspectionDB)
 	assertSQLiteEvaluationQuestionResultsSchema(t, inspectionDB)
 	assertSQLiteEvaluationTaskLabelsSchema(t, inspectionDB)
+	assertSQLiteEvaluationRuntimeMetricsSchema(t, inspectionDB)
+
+	require.NoError(t, migrator.Steps(-1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(20), version)
+	require.False(t, dirty)
+	require.False(t, sqliteColumnExists(t, inspectionDB, "evaluation_tasks", "runtime_metrics"))
+	require.False(t, sqliteColumnExists(t, inspectionDB, "evaluation_question_results", "usage_reported"))
 
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
@@ -86,9 +95,16 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(expectedSQLiteMigrationVersion), version)
+	require.Equal(t, uint(20), version)
 	require.False(t, dirty)
 	assertSQLiteEvaluationTaskLabelsSchema(t, inspectionDB)
+
+	require.NoError(t, migrator.Steps(1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(expectedSQLiteMigrationVersion), version)
+	require.False(t, dirty)
+	assertSQLiteEvaluationRuntimeMetricsSchema(t, inspectionDB)
 }
 
 func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
@@ -121,11 +137,25 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	})
 	version, dirty, err := migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(97), version)
+	require.Equal(t, uint(98), version)
 	require.False(t, dirty)
 	assertPostgresEvaluationSchema(t, adminDB, schema)
 	assertPostgresM3EvaluationSchema(t, adminDB, schema)
 	assertPostgresM4EvaluationSchema(t, adminDB, schema)
+	assertPostgresM5RuntimeSchema(t, adminDB, schema)
+
+	require.NoError(t, migrator.Steps(-1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(97), version)
+	require.False(t, dirty)
+	var runtimeColumnExists bool
+	require.NoError(t, adminDB.Raw(
+		"SELECT EXISTS (SELECT 1 FROM information_schema.columns "+
+			"WHERE table_schema = ? AND table_name = 'evaluation_tasks' AND column_name = 'runtime_metrics')",
+		schema,
+	).Scan(&runtimeColumnExists).Error)
+	require.False(t, runtimeColumnExists)
 
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
@@ -188,6 +218,35 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.Equal(t, uint(97), version)
 	require.False(t, dirty)
 	assertPostgresM4EvaluationSchema(t, adminDB, schema)
+
+	require.NoError(t, migrator.Steps(1))
+	version, dirty, err = migrator.Version()
+	require.NoError(t, err)
+	require.Equal(t, uint(98), version)
+	require.False(t, dirty)
+	assertPostgresM5RuntimeSchema(t, adminDB, schema)
+}
+
+func assertSQLiteEvaluationRuntimeMetricsSchema(t *testing.T, db *sql.DB) {
+	t.Helper()
+	require.True(t, sqliteColumnExists(t, db, "evaluation_tasks", "runtime_metrics"))
+	require.True(t, sqliteColumnExists(t, db, "evaluation_question_results", "usage_reported"))
+}
+
+func assertPostgresM5RuntimeSchema(t *testing.T, db *gorm.DB, schema string) {
+	t.Helper()
+	for table, column := range map[string]string{
+		"evaluation_tasks":            "runtime_metrics",
+		"evaluation_question_results": "usage_reported",
+	} {
+		var exists bool
+		require.NoError(t, db.Raw(
+			"SELECT EXISTS (SELECT 1 FROM information_schema.columns "+
+				"WHERE table_schema = ? AND table_name = ? AND column_name = ?)",
+			schema, table, column,
+		).Scan(&exists).Error)
+		require.Truef(t, exists, "PostgreSQL %s must contain column %s", table, column)
+	}
 }
 
 func postgresMigrationDSN(t *testing.T, baseDSN, schema string) string {

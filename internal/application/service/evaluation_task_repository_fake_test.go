@@ -313,6 +313,7 @@ func (r *fakeEvaluationTaskRepository) PublishProgress(
 	task.Total = command.Total
 	task.Finished = command.Finished
 	task.Metric = append(types.JSON(nil), command.Metric...)
+	task.RuntimeMetrics = append(types.JSON(nil), command.RuntimeMetrics...)
 	if task.HeartbeatAt.Before(now) {
 		task.HeartbeatAt = now
 	}
@@ -400,6 +401,7 @@ func (r *fakeEvaluationTaskRepository) PublishTerminal(
 	task.ErrMsg = command.ErrMsg
 	task.CleanupErrors = append(types.JSON(nil), command.CleanupErrors...)
 	task.Metric = append(types.JSON(nil), command.Metric...)
+	task.RuntimeMetrics = append(types.JSON(nil), command.RuntimeMetrics...)
 	task.LeaseExpiresAt = nil
 	if task.UpdatedAt.Before(endTime) {
 		task.UpdatedAt = endTime
@@ -821,6 +823,7 @@ func cloneEvaluationTaskEntity(task *types.EvaluationTaskEntity) *types.Evaluati
 	cloned := *task
 	cloned.Params = append(types.JSON(nil), task.Params...)
 	cloned.Metric = append(types.JSON(nil), task.Metric...)
+	cloned.RuntimeMetrics = append(types.JSON(nil), task.RuntimeMetrics...)
 	cloned.ExperimentSnapshot = append(types.JSON(nil), task.ExperimentSnapshot...)
 	cloned.CleanupErrors = append(types.JSON(nil), task.CleanupErrors...)
 	cloned.Labels = append([]string(nil), task.Labels...)

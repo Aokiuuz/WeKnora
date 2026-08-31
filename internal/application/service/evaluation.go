@@ -245,6 +245,7 @@ func (e *EvaluationService) runEvaluation(
 	}
 	knowledgeBaseID = entity.TemporaryKnowledgeBaseID
 	startTime := time.Now().UTC()
+	runtimeCollector := newEvaluationRuntimeCollector(startTime)
 	started, err := e.evaluationTaskRepository.TryStartTask(runCtx, types.EvaluationTaskStartCommand{
 		TenantID:        entity.TenantID,
 		TaskID:          entity.ID,
@@ -287,6 +288,7 @@ func (e *EvaluationService) runEvaluation(
 		runState,
 		&cleanupErrors,
 		&taskDeadlineStoppedRun,
+		runtimeCollector,
 	)
 	if ownershipErr := context.Cause(runCtx); evaluationHeartbeatOwnershipLost(ownershipErr) {
 		heartbeatErr := heartbeat.StopAndWait()
@@ -303,6 +305,7 @@ func (e *EvaluationService) runEvaluation(
 		return runErr
 	}
 	logger.Infof(runCtx, "Cleaning up evaluation knowledge base: %s", knowledgeBaseID)
+	cleanupStart := time.Now()
 	if cleanupErr := e.deleteEvaluationKnowledgeBase(heartbeat.ctx, knowledgeBaseID); cleanupErr != nil {
 		logger.Errorf(
 			runCtx,
@@ -312,6 +315,7 @@ func (e *EvaluationService) runEvaluation(
 		)
 		appendEvaluationCleanupError(&cleanupErrors, "knowledge base", knowledgeBaseID, cleanupErr)
 	}
+	runtimeCollector.addCleanup(time.Since(cleanupStart))
 	heartbeatErr := heartbeat.StopAndWait()
 	if heartbeatErr != nil {
 		if runErr != nil {
@@ -345,6 +349,13 @@ func (e *EvaluationService) runEvaluation(
 		}
 		return encodeErr
 	}
+	runtimeMetricsJSON, encodeErr := encodeEvaluationRuntimeMetrics(runtimeCollector.snapshot(endTime))
+	if encodeErr != nil {
+		if terminalErr != nil {
+			return errors.Join(terminalErr, encodeErr)
+		}
+		return encodeErr
+	}
 	publicationCtx, publicationCancel := context.WithTimeout(
 		logger.CloneContext(runCtx),
 		evaluationCleanupTimeout,
@@ -360,7 +371,9 @@ func (e *EvaluationService) runEvaluation(
 		ErrMsg:          errMsg,
 		CleanupErrors:   cleanupJSON,
 		Metric:          append(types.JSON(nil), runState.metric...),
+		RuntimeMetrics:  runtimeMetricsJSON,
 	}
+	publicationStart := time.Now()
 	if _, err := e.evaluationTaskRepository.PublishTerminal(publicationCtx, terminalCommand); err != nil {
 		// A cancel request persisted concurrently invalidates the terminal
 		// compare-and-swap truth. Re-read the task and republish Canceled
@@ -389,6 +402,7 @@ func (e *EvaluationService) runEvaluation(
 			return publicationErr
 		}
 	}
+	runtimeCollector.addPersistence(time.Since(publicationStart))
 
 	if terminalErr != nil {
 		return terminalErr
@@ -768,7 +782,9 @@ func (e *EvaluationService) EvalDataset(ctx context.Context, detail *types.Evalu
 	if err != nil {
 		return err
 	}
-	return e.evalDataset(ctx, logger.CloneContext(ctx), persistedDetail, knowledgeBaseID, runState, nil, nil)
+	runtimeCollector := newEvaluationRuntimeCollector(entity.StartTime)
+	return e.evalDataset(ctx, logger.CloneContext(ctx), persistedDetail, knowledgeBaseID, runState, nil, nil,
+		runtimeCollector)
 }
 
 func (e *EvaluationService) evalDataset(
@@ -779,6 +795,7 @@ func (e *EvaluationService) evalDataset(
 	runState *evaluationRunState,
 	cleanupErrors *[]string,
 	taskDeadlineStoppedRun *bool,
+	runtimeCollector *evaluationRuntimeCollector,
 ) (runErr error) {
 	defer func() {
 		captureEvaluationTaskDeadline(ctx, runErr, taskDeadlineStoppedRun)
@@ -794,16 +811,19 @@ func (e *EvaluationService) evalDataset(
 	}
 
 	// Load the immutable dataset version frozen in the experiment manifest.
+	datasetLoadStart := time.Now()
 	dataset, err := e.loadEvaluationDataset(ctx, detail)
+	runtimeCollector.addDatasetLoad(time.Since(datasetLoadStart))
 	if err != nil {
 		logger.Errorf(ctx, "Failed to get dataset: %v", err)
 		captureEvaluationTaskDeadline(ctx, err, taskDeadlineStoppedRun)
 		return err
 	}
 	logger.Infof(ctx, "Dataset retrieved successfully with %d QA pairs", len(dataset))
+	runtimeCollector.setTotal(len(dataset))
 
 	// Publish the total before creating any temporary Knowledge resource.
-	if err := e.publishEvaluationProgress(ctx, runState, len(dataset), 0, nil); err != nil {
+	if err := e.publishEvaluationProgress(ctx, runState, len(dataset), 0, nil, runtimeCollector); err != nil {
 		return fmt.Errorf("publish evaluation total: %w", err)
 	}
 	logger.Infof(ctx, "Updated task total to %d QA pairs", len(dataset))
@@ -813,7 +833,9 @@ func (e *EvaluationService) evalDataset(
 	logger.Infof(ctx, "Creating knowledge from %d passages", len(passages))
 
 	// Create knowledge base from passages (sync: wait for indexing to complete before querying)
+	indexingStart := time.Now()
 	knowledge, err := e.knowledgeService.CreateKnowledgeFromPassageSync(ctx, knowledgeBaseID, passages, "")
+	runtimeCollector.addIndexing(time.Since(indexingStart))
 	if err != nil {
 		logger.Errorf(ctx, "Failed to create knowledge from passages: %v", err)
 		captureEvaluationTaskDeadline(ctx, err, taskDeadlineStoppedRun)
@@ -834,10 +856,12 @@ func (e *EvaluationService) evalDataset(
 			)
 			return
 		}
+		cleanupStart := time.Now()
 		if err := e.deleteEvaluationKnowledge(cleanupCtx, knowledge.ID); err != nil {
 			logger.Errorf(ctx, "Failed to delete knowledge: %v, knowledge ID: %s", err, knowledge.ID)
 			appendEvaluationCleanupError(cleanupErrors, "knowledge", knowledge.ID, err)
 		}
+		runtimeCollector.addCleanup(time.Since(cleanupStart))
 	}()
 
 	recorded, err := e.evaluationTaskRepository.RecordTemporaryKnowledge(
@@ -877,6 +901,7 @@ func (e *EvaluationService) evalDataset(
 	// Set worker limit based on available CPUs
 	g.SetLimit(max(runtime.GOMAXPROCS(0)-1, 1))
 	logger.Infof(ctx, "Starting evaluation with %d parallel workers", max(runtime.GOMAXPROCS(0)-1, 1))
+	executionStart := time.Now()
 
 	// Process each QA pair in parallel
 	for i, qaPair := range dataset {
@@ -888,9 +913,12 @@ func (e *EvaluationService) evalDataset(
 			}
 
 			logger.Infof(ctx, "Processing QA pair %d, question: %s", i, qaPair.Question)
+			runtimeCollector.sampleStarted()
+			sampleStart := time.Now()
 
 			// Prepare chat management parameters for this QA pair
 			chatManage := detail.Params.Clone()
+			chatManage.EvaluationTimings = &types.EvaluationPipelineTimings{}
 			chatManage.Query = qaPair.Question
 			chatManage.RewriteQuery = qaPair.Question
 			// Set knowledge base ID and search targets for this evaluation
@@ -901,33 +929,50 @@ func (e *EvaluationService) evalDataset(
 					KnowledgeBaseID: knowledgeBaseID,
 				},
 			}
+			metricHook.recordInit(i)
+			metricHook.recordQaPair(i, qaPair)
 
 			// Execute knowledge QA pipeline
 			logger.Infof(ctx, "Running knowledge QA for question: %s", qaPair.Question)
 			qaErr := e.sessionService.KnowledgeQAByEvent(workerCtx, chatManage, types.Pipline["rag"])
 			if qaErr != nil {
+				canceled := errors.Is(qaErr, context.Canceled) || errors.Is(workerCtx.Err(), context.Canceled)
+				runtimeCollector.sampleFailed(canceled)
+				metricHook.recordSearchResult(i, chatManage.SearchResult)
+				metricHook.recordRerankResult(i, chatManage.RerankResult)
+				metricHook.recordChatResponse(i, chatManage.ChatResponse)
+				if publishErr := e.publishFailedEvaluationQuestion(
+					ctx, detail, runState, metricHook, runtimeCollector, chatManage,
+					&publishMu, &finished, len(dataset), i, time.Since(sampleStart), canceled,
+				); publishErr != nil {
+					return errors.Join(qaErr, publishErr)
+				}
 				logger.Errorf(ctx, "Failed to process question %d: %v", i, qaErr)
 				return qaErr
 			}
 
 			// Record evaluation metrics
 			logger.Infof(ctx, "Recording metrics for QA pair %d", i)
-			metricHook.recordInit(i)
-			metricHook.recordQaPair(i, qaPair)
 			metricHook.recordSearchResult(i, chatManage.SearchResult)
 			metricHook.recordRerankResult(i, chatManage.RerankResult)
 			metricHook.recordChatResponse(i, chatManage.ChatResponse)
+			promptTokens, completionTokens, totalTokens, usageReported := evaluationQuestionUsage(chatManage.ChatResponse)
 
 			// Publish each completed QA pair and its aggregate metric as one ordered snapshot.
 			publishMu.Lock()
 			if err := workerCtx.Err(); err != nil {
+				runtimeCollector.sampleFailed(true)
+				runtimeCollector.recordSampleTokens(promptTokens, completionTokens, totalTokens, usageReported)
 				publishMu.Unlock()
 				return err
 			}
 			if err := metricHook.recordFinishWithContext(workerCtx, i); err != nil {
+				runtimeCollector.sampleFailed(false)
+				runtimeCollector.recordSampleTokens(promptTokens, completionTokens, totalTokens, usageReported)
 				publishMu.Unlock()
 				return fmt.Errorf("compute metrics for QA pair %d: %w", i, err)
 			}
+			runtimeCollector.sampleSucceeded(promptTokens, completionTokens, totalTokens, usageReported)
 			finished += 1
 			finishedSnapshot := finished
 			metricResult := metricHook.MetricResult()
@@ -937,11 +982,12 @@ func (e *EvaluationService) evalDataset(
 				// aggregate metric in one transaction.
 				input := metricHook.questionResultInput(i, detail.Experiment.MetricPlan, detail.Params.RerankTopK)
 				if input != nil {
+					applyEvaluationQuestionRuntime(input, chatManage.EvaluationTimings, time.Since(sampleStart), usageReported)
 					updateErr = e.publishQuestionResult(workerCtx, runState, len(dataset), finishedSnapshot,
-						metricResult, input)
+						metricResult, input, runtimeCollector)
 				} else {
 					updateErr = e.publishEvaluationProgress(workerCtx, runState, len(dataset), finishedSnapshot,
-						metricResult)
+						metricResult, runtimeCollector)
 				}
 			} else {
 				updateErr = e.publishEvaluationProgress(
@@ -950,6 +996,7 @@ func (e *EvaluationService) evalDataset(
 					len(dataset),
 					finishedSnapshot,
 					metricResult,
+					runtimeCollector,
 				)
 			}
 			publishMu.Unlock()
@@ -964,13 +1011,15 @@ func (e *EvaluationService) evalDataset(
 	// Wait for all parallel evaluations to complete
 	logger.Info(ctx, "Waiting for all evaluation tasks to complete")
 	if err := g.Wait(); err != nil {
+		runtimeCollector.addExecution(time.Since(executionStart))
 		logger.Errorf(ctx, "Evaluation error: %v", err)
 		return err
 	}
+	runtimeCollector.addExecution(time.Since(executionStart))
 
 	// Final update of evaluation metrics
 	finalMetric := metricHook.MetricResult()
-	if err := e.publishEvaluationProgress(ctx, runState, len(dataset), finished, finalMetric); err != nil {
+	if err := e.publishEvaluationProgress(ctx, runState, len(dataset), finished, finalMetric, runtimeCollector); err != nil {
 		return fmt.Errorf("publish final evaluation progress: %w", err)
 	}
 
@@ -984,6 +1033,7 @@ func (e *EvaluationService) publishEvaluationProgress(
 	total int,
 	finished int,
 	metric *types.MetricResult,
+	runtimeCollector *evaluationRuntimeCollector,
 ) error {
 	if runState == nil {
 		return errors.New("publish evaluation progress: run state is required")
@@ -993,6 +1043,11 @@ func (e *EvaluationService) publishEvaluationProgress(
 		return err
 	}
 	now := time.Now().UTC()
+	runtimeMetricsJSON, err := encodeEvaluationRuntimeMetrics(runtimeCollector.currentSnapshot(now))
+	if err != nil {
+		return err
+	}
+	persistenceStart := time.Now()
 	updated, err := e.evaluationTaskRepository.PublishProgress(
 		ctx,
 		types.EvaluationTaskProgressCommand{
@@ -1003,6 +1058,7 @@ func (e *EvaluationService) publishEvaluationProgress(
 			Total:           total,
 			Finished:        finished,
 			Metric:          metricJSON,
+			RuntimeMetrics:  runtimeMetricsJSON,
 			Now:             now,
 			LeaseExpiresAt:  e.evaluationLeaseExpiresAt(now),
 		},
@@ -1010,8 +1066,10 @@ func (e *EvaluationService) publishEvaluationProgress(
 	if err != nil {
 		return err
 	}
+	runtimeCollector.addPersistence(time.Since(persistenceStart))
 	runState.version = updated.Version
 	runState.metric = append(types.JSON(nil), updated.Metric...)
+	runState.runtimeMetrics = append(types.JSON(nil), updated.RuntimeMetrics...)
 	return nil
 }
 
@@ -1025,6 +1083,7 @@ func (e *EvaluationService) publishQuestionResult(
 	finished int,
 	metric *types.MetricResult,
 	input *types.EvaluationQuestionResultInput,
+	runtimeCollector *evaluationRuntimeCollector,
 ) error {
 	if runState == nil {
 		return errors.New("publish evaluation question result: run state is required")
@@ -1034,6 +1093,11 @@ func (e *EvaluationService) publishQuestionResult(
 		return err
 	}
 	now := time.Now().UTC()
+	runtimeMetricsJSON, err := encodeEvaluationRuntimeMetrics(runtimeCollector.currentSnapshot(now))
+	if err != nil {
+		return err
+	}
+	persistenceStart := time.Now()
 	updated, inserted, err := e.questionResultRepository.PublishQuestionResult(
 		ctx,
 		interfaces.EvaluationQuestionResultCommand{
@@ -1044,6 +1108,7 @@ func (e *EvaluationService) publishQuestionResult(
 			Total:           total,
 			Finished:        finished,
 			Metric:          metricJSON,
+			RuntimeMetrics:  runtimeMetricsJSON,
 			Now:             now,
 			LeaseExpiresAt:  e.evaluationLeaseExpiresAt(now),
 			Result:          input,
@@ -1052,10 +1117,66 @@ func (e *EvaluationService) publishQuestionResult(
 	if err != nil {
 		return err
 	}
+	runtimeCollector.addPersistence(time.Since(persistenceStart))
 	runState.version = updated.Version
 	runState.metric = append(types.JSON(nil), updated.Metric...)
+	runState.runtimeMetrics = append(types.JSON(nil), updated.RuntimeMetrics...)
 	if !inserted {
 		logger.Infof(ctx, "Question result for sample %d already published with identical hash", input.SampleIndex)
+	}
+	return nil
+}
+
+func (e *EvaluationService) publishFailedEvaluationQuestion(
+	ctx context.Context,
+	detail *types.EvaluationDetail,
+	runState *evaluationRunState,
+	metricHook *HookMetric,
+	runtimeCollector *evaluationRuntimeCollector,
+	chatManage *types.ChatManage,
+	publishMu *sync.Mutex,
+	finished *int,
+	total int,
+	sampleIndex int,
+	totalDuration time.Duration,
+	canceled bool,
+) error {
+	if ctx.Err() != nil || e.questionResultRepository == nil || detail.Experiment == nil {
+		return nil
+	}
+	input := metricHook.questionResultInput(
+		sampleIndex,
+		detail.Experiment.MetricPlan,
+		detail.Params.RerankTopK,
+	)
+	if input == nil {
+		return nil
+	}
+	promptTokens, completionTokens, totalTokens, usageReported := evaluationQuestionUsage(chatManage.ChatResponse)
+	runtimeCollector.recordSampleTokens(promptTokens, completionTokens, totalTokens, usageReported)
+	applyEvaluationQuestionRuntime(input, chatManage.EvaluationTimings, totalDuration, usageReported)
+	input.Status = types.EvaluationQuestionStatusFailed
+	input.ErrorCode = "evaluation_question_failed"
+	if canceled {
+		input.Status = types.EvaluationQuestionStatusCanceled
+		input.ErrorCode = "evaluation_question_canceled"
+	}
+
+	publishMu.Lock()
+	defer publishMu.Unlock()
+	*finished++
+	finishedSnapshot := *finished
+	if err := e.publishQuestionResult(
+		ctx,
+		runState,
+		total,
+		finishedSnapshot,
+		metricHook.MetricResult(),
+		input,
+		runtimeCollector,
+	); err != nil {
+		*finished--
+		return fmt.Errorf("publish failed question result for sample %d: %w", sampleIndex, err)
 	}
 	return nil
 }

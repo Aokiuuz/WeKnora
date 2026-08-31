@@ -22,9 +22,10 @@ type EvaluationTaskEntity struct {
 	CreatedAt time.Time        `json:"created_at" gorm:"not null"`
 	UpdatedAt time.Time        `json:"updated_at" gorm:"not null"`
 
-	CleanupErrors JSON `json:"cleanup_errors" gorm:"type:jsonb;not null;default:'[]'"`
-	Params        JSON `json:"params" gorm:"type:jsonb;not null;default:'{}'"`
-	Metric        JSON `json:"metric,omitempty" gorm:"type:jsonb"`
+	CleanupErrors  JSON `json:"cleanup_errors" gorm:"type:jsonb;not null;default:'[]'"`
+	Params         JSON `json:"params" gorm:"type:jsonb;not null;default:'{}'"`
+	Metric         JSON `json:"metric,omitempty" gorm:"type:jsonb"`
+	RuntimeMetrics JSON `json:"runtime_metrics,omitempty" gorm:"type:jsonb"`
 
 	// Frozen experiment provenance (M3). All four stay nil for pre-M3 tasks:
 	// null provenance is reported as experiment=null and
@@ -93,6 +94,7 @@ type EvaluationTaskProgressCommand struct {
 	Total           int
 	Finished        int
 	Metric          JSON
+	RuntimeMetrics  JSON
 	Now             time.Time
 	LeaseExpiresAt  time.Time
 }
@@ -120,6 +122,7 @@ type EvaluationTaskTerminalCommand struct {
 	ErrMsg          string
 	CleanupErrors   JSON
 	Metric          JSON
+	RuntimeMetrics  JSON
 }
 
 // EvaluationTaskCancelCommand records the first persistent user-cancel

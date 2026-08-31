@@ -360,6 +360,9 @@ func (r *evaluationTaskRepository) PublishProgress(
 	if err := validateEvaluationTaskJSONObject(command.Metric, true); err != nil {
 		return nil, fmt.Errorf("publish evaluation progress: metric: %w", err)
 	}
+	if err := validateEvaluationTaskJSONObject(command.RuntimeMetrics, true); err != nil {
+		return nil, fmt.Errorf("publish evaluation progress: runtime_metrics: %w", err)
+	}
 
 	return r.updateEvaluationTask(
 		ctx,
@@ -371,9 +374,10 @@ func (r *evaluationTaskRepository) PublishProgress(
 		"(total = 0 OR total = ?) AND finished <= ? AND lease_expires_at > ?",
 		[]any{command.Total, command.Finished, command.Now},
 		map[string]any{
-			"total":    command.Total,
-			"finished": command.Finished,
-			"metric":   command.Metric,
+			"total":           command.Total,
+			"finished":        command.Finished,
+			"metric":          command.Metric,
+			"runtime_metrics": command.RuntimeMetrics,
 			"heartbeat_at": gorm.Expr(
 				"CASE WHEN heartbeat_at > ? THEN heartbeat_at ELSE ? END",
 				command.Now, command.Now,
@@ -483,6 +487,9 @@ func (r *evaluationTaskRepository) PublishTerminal(
 	if err := validateEvaluationTaskJSONObject(command.Metric, true); err != nil {
 		return nil, fmt.Errorf("publish evaluation terminal state: metric: %w", err)
 	}
+	if err := validateEvaluationTaskJSONObject(command.RuntimeMetrics, true); err != nil {
+		return nil, fmt.Errorf("publish evaluation terminal state: runtime_metrics: %w", err)
+	}
 
 	// Terminal compare-and-swap truth: Canceled requires a persistent cancel
 	// request; every other terminal state requires its absence.
@@ -506,6 +513,7 @@ func (r *evaluationTaskRepository) PublishTerminal(
 			"err_msg":          command.ErrMsg,
 			"cleanup_errors":   command.CleanupErrors,
 			"metric":           command.Metric,
+			"runtime_metrics":  command.RuntimeMetrics,
 			"lease_expires_at": nil,
 			"updated_at": gorm.Expr(
 				"CASE WHEN updated_at > ? THEN updated_at ELSE ? END",
@@ -1019,6 +1027,9 @@ func validateInitialEvaluationTask(task *types.EvaluationTaskEntity) error {
 	}
 	if len(task.Metric) != 0 || task.TemporaryKnowledgeID != "" {
 		return errors.New("create evaluation task: result and temporary knowledge fields must be empty")
+	}
+	if len(task.RuntimeMetrics) != 0 {
+		return errors.New("create evaluation task: runtime_metrics must be empty")
 	}
 	if task.Version > 1 || task.DeletedAt.Valid {
 		return errors.New("create evaluation task: version and deletion fields must describe a new task")
