@@ -163,3 +163,27 @@ curl --location 'http://localhost:8080/api/v1/evaluation' \
     "success": true
 }
 ```
+
+## M5 指标、统计与人工评分入口
+
+里程碑 5（Milestone 5，M5）增加版本化指标目录、模型统计、价格版本和人工评分修订。下表中的 Viewer 表示查看者
+角色，Admin 表示管理员角色；应用程序编程接口密钥（Application Programming Interface Key，API Key）读取指标目录
+时需要 `run_evaluations` 能力。
+
+| 方法 | 路径 | 权限 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/api/v1/evaluation/metrics` | Viewer / API Key | 返回指标 key、version、类别、默认配置和配置 schema |
+| GET | `/api/v1/models/:id/usage?from=&to=` | Viewer | 返回单模型调用、Token、费用、缓存和延迟统计 |
+| GET | `/api/v1/models/usage?from=&to=&model_ids=` | Viewer | 返回一个或多个模型的时间区间统计 |
+| GET | `/api/v1/models/:id/pricing` | Viewer | 返回按生效时间倒序排列的价格版本 |
+| PUT | `/api/v1/models/:id/pricing` | Admin | 创建一个有效区间不重叠的价格版本 |
+| GET | `/api/v1/evaluation/tasks/:task_id/questions/:sample_index/ratings` | Viewer | 返回人工评分修订 |
+| POST | `/api/v1/evaluation/tasks/:task_id/questions/:sample_index/ratings` | Admin | 追加人工评分修订 |
+
+模型统计使用协调世界时（Coordinated Universal Time，UTC）半开区间 `[from, to)`。省略时间时返回最近 30 天，
+最长区间为 366 天。响应中的 `latency` 包含 p50、p95、p99 和可报告调用数。`provider_cache` 以厂商报告的 read 与
+miss Token 为分母；`application_cache` 以 hit 与 miss 项为分母，并独立返回 bypass 查询数。
+
+价格单位为每百万输入或输出 Token 对应的整数微货币。调用开始时冻结有效价格；缺少价格或用量的调用返回空费用并计入
+`unpriced_calls`。人工评分请求包含 rubric key、rubric version、rubric snapshot、score 和 comment；服务端分配修订号并
+连接同一 rubric 的 `supersedes_id`。
