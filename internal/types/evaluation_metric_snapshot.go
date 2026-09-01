@@ -40,6 +40,7 @@ type EvaluationMetricPlanSnapshot struct {
 // unavailable, skipped, and failed measurements.
 const (
 	EvaluationMetricObservationValid   = "valid"
+	EvaluationMetricObservationMissing = "missing"
 	EvaluationMetricObservationSkipped = "skipped"
 	EvaluationMetricObservationFailed  = "failed"
 )

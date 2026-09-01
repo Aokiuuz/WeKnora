@@ -10,7 +10,7 @@ import (
 
 const (
 	// EvaluationExportSchemaVersion identifies the audit export schema.
-	EvaluationExportSchemaVersion = 1
+	EvaluationExportSchemaVersion = 2
 	// EvaluationExportFormatJSON selects JavaScript Object Notation output.
 	EvaluationExportFormatJSON = "json"
 	// EvaluationExportFormatCSV selects comma-separated values output.
@@ -106,6 +106,7 @@ type EvaluationExportQuestion struct {
 	PromptTokens     *int   `json:"prompt_tokens"`
 	CompletionTokens *int   `json:"completion_tokens"`
 	TotalTokens      *int   `json:"total_tokens"`
+	UsageReported    bool   `json:"usage_reported"`
 }
 
 // EvaluationExportDocument is the fixed JSON audit export envelope.

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Tencent/WeKnora/internal/config"
+	"github.com/Tencent/WeKnora/internal/models/limiter"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 )
@@ -273,12 +274,31 @@ type evaluationLifecycleSessionStub struct {
 }
 
 func (s *evaluationLifecycleSessionStub) KnowledgeQAByEvent(
-	_ context.Context,
+	ctx context.Context,
 	chatManage *types.ChatManage,
 	_ []types.EventType,
 ) error {
+	release := limiter.Gate(ctx, chatManage.ChatModelID)
+	defer release()
 	s.modelIDs <- chatManage.ChatModelID
 	return nil
+}
+
+type evaluationLimiterAcquisition struct {
+	modelID    string
+	limit      int
+	background bool
+}
+
+type evaluationLimiterSpy struct {
+	acquisitions chan<- evaluationLimiterAcquisition
+}
+
+func (s *evaluationLimiterSpy) Acquire(ctx context.Context, key string, limit int) (func(), error) {
+	s.acquisitions <- evaluationLimiterAcquisition{
+		modelID: key, limit: limit, background: types.IsBackgroundTask(ctx),
+	}
+	return func() {}, nil
 }
 
 func TestEvaluationServiceSeparatesResponseFromBackgroundRun(t *testing.T) {
@@ -287,6 +307,9 @@ func TestEvaluationServiceSeparatesResponseFromBackgroundRun(t *testing.T) {
 	knowledgeEntered := make(chan struct{})
 	knowledgeRelease := make(chan struct{})
 	modelIDs := make(chan string, 1)
+	limiterAcquisitions := make(chan evaluationLimiterAcquisition, 1)
+	limiter.SetGovernor(&evaluationLimiterSpy{acquisitions: limiterAcquisitions}, 1)
+	t.Cleanup(func() { limiter.SetGovernor(nil, 0) })
 
 	service := &EvaluationService{
 		config: &config.Config{
@@ -372,6 +395,14 @@ func TestEvaluationServiceSeparatesResponseFromBackgroundRun(t *testing.T) {
 
 	if observedModelID != "chat-model" {
 		t.Errorf("background ChatModelID = %q, want chat-model", observedModelID)
+	}
+	select {
+	case acquisition := <-limiterAcquisitions:
+		if acquisition.modelID != "chat-model" || acquisition.limit != 1 || !acquisition.background {
+			t.Errorf("limiter acquisition = %+v, want background chat-model with limit 1", acquisition)
+		}
+	default:
+		t.Error("background evaluation model call bypassed the concurrency limiter")
 	}
 	if completed.Task.ID != taskID || completed.Task.DatasetID != "dataset" {
 		t.Errorf("stored task = %+v, want original ID and dataset", completed.Task)

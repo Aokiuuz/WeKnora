@@ -89,7 +89,7 @@ func (e *EvaluationService) CompareEvaluations(
 		if err != nil {
 			return nil, fmt.Errorf("task %s: %w", taskID, err)
 		}
-		metrics, err := types.FlattenEvaluationNumericMetrics(entity.Metric)
+		metrics, err := evaluationAvailableNumericMetrics(entity.Metric, experiment.MetricPlan)
 		if err != nil {
 			return nil, fmt.Errorf("task %s: %w", taskID, err)
 		}
@@ -281,47 +281,46 @@ func (e *EvaluationService) loadEvaluationComparisonStatistics(
 	tenantID uint64,
 	input *evaluationComparisonInput,
 ) error {
-	from := 0
 	successes := 0
 	trials := 0
-	for {
-		rows, err := e.questionResultRepository.ListQuestionResults(
-			ctx, tenantID, input.entity.ID, from, types.EvaluationQuestionPageMaxSize,
+	rows, err := e.verifySuccessfulEvaluationResults(ctx, tenantID, input.entity, input.experiment)
+	if err != nil {
+		return fmt.Errorf(
+			"%w: task %s result integrity: %v",
+			types.ErrEvaluationComparisonConflict,
+			input.entity.ID,
+			err,
 		)
-		if err != nil {
-			return fmt.Errorf("load comparison statistics for task %s: %w", input.entity.ID, err)
+	}
+	for _, row := range rows {
+		trials++
+		if row.TotalMs != nil {
+			input.totalLatencies = append(input.totalLatencies, float64(*row.TotalMs))
 		}
-		for _, row := range rows {
-			trials++
-			if row.TotalMs != nil {
-				input.totalLatencies = append(input.totalLatencies, float64(*row.TotalMs))
+		if row.TotalTokens != nil {
+			input.tokenTotals.NValid++
+			input.tokenTotals.Total += int64(*row.TotalTokens)
+			if row.PromptTokens != nil {
+				input.tokenTotals.Prompt += int64(*row.PromptTokens)
 			}
-			if row.TotalTokens != nil {
-				input.tokenTotals.NValid++
-				input.tokenTotals.Total += int64(*row.TotalTokens)
-				if row.PromptTokens != nil {
-					input.tokenTotals.Prompt += int64(*row.PromptTokens)
-				}
-				if row.CompletionTokens != nil {
-					input.tokenTotals.Completion += int64(*row.CompletionTokens)
-				}
-			}
-			if row.Status != types.EvaluationQuestionStatusSuccess {
-				continue
-			}
-			successes++
-			metrics, flattenErr := types.FlattenEvaluationNumericMetrics(row.PerSampleMetrics)
-			if flattenErr != nil {
-				return fmt.Errorf("task %s sample %d metrics: %w", input.entity.ID, row.SampleIndex, flattenErr)
-			}
-			for pointer, value := range metrics {
-				input.metricSamples[pointer] = append(input.metricSamples[pointer], value)
+			if row.CompletionTokens != nil {
+				input.tokenTotals.Completion += int64(*row.CompletionTokens)
 			}
 		}
-		if len(rows) < types.EvaluationQuestionPageMaxSize {
-			break
+		if row.Status != types.EvaluationQuestionStatusSuccess {
+			continue
 		}
-		from = rows[len(rows)-1].SampleIndex + 1
+		successes++
+		metrics, flattenErr := evaluationAvailableNumericMetrics(
+			row.PerSampleMetrics,
+			input.experiment.MetricPlan,
+		)
+		if flattenErr != nil {
+			return fmt.Errorf("task %s sample %d metrics: %w", input.entity.ID, row.SampleIndex, flattenErr)
+		}
+		for pointer, value := range metrics {
+			input.metricSamples[pointer] = append(input.metricSamples[pointer], value)
+		}
 	}
 	input.questionTotal = trials
 	input.tokenTotals.NTotal = trials
@@ -335,6 +334,72 @@ func (e *EvaluationService) loadEvaluationComparisonStatistics(
 		}
 	}
 	return nil
+}
+
+// evaluationAvailableNumericMetrics projects a metric result through its
+// frozen plan. Dynamic score state decides availability, while fixed fields
+// remain comparison aliases only when their mapping is unambiguous.
+func evaluationAvailableNumericMetrics(
+	raw types.JSON,
+	plan *types.EvaluationMetricPlanSnapshot,
+) (map[string]float64, error) {
+	if plan == nil {
+		return nil, fmt.Errorf("%w: frozen metric plan is required", types.ErrEvaluationComparisonDataInvalid)
+	}
+	var result types.MetricResult
+	if len(strings.TrimSpace(string(raw))) == 0 || !json.Valid(raw) {
+		return nil, fmt.Errorf("%w: metric result is invalid JSON", types.ErrEvaluationComparisonDataInvalid)
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("%w: decode metric result: %v", types.ErrEvaluationComparisonDataInvalid, err)
+	}
+
+	fixedCounts := make(map[string]int)
+	for _, spec := range plan.Metrics {
+		if pointer, ok := types.EvaluationMetricFixedPointer(spec); ok {
+			fixedCounts[pointer]++
+		}
+	}
+
+	metrics := make(map[string]float64, len(plan.Metrics)*2)
+	for _, spec := range plan.Metrics {
+		score, exists := result.Scores[spec.InstanceID]
+		fixedPointer, hasFixedPointer := types.EvaluationMetricFixedPointer(spec)
+		if !exists {
+			// Version 1 fixed fields are the defined compatibility representation
+			// for persisted results that do not carry dynamic score state.
+			if spec.Version == "1.0.0" && hasFixedPointer && fixedCounts[fixedPointer] == 1 {
+				value, _ := types.EvaluationMetricFixedValue(&result, fixedPointer)
+				metrics[fixedPointer] = value
+			}
+			continue
+		}
+		if score.Status != types.EvaluationMetricObservationValid {
+			continue
+		}
+		if score.Value == nil {
+			return nil, fmt.Errorf(
+				"%w: valid metric %s has no value",
+				types.ErrEvaluationComparisonDataInvalid,
+				spec.InstanceID,
+			)
+		}
+		metrics[types.EvaluationMetricScoreValuePointer(spec.InstanceID)] = *score.Value
+		if !hasFixedPointer || fixedCounts[fixedPointer] != 1 {
+			continue
+		}
+		fixedValue, _ := types.EvaluationMetricFixedValue(&result, fixedPointer)
+		if fixedValue != *score.Value {
+			return nil, fmt.Errorf(
+				"%w: fixed metric %s disagrees with %s",
+				types.ErrEvaluationComparisonDataInvalid,
+				fixedPointer,
+				spec.InstanceID,
+			)
+		}
+		metrics[fixedPointer] = fixedValue
+	}
+	return metrics, nil
 }
 
 func evaluationLatencyPercentiles(values []float64, total int) *types.EvaluationPercentiles {

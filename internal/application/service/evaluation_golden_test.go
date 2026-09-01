@@ -157,17 +157,27 @@ func runGoldenPipeline(dataset *goldenDatasetFixture) (*HookMetric, []*types.Met
 		questionByID[question.QID] = i
 	}
 	relevanceByQID := make(map[string][]int)
+	gradesByQID := make(map[string]map[int]int)
 	for _, edge := range dataset.Relevance {
-		relevanceByQID[edge.QID] = append(relevanceByQID[edge.QID], goldenPID(edge.PID))
+		pid := goldenPID(edge.PID)
+		if gradesByQID[edge.QID] == nil {
+			gradesByQID[edge.QID] = make(map[int]int)
+		}
+		gradesByQID[edge.QID][pid] = edge.Grade
+		if edge.Grade > 0 {
+			relevanceByQID[edge.QID] = append(relevanceByQID[edge.QID], pid)
+		}
 	}
 
 	for index, sample := range dataset.Samples {
 		question := dataset.Questions[questionByID[sample.QID]]
 		qaPair := &types.QAPair{
-			QID:      index,
-			Question: question.Question,
-			PIDs:     relevanceByQID[sample.QID],
-			Answer:   question.Answer,
+			QID:                      index,
+			Question:                 question.Question,
+			PIDs:                     relevanceByQID[sample.QID],
+			PIDGrades:                gradesByQID[sample.QID],
+			RetrievalLabelsAvailable: true,
+			Answer:                   question.Answer,
 		}
 
 		hook.recordInit(index)

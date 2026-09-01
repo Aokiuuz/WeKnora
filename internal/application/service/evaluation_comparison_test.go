@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Tencent/WeKnora/internal/evaluation/metricregistry"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -62,6 +63,80 @@ func comparisonServiceContext() context.Context {
 	return context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
 }
 
+func comparisonQuestionFixture(
+	t *testing.T,
+	taskID string,
+	index int,
+	status string,
+	precision float64,
+) *types.EvaluationQuestionResultEntity {
+	t.Helper()
+	row := evaluationExportQuestionFixture(t, index, "question")
+	row.TaskID = taskID
+	row.Status = status
+	var metric types.MetricResult
+	require.NoError(t, json.Unmarshal(row.PerSampleMetrics, &metric))
+	metric.RetrievalMetrics.Precision = precision
+	plan, err := types.DefaultEvaluationMetricPlan()
+	require.NoError(t, err)
+	for _, spec := range plan.Metrics {
+		if spec.Key != "retrieval.precision" {
+			continue
+		}
+		value := precision
+		metric.Scores[spec.InstanceID] = types.EvaluationMetricScore{
+			Value: &value, Status: types.EvaluationMetricObservationValid,
+		}
+		var observations []types.EvaluationMetricObservationSnapshot
+		require.NoError(t, json.Unmarshal(row.MetricObservations, &observations))
+		for index := range observations {
+			if observations[index].InstanceID == spec.InstanceID {
+				observationValue := precision
+				observations[index].Value = &observationValue
+			}
+		}
+		observationJSON, marshalErr := json.Marshal(observations)
+		require.NoError(t, marshalErr)
+		row.MetricObservations = types.JSON(observationJSON)
+	}
+	encoded, err := json.Marshal(&metric)
+	require.NoError(t, err)
+	row.PerSampleMetrics = types.JSON(encoded)
+	input, err := evaluationQuestionResultInputFromEntity(row)
+	require.NoError(t, err)
+	row.ResultHash = types.EvaluationQuestionResultHash(input)
+	return row
+}
+
+func sealComparisonTaskResults(
+	t *testing.T,
+	task *types.EvaluationTaskEntity,
+	rows []*types.EvaluationQuestionResultEntity,
+) {
+	t.Helper()
+	task.Total = len(rows)
+	task.Finished = len(rows)
+	var experiment types.EvaluationExperimentSnapshot
+	require.NoError(t, json.Unmarshal(task.ExperimentSnapshot, &experiment))
+	registry, err := metricregistry.NewDefaultRegistry()
+	require.NoError(t, err)
+	resolved, err := registry.ResolveSnapshot(experiment.MetricPlan)
+	require.NoError(t, err)
+	results := make([]*types.MetricResult, 0, len(rows))
+	for _, row := range rows {
+		input, decodeErr := evaluationQuestionResultInputFromEntity(row)
+		require.NoError(t, decodeErr)
+		if row.Status == types.EvaluationQuestionStatusSuccess {
+			results = append(results, input.PerSampleMetrics)
+		} else {
+			results = append(results, nil)
+		}
+	}
+	encoded, err := json.Marshal(resolved.Aggregate(results))
+	require.NoError(t, err)
+	task.Metric = types.JSON(encoded)
+}
+
 func TestCompareEvaluationsBuildsStableParameterAndMetricDeltas(t *testing.T) {
 	repo := newFakeEvaluationTaskRepository()
 	repo.register(comparisonTaskFixture(t, "task-a", 5, 0.5))
@@ -97,28 +172,28 @@ func TestCompareEvaluationsIncludesDeterministicMetricAndSuccessIntervals(t *tes
 	prompt4, prompt12 := 4, 12
 	completion6, completion18 := 6, 18
 	taskRepo := newFakeEvaluationTaskRepository()
-	taskRepo.register(comparisonTaskFixture(t, "task-a", 5, 0.5))
-	taskRepo.register(comparisonTaskFixture(t, "task-b", 5, 0.6))
-	questionRepo := &fakeEvaluationExportQuestionRepository{rows: []*types.EvaluationQuestionResultEntity{
-		{
-			TenantID: 7, TaskID: "task-a", SampleIndex: 0, Status: types.EvaluationQuestionStatusSuccess,
-			PerSampleMetrics: types.JSON(`{"retrieval_metrics":{"precision":0.25}}`), TotalMs: &total20,
-			TotalTokens: &tokens10, PromptTokens: &prompt4, CompletionTokens: &completion6,
-		},
-		{
-			TenantID: 7, TaskID: "task-a", SampleIndex: 1, Status: types.EvaluationQuestionStatusSuccess,
-			PerSampleMetrics: types.JSON(`{"retrieval_metrics":{"precision":0.75}}`), TotalMs: &total40,
-			TotalTokens: &tokens30, PromptTokens: &prompt12, CompletionTokens: &completion18,
-		},
-		{
-			TenantID: 7, TaskID: "task-a", SampleIndex: 2, Status: types.EvaluationQuestionStatusFailed,
-			PerSampleMetrics: types.JSON(`{}`),
-		},
-		{
-			TenantID: 7, TaskID: "task-b", SampleIndex: 0, Status: types.EvaluationQuestionStatusSuccess,
-			PerSampleMetrics: types.JSON(`{"retrieval_metrics":{"precision":0.6}}`),
-		},
-	}}
+	rows := []*types.EvaluationQuestionResultEntity{
+		comparisonQuestionFixture(t, "task-a", 0, types.EvaluationQuestionStatusSuccess, 0.25),
+		comparisonQuestionFixture(t, "task-a", 1, types.EvaluationQuestionStatusSuccess, 0.75),
+		comparisonQuestionFixture(t, "task-a", 2, types.EvaluationQuestionStatusFailed, 0),
+		comparisonQuestionFixture(t, "task-b", 0, types.EvaluationQuestionStatusSuccess, 0.6),
+	}
+	rows[0].TotalMs, rows[0].TotalTokens = &total20, &tokens10
+	rows[0].PromptTokens, rows[0].CompletionTokens, rows[0].UsageReported = &prompt4, &completion6, true
+	rows[1].TotalMs, rows[1].TotalTokens = &total40, &tokens30
+	rows[1].PromptTokens, rows[1].CompletionTokens, rows[1].UsageReported = &prompt12, &completion18, true
+	for _, row := range rows {
+		input, decodeErr := evaluationQuestionResultInputFromEntity(row)
+		require.NoError(t, decodeErr)
+		row.ResultHash = types.EvaluationQuestionResultHash(input)
+	}
+	taskA := comparisonTaskFixture(t, "task-a", 5, 0.5)
+	taskB := comparisonTaskFixture(t, "task-b", 5, 0.6)
+	sealComparisonTaskResults(t, taskA, rows[:3])
+	sealComparisonTaskResults(t, taskB, rows[3:])
+	taskRepo.register(taskA)
+	taskRepo.register(taskB)
+	questionRepo := &fakeEvaluationExportQuestionRepository{rows: rows}
 	svc := &EvaluationService{evaluationTaskRepository: taskRepo, questionResultRepository: questionRepo}
 
 	request := types.EvaluationComparisonRequest{TaskIDs: []string{"task-a", "task-b"}}
@@ -170,12 +245,46 @@ func TestCompareEvaluationsKeepsRelativeDeltaNullForZeroBaseline(t *testing.T) {
 	require.Equal(t, types.EvaluationComparisonReasonBaselineZero, precision.Values[1].RelativeReason)
 }
 
+func TestEvaluationAvailableNumericMetricsKeepsZeroAndExcludesMissing(t *testing.T) {
+	plan, err := types.DefaultEvaluationMetricPlan()
+	require.NoError(t, err)
+	zero := 0.0
+	result := types.MetricResult{Scores: make(map[string]types.EvaluationMetricScore, len(plan.Metrics))}
+	var precisionSpec, mapSpec types.EvaluationMetricSpecSnapshot
+	for _, spec := range plan.Metrics {
+		switch spec.Key {
+		case "retrieval.precision":
+			precisionSpec = spec
+			result.Scores[spec.InstanceID] = types.EvaluationMetricScore{
+				Value: &zero, Status: types.EvaluationMetricObservationValid,
+			}
+		case "retrieval.map":
+			mapSpec = spec
+			result.Scores[spec.InstanceID] = types.EvaluationMetricScore{
+				Status:    types.EvaluationMetricObservationMissing,
+				ErrorCode: "relevance_labels_missing",
+			}
+		}
+	}
+	raw, err := json.Marshal(result)
+	require.NoError(t, err)
+	metrics, err := evaluationAvailableNumericMetrics(types.JSON(raw), plan)
+	require.NoError(t, err)
+
+	require.Contains(t, metrics, "/retrieval_metrics/precision")
+	require.Zero(t, metrics["/retrieval_metrics/precision"])
+	require.Contains(t, metrics, types.EvaluationMetricScoreValuePointer(precisionSpec.InstanceID))
+	require.NotContains(t, metrics, "/retrieval_metrics/map")
+	require.NotContains(t, metrics, types.EvaluationMetricScoreValuePointer(mapSpec.InstanceID))
+}
+
 func TestCompareEvaluationsMarksFrozenMetricIdentityMismatch(t *testing.T) {
 	repo := newFakeEvaluationTaskRepository()
 	baseline := comparisonTaskFixture(t, "task-a", 5, 0.5)
 	other := comparisonTaskFixture(t, "task-b", 5, 0.6)
 	var experiment types.EvaluationExperimentSnapshot
 	require.NoError(t, json.Unmarshal(other.ExperimentSnapshot, &experiment))
+	precisionInstanceID := ""
 	for index := range experiment.MetricPlan.Metrics {
 		if experiment.MetricPlan.Metrics[index].Key == "retrieval.precision" {
 			experiment.MetricPlan.Metrics[index].Version = "2.0.0"
@@ -184,11 +293,20 @@ func TestCompareEvaluationsMarksFrozenMetricIdentityMismatch(t *testing.T) {
 				experiment.MetricPlan.Metrics[index].Version,
 				experiment.MetricPlan.Metrics[index].ConfigSHA256,
 			)
+			precisionInstanceID = experiment.MetricPlan.Metrics[index].InstanceID
 		}
 	}
 	encoded, err := experiment.CanonicalJSON()
 	require.NoError(t, err)
 	other.ExperimentSnapshot = encoded
+	otherPrecision := 0.6
+	metric := types.MetricResult{Scores: map[string]types.EvaluationMetricScore{
+		precisionInstanceID: {Value: &otherPrecision, Status: types.EvaluationMetricObservationValid},
+	}}
+	metric.RetrievalMetrics.Precision = otherPrecision
+	metricJSON, err := json.Marshal(metric)
+	require.NoError(t, err)
+	other.Metric = types.JSON(metricJSON)
 	repo.register(baseline)
 	repo.register(other)
 	svc := &EvaluationService{evaluationTaskRepository: repo}

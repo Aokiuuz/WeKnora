@@ -102,9 +102,7 @@ func evaluationDatasetVersionToQAPairs(
 
 	relevanceByQID := make(map[string][]types.EvaluationDatasetRelevance)
 	for _, relevance := range content.Relevance {
-		if relevance.Grade > 0 {
-			relevanceByQID[relevance.QID] = append(relevanceByQID[relevance.QID], relevance)
-		}
+		relevanceByQID[relevance.QID] = append(relevanceByQID[relevance.QID], relevance)
 	}
 	pairs := make([]*types.QAPair, len(content.Questions))
 	for index, question := range content.Questions {
@@ -113,11 +111,13 @@ func evaluationDatasetVersionToQAPairs(
 				index, interfaces.ErrEvaluationDatasetInvalid)
 		}
 		pair := &types.QAPair{
-			QID:        index,
-			DatasetQID: question.QID,
-			Question:   question.Question,
-			Answer:     question.Answer,
-			Corpus:     corpus,
+			QID:                      index,
+			DatasetQID:               question.QID,
+			Question:                 question.Question,
+			Answer:                   question.Answer,
+			Corpus:                   corpus,
+			PIDGrades:                make(map[int]int),
+			RetrievalLabelsAvailable: len(relevanceByQID[question.QID]) > 0,
 		}
 		for _, relevance := range relevanceByQID[question.QID] {
 			pid, ok := pidIndex[relevance.PID]
@@ -125,8 +125,11 @@ func evaluationDatasetVersionToQAPairs(
 				return nil, fmt.Errorf("question %s references unknown passage %s: %w",
 					question.QID, relevance.PID, interfaces.ErrEvaluationDatasetInvalid)
 			}
-			pair.PIDs = append(pair.PIDs, pid)
-			pair.Passages = append(pair.Passages, corpus[pid])
+			pair.PIDGrades[pid] = relevance.Grade
+			if relevance.Grade > 0 {
+				pair.PIDs = append(pair.PIDs, pid)
+				pair.Passages = append(pair.Passages, corpus[pid])
+			}
 		}
 		pairs[index] = pair
 	}

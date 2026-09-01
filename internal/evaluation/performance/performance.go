@@ -341,7 +341,8 @@ func runCase(
 				sort.Ints(retrieved[1:])
 				generated := dataset.Samples[index%len(dataset.Samples)].GeneratedText
 				metric, _, metricErr := plan.Compute(benchmarkCtx, &types.MetricInput{
-					RetrievalGT: [][]int{{index % size}}, RetrievalIDs: retrieved,
+					RetrievalGT: [][]int{{index % size}}, RetrievalGrades: map[int]int{index % size: 1},
+					RetrievalLabelsAvailable: true, RetrievalIDs: retrieved,
 					GeneratedTexts: generated, GeneratedGT: generated,
 				})
 				if metricErr != nil {

@@ -12,9 +12,10 @@ import (
 )
 
 type builtinMetric struct {
-	definition Definition
-	validate   func(json.RawMessage) error
-	calculator interfaces.Metrics
+	definition              Definition
+	validate                func(json.RawMessage) error
+	calculator              interfaces.Metrics
+	requiresRetrievalLabels bool
 }
 
 func (m builtinMetric) Definition() Definition { return m.definition }
@@ -34,14 +35,18 @@ func (m builtinMetric) Compute(
 	if err := ctx.Err(); err != nil {
 		return Observation{Status: types.EvaluationMetricObservationFailed, ErrorCode: "context_canceled"}, err
 	}
+	if m.requiresRetrievalLabels && (input == nil || !input.RetrievalLabelsAvailable) {
+		return Observation{Status: types.EvaluationMetricObservationMissing, ErrorCode: "relevance_labels_missing"}, nil
+	}
 	value := m.calculator.Compute(input)
 	return Observation{Value: &value, Status: types.EvaluationMetricObservationValid}, nil
 }
 
 type configuredMetric struct {
-	definition Definition
-	validate   func(json.RawMessage) error
-	build      func(json.RawMessage) (interfaces.Metrics, error)
+	definition              Definition
+	validate                func(json.RawMessage) error
+	build                   func(json.RawMessage) (interfaces.Metrics, error)
+	requiresRetrievalLabels bool
 }
 
 func (m configuredMetric) Definition() Definition { return m.definition }
@@ -55,6 +60,9 @@ func (m configuredMetric) Compute(
 ) (Observation, error) {
 	if err := ctx.Err(); err != nil {
 		return Observation{Status: types.EvaluationMetricObservationFailed, ErrorCode: "context_canceled"}, err
+	}
+	if m.requiresRetrievalLabels && (input == nil || !input.RetrievalLabelsAvailable) {
+		return Observation{Status: types.EvaluationMetricObservationMissing, ErrorCode: "relevance_labels_missing"}, nil
 	}
 	calculator, err := m.build(config)
 	if err != nil {
@@ -72,7 +80,8 @@ func NewDefaultRegistry() (*Registry, error) {
 	return NewDefaultRegistryWithPlugins()
 }
 
-// NewDefaultRegistryWithPlugins combines the twelve compatibility metrics with opt-in plugins.
+// NewDefaultRegistryWithPlugins combines the compatibility algorithms and the
+// current graded-relevance algorithms with opt-in plugins.
 func NewDefaultRegistryWithPlugins(plugins ...Metric) (*Registry, error) {
 	entries := []registeredMetric{
 		builtinEntry(
@@ -110,10 +119,41 @@ func NewDefaultRegistryWithPlugins(plugins ...Metric) (*Registry, error) {
 				}
 			},
 		),
+		configuredEntryWithLabelRequirement(
+			Definition{
+				Key: "retrieval.ndcg", Version: "2.0.0", Kind: KindRetrieval,
+				Description:   "Graded normalized discounted cumulative gain at a configured cutoff.",
+				DefaultConfig: json.RawMessage(`{"k":3}`),
+				ConfigSchema: json.RawMessage(
+					`{"type":"object","required":["k"],` +
+						`"properties":{"k":{"type":"integer","minimum":1}},"additionalProperties":false}`,
+				),
+			},
+			validatePositiveInt("k"),
+			func(config json.RawMessage) (interfaces.Metrics, error) {
+				value, err := intConfig(config, "k")
+				return metric.NewNDCGMetricV2(value), err
+			},
+			func(result *types.MetricResult, value float64, config json.RawMessage) {
+				cutoff, _ := intConfig(config, "k")
+				switch cutoff {
+				case 3:
+					result.RetrievalMetrics.NDCG3 = value
+				case 10:
+					result.RetrievalMetrics.NDCG10 = value
+				}
+			},
+		),
 		builtinEntry(
 			"retrieval.mrr", KindRetrieval, "Reciprocal rank of the first relevant passage.",
 			metric.NewMRRMetric(),
 			func(result *types.MetricResult, value float64) { result.RetrievalMetrics.MRR = value },
+		),
+		builtinVersionedEntry(
+			"retrieval.map", "2.0.0", KindRetrieval,
+			"Binary mean average precision normalized by the complete relevant set.",
+			metric.NewMAPMetricV2(), true,
+			func(result *types.MetricResult, value float64) { result.RetrievalMetrics.MAP = value },
 		),
 		builtinEntry(
 			"retrieval.map", KindRetrieval, "Mean average precision across relevance sets.",
@@ -199,15 +239,41 @@ func builtinEntry(
 	calculator interfaces.Metrics,
 	set func(*types.MetricResult, float64),
 ) registeredMetric {
+	return builtinVersionedEntry(key, "1.0.0", kind, description, calculator, false, set)
+}
+
+func builtinVersionedEntry(
+	key string,
+	version string,
+	kind Kind,
+	description string,
+	calculator interfaces.Metrics,
+	requiresRetrievalLabels bool,
+	set func(*types.MetricResult, float64),
+) registeredMetric {
 	return registeredMetric{
 		metric: builtinMetric{
 			definition: Definition{
-				Key: key, Version: "1.0.0", Kind: kind, Description: description,
+				Key: key, Version: version, Kind: kind, Description: description,
 				DefaultConfig: json.RawMessage(`{}`), ConfigSchema: emptyObjectSchema,
 			},
-			calculator: calculator,
+			calculator: calculator, requiresRetrievalLabels: requiresRetrievalLabels,
 		},
 		set: func(result *types.MetricResult, value float64, _ json.RawMessage) { set(result, value) },
+	}
+}
+
+func configuredEntryWithLabelRequirement(
+	definition Definition,
+	validate func(json.RawMessage) error,
+	build func(json.RawMessage) (interfaces.Metrics, error),
+	set func(*types.MetricResult, float64, json.RawMessage),
+) registeredMetric {
+	return registeredMetric{
+		metric: configuredMetric{
+			definition: definition, validate: validate, build: build, requiresRetrievalLabels: true,
+		},
+		set: set,
 	}
 }
 
@@ -228,10 +294,10 @@ func DefaultSpecs() []Spec {
 	return []Spec{
 		{Key: "retrieval.precision", Version: "1.0.0", Required: true},
 		{Key: "retrieval.recall", Version: "1.0.0", Required: true},
-		{Key: "retrieval.ndcg", Version: "1.0.0", Config: json.RawMessage(`{"k":3}`), Required: true},
-		{Key: "retrieval.ndcg", Version: "1.0.0", Config: json.RawMessage(`{"k":10}`), Required: true},
+		{Key: "retrieval.ndcg", Version: "2.0.0", Config: json.RawMessage(`{"k":3}`), Required: true},
+		{Key: "retrieval.ndcg", Version: "2.0.0", Config: json.RawMessage(`{"k":10}`), Required: true},
 		{Key: "retrieval.mrr", Version: "1.0.0", Required: true},
-		{Key: "retrieval.map", Version: "1.0.0", Required: true},
+		{Key: "retrieval.map", Version: "2.0.0", Required: true},
 		{Key: "generation.bleu", Version: "1.0.0", Config: json.RawMessage(`{"n":1}`), Required: true},
 		{Key: "generation.bleu", Version: "1.0.0", Config: json.RawMessage(`{"n":2}`), Required: true},
 		{Key: "generation.bleu", Version: "1.0.0", Config: json.RawMessage(`{"n":4}`), Required: true},

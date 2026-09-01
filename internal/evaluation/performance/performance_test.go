@@ -49,8 +49,11 @@ func TestJSONSchemaAndMarkdownDerivation(t *testing.T) {
 func BenchmarkMetricCalculation(b *testing.B) {
 	plan := benchmarkMetricPlan(b)
 	input := &types.MetricInput{
-		RetrievalGT: [][]int{{1}}, RetrievalIDs: []int{1, 2, 3},
-		GeneratedTexts: "answer", GeneratedGT: "answer",
+		RetrievalGT:              [][]int{{1}},
+		RetrievalGrades:          map[int]int{1: 1},
+		RetrievalLabelsAvailable: true,
+		RetrievalIDs:             []int{1, 2, 3},
+		GeneratedTexts:           "answer", GeneratedGT: "answer",
 	}
 	b.ResetTimer()
 	for index := 0; index < b.N; index++ {
@@ -66,8 +69,11 @@ func BenchmarkMetricAggregation(b *testing.B) {
 	rows := make([]*types.MetricResult, 100)
 	for index := range rows {
 		rows[index], _, _ = plan.Compute(context.Background(), &types.MetricInput{
-			RetrievalGT: [][]int{{1}}, RetrievalIDs: []int{1, 2, 3},
-			GeneratedTexts: "answer", GeneratedGT: "answer",
+			RetrievalGT:              [][]int{{1}},
+			RetrievalGrades:          map[int]int{1: 1},
+			RetrievalLabelsAvailable: true,
+			RetrievalIDs:             []int{1, 2, 3},
+			GeneratedTexts:           "answer", GeneratedGT: "answer",
 		})
 	}
 	b.ResetTimer()
@@ -113,8 +119,11 @@ func BenchmarkQuestionList(b *testing.B) {
 func BenchmarkComparison(b *testing.B) {
 	plan := benchmarkMetricPlan(b)
 	row, _, _ := plan.Compute(context.Background(), &types.MetricInput{
-		RetrievalGT: [][]int{{1}}, RetrievalIDs: []int{1, 2, 3},
-		GeneratedTexts: "answer", GeneratedGT: "answer",
+		RetrievalGT:              [][]int{{1}},
+		RetrievalGrades:          map[int]int{1: 1},
+		RetrievalLabelsAvailable: true,
+		RetrievalIDs:             []int{1, 2, 3},
+		GeneratedTexts:           "answer", GeneratedGT: "answer",
 	})
 	b.ResetTimer()
 	for index := 0; index < b.N; index++ {

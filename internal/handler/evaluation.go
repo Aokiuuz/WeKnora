@@ -28,7 +28,15 @@ func NewEvaluationHandler(evaluationService interfaces.EvaluationService) *Evalu
 	return &EvaluationHandler{evaluationService: evaluationService}
 }
 
-// ListEvaluationMetrics returns the versioned registry catalog.
+// ListEvaluationMetrics godoc
+// @Summary      列出版本化评测指标
+// @Description  返回指标 key、版本、类别、默认配置和配置 schema
+// @Tags         评估
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}  "指标目录"
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /evaluation/metrics [get]
 func (e *EvaluationHandler) ListEvaluationMetrics(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -170,6 +178,12 @@ func (e *EvaluationHandler) DeleteEvaluation(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Param        status     query     int     false  "数值状态筛选"
+// @Param        dataset_id query     string  false  "数据集 ID"
+// @Param        dataset_version_id query string false "数据集版本 ID"
+// @Param        model_id   query     string  false  "冻结实验中使用的模型 ID"
+// @Param        started_from query   string  false  "开始时间下界（RFC 3339，含）"
+// @Param        started_to query     string  false  "开始时间上界（RFC 3339，不含）"
+// @Param        label      query     []string false "标签交集筛选，可重复"
 // @Param        page_size  query     int     false  "每页条数（默认 20，最大 100）"
 // @Param        cursor     query     string  false  "上一页返回的 next_cursor"
 // @Success      200        {object}  map[string]interface{}  "任务页"
@@ -271,6 +285,7 @@ type ReplaceEvaluationTaskLabelsRequest struct {
 // @Failure      400      {object} errors.AppError                  "标签非法"
 // @Failure      404      {object} errors.AppError                  "任务不存在"
 // @Security     Bearer
+// @Security     ApiKeyAuth
 // @Router       /evaluation/tasks/{task_id}/labels [put]
 func (e *EvaluationHandler) ReplaceEvaluationTaskLabels(c *gin.Context) {
 	taskID := strings.TrimSpace(c.Param("task_id"))

@@ -278,12 +278,21 @@ func computeSamples(
 		questions[question.QID] = struct{ answer string }{answer: question.Answer}
 	}
 	relevance := make(map[string][]int)
+	grades := make(map[string]map[int]int)
+	labelsAvailable := make(map[string]bool)
 	for _, edge := range dataset.Relevance {
 		pid, err := strconv.Atoi(edge.PID)
 		if err != nil {
 			return nil, fmt.Errorf("golden pid %q is not numeric", edge.PID)
 		}
-		relevance[edge.QID] = append(relevance[edge.QID], pid)
+		labelsAvailable[edge.QID] = true
+		if grades[edge.QID] == nil {
+			grades[edge.QID] = make(map[int]int)
+		}
+		grades[edge.QID][pid] = edge.Grade
+		if edge.Grade > 0 {
+			relevance[edge.QID] = append(relevance[edge.QID], pid)
+		}
 	}
 	results := make([]*types.MetricResult, 0, len(dataset.Samples))
 	for _, sample := range dataset.Samples {
@@ -308,7 +317,8 @@ func computeSamples(
 			retrieved = append(retrieved, pid)
 		}
 		computed, _, err := plan.Compute(ctx, &types.MetricInput{
-			RetrievalGT: [][]int{relevance[sample.QID]}, RetrievalIDs: retrieved,
+			RetrievalGT: [][]int{relevance[sample.QID]}, RetrievalGrades: grades[sample.QID],
+			RetrievalLabelsAvailable: labelsAvailable[sample.QID], RetrievalIDs: retrieved,
 			GeneratedTexts: sample.GeneratedText, GeneratedGT: question.answer,
 		})
 		if err != nil {

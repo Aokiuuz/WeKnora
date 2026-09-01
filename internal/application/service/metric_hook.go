@@ -169,10 +169,12 @@ func (h *HookMetric) recordFinishWithContext(ctx context.Context, index int) err
 
 	// Prepare metric input data
 	metricInput := &types.MetricInput{
-		RetrievalGT:    [][]int{qaPair.PIDs},
-		RetrievalIDs:   retrievalIDs,
-		GeneratedTexts: generatedTexts,
-		GeneratedGT:    qaPair.Answer,
+		RetrievalGT:              [][]int{qaPair.PIDs},
+		RetrievalGrades:          qaPair.PIDGrades,
+		RetrievalLabelsAvailable: qaPair.RetrievalLabelsAvailable || len(qaPair.PIDs) > 0,
+		RetrievalIDs:             retrievalIDs,
+		GeneratedTexts:           generatedTexts,
+		GeneratedGT:              qaPair.Answer,
 	}
 
 	// Thread-safe append of metrics

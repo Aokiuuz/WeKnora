@@ -802,6 +802,7 @@ func (e *EvaluationService) evalDataset(
 	taskDeadlineStoppedRun *bool,
 	runtimeCollector *evaluationRuntimeCollector,
 ) (runErr error) {
+	ctx = types.WithBackgroundTask(ctx)
 	ctx = modelobs.WithPurpose(ctx, modelobs.PurposeEvaluation, true)
 	ctx = modelobs.WithEvaluationTask(ctx, detail.Task.ID)
 	defer func() {

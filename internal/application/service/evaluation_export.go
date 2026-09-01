@@ -102,6 +102,19 @@ func (e *EvaluationService) prepareEvaluationExport(
 	if err != nil {
 		return nil, err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if entity.Status == types.EvaluationStatueSuccess {
+		if _, err := e.verifySuccessfulEvaluationResults(ctx, tenantID, entity, experiment); err != nil {
+			return nil, fmt.Errorf(
+				"%w: task %s result integrity: %v",
+				types.ErrEvaluationExportTaskConflict,
+				taskID,
+				err,
+			)
+		}
+	}
 	exportContext := evaluationExportContext{
 		ExportedAt: time.Now().UTC(),
 		Task:       evaluationExportTaskFromEntity(entity, provenanceComplete),
@@ -293,7 +306,7 @@ var evaluationExportCSVHeader = []string{
 	"search_results_json", "rerank_results_json", "generation_pids_json", "generated_text_json",
 	"per_sample_metrics_json", "metric_observations_json", "question_error_code", "question_status",
 	"result_hash", "retrieval_ms", "rerank_ms", "generation_ms", "total_ms", "prompt_tokens", "completion_tokens",
-	"total_tokens",
+	"total_tokens", "usage_reported",
 }
 
 func (e *EvaluationService) writeEvaluationCSVExport(
@@ -393,6 +406,7 @@ func evaluationExportCSVQuestionValues(
 		"rerank_ms":    int64PointerValue(row.RerankMs), "generation_ms": int64PointerValue(row.GenerationMs),
 		"total_ms": int64PointerValue(row.TotalMs), "prompt_tokens": intPointerValue(row.PromptTokens),
 		"completion_tokens": intPointerValue(row.CompletionTokens), "total_tokens": intPointerValue(row.TotalTokens),
+		"usage_reported": strconv.FormatBool(row.UsageReported),
 	}
 	jsonValues := map[string]any{
 		"qid_json": row.QID, "question_json": row.Question, "reference_answer_json": row.ReferenceAnswer,
@@ -484,6 +498,7 @@ func evaluationExportQuestionFromEntity(row *types.EvaluationQuestionResultEntit
 		RetrievalMs: row.RetrievalMs, RerankMs: row.RerankMs,
 		GenerationMs: row.GenerationMs, TotalMs: row.TotalMs, PromptTokens: row.PromptTokens,
 		CompletionTokens: row.CompletionTokens, TotalTokens: row.TotalTokens,
+		UsageReported: row.UsageReported,
 	}
 }
 

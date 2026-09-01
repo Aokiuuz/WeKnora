@@ -48,7 +48,7 @@ func TestEvaluationComparisonMetricIdentityForFixedPathUsesFrozenPlan(t *testing
 	identity, ok := EvaluationComparisonMetricIdentityForPath(experiment, "/retrieval_metrics/ndcg3")
 	require.True(t, ok)
 	require.Equal(t, "retrieval.ndcg", identity.Key)
-	require.Equal(t, "1.0.0", identity.Version)
+	require.Equal(t, "2.0.0", identity.Version)
 	require.Equal(t,
 		CanonicalEvaluationMetricConfigSHA256(json.RawMessage(`{"k":3}`)),
 		identity.ConfigSHA256,

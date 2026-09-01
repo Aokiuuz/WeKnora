@@ -26,7 +26,17 @@ func NewEvaluationQuestionHandler(
 	return &EvaluationQuestionHandler{questionResults: questionResults, humanRatings: humanRatings}
 }
 
-// ListHumanRatings returns newest-first immutable revisions for one question.
+// ListHumanRatings godoc
+// @Summary      列出逐题人工评分修订
+// @Description  按修订号倒序返回一个评测题目的不可变人工评分记录
+// @Tags         评估
+// @Produce      json
+// @Param        task_id       path      string  true  "任务 ID"
+// @Param        sample_index  path      int     true  "样本序号"
+// @Success      200           {object}  map[string]interface{}  "人工评分修订"
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /evaluation/tasks/{task_id}/questions/{sample_index}/ratings [get]
 func (h *EvaluationQuestionHandler) ListHumanRatings(c *gin.Context) {
 	tenantID, taskID, sampleIndex, ok := evaluationRatingIdentity(c)
 	if !ok {
@@ -52,7 +62,19 @@ type appendHumanRatingRequest struct {
 	Comment        string         `json:"comment" binding:"max=4000"`
 }
 
-// AppendHumanRating creates a new revision while retaining every prior judgment.
+// AppendHumanRating godoc
+// @Summary      追加逐题人工评分修订
+// @Description  追加不可变评分记录，并关联同一 rubric 的上一修订
+// @Tags         评估
+// @Accept       json
+// @Produce      json
+// @Param        task_id       path      string                  true  "任务 ID"
+// @Param        sample_index  path      int                     true  "样本序号"
+// @Param        request       body      map[string]interface{}  true  "评分规则、版本、快照、分数和备注"
+// @Success      201           {object}  map[string]interface{}  "新增评分修订"
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /evaluation/tasks/{task_id}/questions/{sample_index}/ratings [post]
 func (h *EvaluationQuestionHandler) AppendHumanRating(c *gin.Context) {
 	tenantID, taskID, sampleIndex, ok := evaluationRatingIdentity(c)
 	if !ok {
@@ -111,6 +133,7 @@ func evaluationRatingIdentity(c *gin.Context) (uint64, string, int, bool) {
 // @Param        cursor     query     string  false  "keyset 游标"
 // @Success      200        {object}  map[string]interface{}  "逐题分页"
 // @Security     Bearer
+// @Security     ApiKeyAuth
 // @Router       /evaluation/tasks/{task_id}/questions [get]
 func (h *EvaluationQuestionHandler) ListQuestionResults(c *gin.Context) {
 	ctx := c.Request.Context()

@@ -97,8 +97,10 @@ func (e *EvaluationTask) String() string {
 
 // MetricInput contains input data for metric calculation
 type MetricInput struct {
-	RetrievalGT  [][]int // Ground truth for retrieval
-	RetrievalIDs []int   // Retrieved IDs
+	RetrievalGT              [][]int     // Binary ground truth for retrieval
+	RetrievalGrades          map[int]int // Graded relevance keyed by passage ID
+	RetrievalLabelsAvailable bool        // Distinguishes an empty labeled set from missing labels
+	RetrievalIDs             []int       // Retrieved IDs
 
 	GeneratedTexts string // Generated text for evaluation
 	GeneratedGT    string // Ground truth text for comparison

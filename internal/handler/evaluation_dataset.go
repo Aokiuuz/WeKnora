@@ -47,6 +47,7 @@ type CreateEvaluationDatasetRequest struct {
 // @Param        request  body      CreateEvaluationDatasetRequest  true  "数据集"
 // @Success      200      {object}  map[string]interface{}           "数据集"
 // @Security     Bearer
+// @Security     ApiKeyAuth
 // @Router       /evaluation/datasets [post]
 func (h *EvaluationDatasetHandler) CreateDataset(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -79,6 +80,7 @@ func (h *EvaluationDatasetHandler) CreateDataset(c *gin.Context) {
 // @Param        request  body      types.EvaluationDatasetVersionInput true  "版本内容"
 // @Success      200      {object}  map[string]interface{}               "版本"
 // @Security     Bearer
+// @Security     ApiKeyAuth
 // @Router       /evaluation/datasets/{id}/versions [post]
 func (h *EvaluationDatasetHandler) CreateVersion(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -124,6 +126,7 @@ func (h *EvaluationDatasetHandler) CreateVersion(c *gin.Context) {
 // @Produce      json
 // @Success      200  {object}  map[string]interface{}  "数据集列表"
 // @Security     Bearer
+// @Security     ApiKeyAuth
 // @Router       /evaluation/datasets [get]
 func (h *EvaluationDatasetHandler) ListDatasets(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -147,6 +150,7 @@ func (h *EvaluationDatasetHandler) ListDatasets(c *gin.Context) {
 // @Param        id   path      string  true  "数据集 ID"
 // @Success      200  {object}  map[string]interface{}  "版本列表"
 // @Security     Bearer
+// @Security     ApiKeyAuth
 // @Router       /evaluation/datasets/{id}/versions [get]
 func (h *EvaluationDatasetHandler) ListVersions(c *gin.Context) {
 	ctx := c.Request.Context()

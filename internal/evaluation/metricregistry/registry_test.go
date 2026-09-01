@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Tencent/WeKnora/internal/types"
@@ -100,14 +101,37 @@ func TestDefaultRegistryResolvesTwelveMetricsAndFillsCompatibilityFields(t *test
 	require.Len(t, resolved.Snapshot.Metrics, 12)
 
 	result, observations, err := resolved.Compute(context.Background(), &types.MetricInput{
-		RetrievalGT:    [][]int{{3}},
-		RetrievalIDs:   []int{9, 3},
-		GeneratedTexts: "known answer",
-		GeneratedGT:    "known answer",
+		RetrievalGT:              [][]int{{3}},
+		RetrievalGrades:          map[int]int{3: 2},
+		RetrievalLabelsAvailable: true,
+		RetrievalIDs:             []int{9, 3},
+		GeneratedTexts:           "known answer",
+		GeneratedGT:              "known answer",
 	})
 	require.NoError(t, err)
 	require.Len(t, observations, 12)
 	require.Len(t, result.Scores, 12)
 	require.Equal(t, 0.5, result.RetrievalMetrics.Precision)
 	require.Equal(t, 1.0, result.RetrievalMetrics.Recall)
+}
+
+func TestDefaultRetrievalMetricsMarkMissingLabels(t *testing.T) {
+	registry, err := NewDefaultRegistry()
+	require.NoError(t, err)
+	resolved, err := registry.Resolve(DefaultSpecs())
+	require.NoError(t, err)
+
+	result, observations, err := resolved.Compute(context.Background(), &types.MetricInput{
+		RetrievalIDs: []int{1, 2},
+	})
+	require.NoError(t, err)
+	for _, observation := range observations {
+		if strings.HasPrefix(observation.InstanceID, "retrieval.map@2.0.0") ||
+			strings.HasPrefix(observation.InstanceID, "retrieval.ndcg@2.0.0") {
+			require.Equal(t, types.EvaluationMetricObservationMissing, observation.Status)
+			require.Nil(t, observation.Value)
+			require.Equal(t, "relevance_labels_missing", observation.ErrorCode)
+		}
+	}
+	require.NotNil(t, result)
 }

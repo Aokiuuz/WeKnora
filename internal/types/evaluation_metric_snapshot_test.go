@@ -155,3 +155,38 @@ func TestEvaluationMetricObservationSnapshotStates(t *testing.T) {
 		t.Fatalf("skipped observations must carry null value, got %s", encoded)
 	}
 }
+
+func TestEvaluationMetricObservationsPreserveCurrentMissingScores(t *testing.T) {
+	plan, err := DefaultEvaluationMetricPlan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := &MetricResult{
+		RetrievalMetrics: RetrievalMetrics{MAP: 0.75},
+		Scores:           make(map[string]EvaluationMetricScore),
+	}
+	var mapInstanceID string
+	for _, spec := range plan.Metrics {
+		if spec.Key == "retrieval.map" {
+			mapInstanceID = spec.InstanceID
+			result.Scores[spec.InstanceID] = EvaluationMetricScore{
+				Status: EvaluationMetricObservationMissing, ErrorCode: "relevance_labels_missing",
+			}
+		}
+	}
+	if mapInstanceID == "" {
+		t.Fatal("default plan has no retrieval.map instance")
+	}
+	observations := EvaluationMetricObservationsFromResult(plan, result)
+	for _, observation := range observations {
+		if observation.InstanceID != mapInstanceID {
+			continue
+		}
+		if observation.Status != EvaluationMetricObservationMissing || observation.Value != nil ||
+			observation.ErrorCode != "relevance_labels_missing" {
+			t.Fatalf("missing registry score was not preserved: %+v", observation)
+		}
+		return
+	}
+	t.Fatal("retrieval.map observation not found")
+}
