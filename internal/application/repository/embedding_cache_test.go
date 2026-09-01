@@ -57,7 +57,7 @@ func TestEmbeddingCacheRepositoryPersistsAcrossSQLiteReopen(t *testing.T) {
 	first := NewEmbeddingCacheRepository(firstDB)
 	require.NoError(t, first.PutEmbeddingCache(context.Background(), []*types.EmbeddingCacheEntry{{
 		TenantID: 7, ModelID: "model-1", ModelFingerprint: "fingerprint", RequestOptionsSHA256: "options",
-		TextSHA256: "text", Embedding: []byte{1, 2, 3, 4}, Dimension: 1, ChecksumSHA256: "checksum",
+		TextSHA256: "text", Embedding: []byte{1, 2, 3, 4}, Dimension: 1,
 		ExpiresAt: now.Add(time.Hour), CreatedAt: now, UpdatedAt: now, AccessedAt: now,
 	}}))
 	sqlDB, err := firstDB.DB()

@@ -56,7 +56,7 @@ var versionedSQLiteColumns = map[string][]string{
 	"evaluation_question_results": {"usage_reported"},
 }
 
-const expectedSQLiteMigrationVersion = 25
+const expectedSQLiteMigrationVersion = 26
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -91,7 +91,7 @@ func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	assertSQLiteEvaluationQuestionResultsSchema(t, db)
 	assertSQLiteEvaluationTaskLabelsSchema(t, db)
 	assertSQLiteModelObservabilitySchema(t, db)
-	assertSQLiteEmbeddingCacheSchema(t, db)
+	assertSQLiteEmbeddingCacheSchema(t, db, false)
 	assertSQLiteModelStatisticsSchema(t, db)
 	assertSQLiteHumanRatingsSchema(t, db)
 	require.False(t, sqliteColumnExists(t, db, "knowledges", "tag_id"),
@@ -112,18 +112,20 @@ func assertSQLiteModelObservabilitySchema(t *testing.T, db *sql.DB) {
 	}
 }
 
-func assertSQLiteEmbeddingCacheSchema(t *testing.T, db *sql.DB) {
+func assertSQLiteEmbeddingCacheSchema(t *testing.T, db *sql.DB, checksumExpected bool) {
 	t.Helper()
 	require.True(t, sqliteTableExists(t, db, "embedding_cache_entries"))
 	for _, column := range []string{
 		"tenant_id", "model_id", "model_fingerprint", "request_options_sha256", "text_sha256",
-		"embedding", "dimension", "checksum_sha256", "expires_at", "accessed_at",
+		"embedding", "dimension", "expires_at", "accessed_at",
 	} {
 		require.Truef(t, sqliteColumnExists(t, db, "embedding_cache_entries", column),
 			"SQLite embedding_cache_entries must contain column %s", column)
 	}
 	require.False(t, sqliteColumnExists(t, db, "embedding_cache_entries", "text"),
 		"embedding cache schema must not persist source text")
+	require.Equal(t, checksumExpected,
+		sqliteColumnExists(t, db, "embedding_cache_entries", "checksum_sha256"))
 }
 
 func assertSQLiteModelStatisticsSchema(t *testing.T, db *sql.DB) {
@@ -212,7 +214,7 @@ func TestSQLiteMigrationsUpgradeV4PreservesData(t *testing.T) {
 	).Scan(&relationCount))
 	require.Equal(t, 1, relationCount)
 	assertSQLiteEvaluationTaskSchema(t, db)
-	assertSQLiteEmbeddingCacheSchema(t, db)
+	assertSQLiteEmbeddingCacheSchema(t, db, false)
 	assertSQLiteModelStatisticsSchema(t, db)
 	assertSQLiteHumanRatingsSchema(t, db)
 	require.False(t, sqliteColumnExists(t, db, "knowledges", "tag_id"))

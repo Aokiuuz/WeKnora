@@ -98,6 +98,31 @@ func TestEmbeddingCacheRejectsNonFiniteProviderVector(t *testing.T) {
 	require.ErrorContains(t, err, "non-finite")
 }
 
+func TestEmbeddingCacheRefetchesMalformedStoredVector(t *testing.T) {
+	model := &types.Model{ID: "embedding-1", TenantID: 7}
+	provider := &countingEmbedder{}
+	prefix := CachePrefix{
+		TenantID: 7, ModelID: model.ID,
+		ModelFingerprint:     EmbeddingModelFingerprint(model),
+		RequestOptionsSHA256: requestOptionsSHA256(provider.GetDimensions()),
+	}
+	textHash := sha256Hex([]byte("alpha"))
+	store := &cacheStore{entries: map[string]*types.EmbeddingCacheEntry{
+		cacheStoreKey(prefix, textHash): {
+			TenantID: 7, ModelID: model.ID, ModelFingerprint: prefix.ModelFingerprint,
+			RequestOptionsSHA256: prefix.RequestOptionsSHA256, TextSHA256: textHash,
+			Embedding: []byte{1, 2, 3, 4}, Dimension: provider.GetDimensions(),
+		},
+	}}
+	wrapped := NewCoordinator(store).Wrap(model, provider)
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+
+	result, err := wrapped.BatchEmbed(ctx, []string{"alpha"})
+	require.NoError(t, err)
+	require.Equal(t, [][]float32{{5, 1}}, result)
+	require.Len(t, provider.batchInputs, 1)
+}
+
 type invalidEmbedder struct{ countingEmbedder }
 
 func (*invalidEmbedder) BatchEmbed(context.Context, []string) ([][]float32, error) {

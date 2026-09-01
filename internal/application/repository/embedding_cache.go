@@ -63,7 +63,7 @@ func (r *embeddingCacheRepository) PutEmbeddingCache(ctx context.Context, entrie
 	for _, entry := range entries {
 		if entry == nil || entry.TenantID == 0 || entry.ModelID == "" || entry.ModelFingerprint == "" ||
 			entry.RequestOptionsSHA256 == "" || entry.TextSHA256 == "" || len(entry.Embedding) == 0 ||
-			entry.Dimension <= 0 || entry.ChecksumSHA256 == "" || entry.ExpiresAt.IsZero() {
+			entry.Dimension <= 0 || entry.ExpiresAt.IsZero() {
 			return errors.New("put embedding cache: complete validated entry is required")
 		}
 	}
@@ -76,7 +76,7 @@ func (r *embeddingCacheRepository) PutEmbeddingCache(ctx context.Context, entrie
 			{Name: "text_sha256"},
 		},
 		DoUpdates: clause.AssignmentColumns([]string{
-			"embedding", "dimension", "checksum_sha256", "expires_at", "accessed_at", "updated_at",
+			"embedding", "dimension", "expires_at", "accessed_at", "updated_at",
 		}),
 	}).Create(&entries).Error; err != nil {
 		return fmt.Errorf("put embedding cache: %w", err)

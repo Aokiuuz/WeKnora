@@ -368,7 +368,7 @@ func buildCacheEntries(
 		entries[i] = &types.EmbeddingCacheEntry{
 			TenantID: prefix.TenantID, ModelID: prefix.ModelID, ModelFingerprint: prefix.ModelFingerprint,
 			RequestOptionsSHA256: prefix.RequestOptionsSHA256, TextSHA256: hashes[i], Embedding: encoded,
-			Dimension: len(vector), ChecksumSHA256: sha256Hex(encoded), ExpiresAt: now.Add(ttl),
+			Dimension: len(vector), ExpiresAt: now.Add(ttl),
 			AccessedAt: now, CreatedAt: now, UpdatedAt: now,
 		}
 	}
@@ -400,8 +400,7 @@ func encodeVector(vector []float32) []byte {
 
 func decodeCacheVector(entry *types.EmbeddingCacheEntry, expectedDimension int) ([]float32, error) {
 	if entry == nil || entry.Dimension <= 0 || len(entry.Embedding) != entry.Dimension*4 ||
-		(expectedDimension > 0 && entry.Dimension != expectedDimension) ||
-		sha256Hex(entry.Embedding) != entry.ChecksumSHA256 {
+		(expectedDimension > 0 && entry.Dimension != expectedDimension) {
 		return nil, errors.New("embedding cache: invalid cached vector")
 	}
 	vector := make([]float32, entry.Dimension)

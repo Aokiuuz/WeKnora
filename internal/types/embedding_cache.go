@@ -11,7 +11,6 @@ type EmbeddingCacheEntry struct {
 	TextSHA256           string    `json:"text_sha256" gorm:"type:char(64);primaryKey"`
 	Embedding            []byte    `json:"-" gorm:"type:bytea;not null"`
 	Dimension            int       `json:"dimension" gorm:"not null"`
-	ChecksumSHA256       string    `json:"checksum_sha256" gorm:"type:char(64);not null"`
 	ExpiresAt            time.Time `json:"expires_at" gorm:"not null;index"`
 	AccessedAt           time.Time `json:"accessed_at" gorm:"not null;index"`
 	CreatedAt            time.Time `json:"created_at" gorm:"not null"`
