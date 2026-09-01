@@ -69,7 +69,7 @@ docker compose ps                 # 等所有服务变成 healthy/running
 若已有部署并下载了更新的 release：
 
 ```bash
-# 在 .env 中将 WEKNORA_VERSION 设为目标版本（如 0.7.0），或保持 latest
+# 在 .env 中将 WEKNORA_VERSION 设为目标版本（如 v0.7.0），或保持 latest
 docker compose pull
 docker compose up -d
 ```

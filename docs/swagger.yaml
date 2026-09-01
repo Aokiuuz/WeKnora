@@ -4947,13 +4947,38 @@ definitions:
       regenerate:
         type: boolean
     type: object
+  internal_handler.CompareEvaluationTasksRequest:
+    type: object
+    properties:
+      baseline_task_id:
+        type: string
+      task_ids:
+        type: array
+        items:
+          type: string
+  internal_handler.CreateEvaluationDatasetRequest:
+    type: object
+    required:
+      - name
+    properties:
+      description:
+        type: string
+      name:
+        type: string
   internal_handler.EvaluationRequest:
+    type: object
     properties:
       chat_id:
         description: ID of chat model to use
         type: string
+      configuration:
+        description: Configuration optionally overrides resolved retrieval/rerank/generation parameters; every override enters the experiment snapshot.
+        $ref: "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationConfigurationOverrides"
       dataset_id:
         description: ID of dataset to evaluate
+        type: string
+      dataset_version_id:
+        description: DatasetVersionID optionally pins one immutable dataset version.
         type: string
       knowledge_base_id:
         description: ID of knowledge base to use
@@ -4961,7 +4986,95 @@ definitions:
       rerank_id:
         description: ID of rerank model to use
         type: string
+      seed:
+        description: Seed distinguishes "not provided" (nil) from an explicit seed=0.
+        type: integer
+  internal_handler.ReplaceEvaluationTaskLabelsRequest:
     type: object
+    properties:
+      labels:
+        type: array
+        items:
+          type: string
+  github_com_Tencent_WeKnora_internal_types.EvaluationConfigurationOverrides:
+    type: object
+    properties:
+      generation:
+        $ref: "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationGenerationOverrides"
+      rerank:
+        $ref: "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationRerankSnapshot"
+      retrieval:
+        $ref: "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationRetrievalSnapshot"
+  github_com_Tencent_WeKnora_internal_types.EvaluationDatasetPassageInput:
+    type: object
+    properties:
+      content:
+        type: string
+      metadata:
+        type: object
+        additionalProperties: true
+      pid:
+        type: string
+  github_com_Tencent_WeKnora_internal_types.EvaluationDatasetQuestionInput:
+    type: object
+    properties:
+      answer:
+        type: string
+      qid:
+        type: string
+      question:
+        type: string
+  github_com_Tencent_WeKnora_internal_types.EvaluationDatasetRelevanceInput:
+    type: object
+    properties:
+      grade:
+        type: integer
+      pid:
+        type: string
+      qid:
+        type: string
+  github_com_Tencent_WeKnora_internal_types.EvaluationDatasetVersionInput:
+    type: object
+    properties:
+      passages:
+        type: array
+        items:
+          $ref: "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationDatasetPassageInput"
+      questions:
+        type: array
+        items:
+          $ref: "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationDatasetQuestionInput"
+      relevance:
+        type: array
+        items:
+          $ref: "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationDatasetRelevanceInput"
+  github_com_Tencent_WeKnora_internal_types.EvaluationGenerationOverrides:
+    type: object
+    properties:
+      max_tokens:
+        type: integer
+      temperature:
+        type: number
+      top_k:
+        type: integer
+      top_p:
+        type: number
+  github_com_Tencent_WeKnora_internal_types.EvaluationRerankSnapshot:
+    type: object
+    properties:
+      rerank_threshold:
+        type: number
+      rerank_top_k:
+        type: integer
+  github_com_Tencent_WeKnora_internal_types.EvaluationRetrievalSnapshot:
+    type: object
+    properties:
+      embedding_top_k:
+        type: integer
+      keyword_threshold:
+        type: number
+      vector_threshold:
+        type: number
   internal_handler.FabriTextRequest:
     properties:
       model_id:
@@ -7898,62 +8011,518 @@ paths:
       - DataSource
   /evaluation/:
     get:
-      consumes:
-      - application/json
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
       description: 根据任务ID获取评估结果
-      parameters:
-      - description: 评估任务ID
-        in: query
-        name: task_id
-        required: true
-        type: string
+      consumes:
+        - application/json
       produces:
-      - application/json
+        - application/json
+      tags:
+        - 评估
+      summary: 获取评估结果
+      parameters:
+        - type: string
+          description: 评估任务ID
+          name: task_id
+          in: query
+          required: true
       responses:
         "200":
           description: 评估结果
           schema:
-            additionalProperties: true
             type: object
+            additionalProperties: true
         "400":
           description: 请求参数错误
           schema:
-            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
-      security:
-      - Bearer: []
-      - ApiKeyAuth: []
-      summary: 获取评估结果
-      tags:
-      - 评估
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError"
     post:
-      consumes:
-      - application/json
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
       description: 对知识库进行评估测试
-      parameters:
-      - description: 评估请求参数
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_handler.EvaluationRequest'
+      consumes:
+        - application/json
       produces:
-      - application/json
+        - application/json
+      tags:
+        - 评估
+      summary: 执行评估
+      parameters:
+        - description: 评估请求参数
+          name: request
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/internal_handler.EvaluationRequest"
       responses:
         "200":
           description: 评估任务
           schema:
-            additionalProperties: true
             type: object
+            additionalProperties: true
         "400":
           description: 请求参数错误
           schema:
-            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError"
+  /evaluation/{task_id}:
+    delete:
       security:
-      - Bearer: []
-      - ApiKeyAuth: []
-      summary: 执行评估
+        - Bearer: []
+      description: 软删除终态评估任务；缺失、跨租户与已删除任务返回 204，活动任务返回 409
+      consumes:
+        - application/json
+      produces:
+        - application/json
       tags:
-      - 评估
+        - 评估
+      summary: 删除已结束的评估任务
+      parameters:
+        - type: string
+          description: 评估任务ID
+          name: task_id
+          in: path
+          required: true
+      responses:
+        "204":
+          description: 删除成功或任务本就不存在
+        "409":
+          description: 任务仍在活动状态
+          schema:
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError"
+  /evaluation/{task_id}/cancel:
+    post:
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
+      description: 持久化取消请求；运行实例处理取消并完成资源清理后任务进入 Canceled
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      tags:
+        - 评估
+      summary: 取消评估任务
+      parameters:
+        - type: string
+          description: 评估任务ID
+          name: task_id
+          in: path
+          required: true
+      responses:
+        "200":
+          description: 当前任务状态
+          schema:
+            type: object
+            additionalProperties: true
+        "404":
+          description: 任务不存在或属于其他租户
+          schema:
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError"
+  /evaluation/comparisons:
+    post:
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
+      description: 返回成功运行的冻结参数差异、指标绝对值和相对基线增减值
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      tags:
+        - 评估
+      summary: 对比评估运行
+      parameters:
+        - description: 运行与基线
+          name: request
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/internal_handler.CompareEvaluationTasksRequest"
+      responses:
+        "200":
+          description: 对比结果
+          schema:
+            type: object
+            additionalProperties: true
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError"
+        "404":
+          description: 运行不存在
+          schema:
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError"
+        "409":
+          description: 运行不可对比
+          schema:
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError"
+  /evaluation/datasets:
+    get:
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
+      description: 列出当前租户可见的评测数据集
+      produces:
+        - application/json
+      tags:
+        - 评估
+      summary: 列出评测数据集
+      responses:
+        "200":
+          description: 数据集列表
+          schema:
+            type: object
+            additionalProperties: true
+    post:
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
+      description: 创建租户评测数据集身份
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      tags:
+        - 评估
+      summary: 创建评测数据集
+      parameters:
+        - description: 数据集
+          name: request
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/internal_handler.CreateEvaluationDatasetRequest"
+      responses:
+        "200":
+          description: 数据集
+          schema:
+            type: object
+            additionalProperties: true
+  /evaluation/datasets/{id}/versions:
+    get:
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
+      description: 列出一个可见数据集的全部不可变版本
+      produces:
+        - application/json
+      tags:
+        - 评估
+      summary: 列出评测数据集版本
+      parameters:
+        - type: string
+          description: 数据集 ID
+          name: id
+          in: path
+          required: true
+      responses:
+        "200":
+          description: 版本列表
+          schema:
+            type: object
+            additionalProperties: true
+    post:
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
+      description: 以结构化输入创建不可变数据集版本
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      tags:
+        - 评估
+      summary: 创建评测数据集版本
+      parameters:
+        - type: string
+          description: 数据集 ID
+          name: id
+          in: path
+          required: true
+        - description: 版本内容
+          name: request
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationDatasetVersionInput"
+      responses:
+        "200":
+          description: 版本
+          schema:
+            type: object
+            additionalProperties: true
+  /evaluation/metrics:
+    get:
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
+      description: 返回指标 key、版本、类别、默认配置和配置 schema
+      produces:
+        - application/json
+      tags:
+        - 评估
+      summary: 列出版本化评测指标
+      responses:
+        "200":
+          description: 指标目录
+          schema:
+            type: object
+            additionalProperties: true
+  /evaluation/tasks:
+    get:
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
+      description: 按 (start_time DESC, id DESC) keyset 分页列出当前租户的评估任务
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      tags:
+        - 评估
+      summary: 列出评估任务
+      parameters:
+        - type: integer
+          description: 数值状态筛选
+          name: status
+          in: query
+          required: false
+        - type: string
+          description: 数据集 ID
+          name: dataset_id
+          in: query
+          required: false
+        - type: string
+          description: 数据集版本 ID
+          name: dataset_version_id
+          in: query
+          required: false
+        - type: string
+          description: 冻结实验中使用的模型 ID
+          name: model_id
+          in: query
+          required: false
+        - type: string
+          description: 开始时间下界（RFC 3339，含）
+          name: started_from
+          in: query
+          required: false
+        - type: string
+          description: 开始时间上界（RFC 3339，不含）
+          name: started_to
+          in: query
+          required: false
+        - type: array
+          description: 标签交集筛选，可重复
+          name: label
+          in: query
+          required: false
+          items:
+            type: string
+          collectionFormat: multi
+        - type: integer
+          description: 每页条数（默认 20，最大 100）
+          name: page_size
+          in: query
+          required: false
+        - type: string
+          description: 上一页返回的 next_cursor
+          name: cursor
+          in: query
+          required: false
+      responses:
+        "200":
+          description: 任务页
+          schema:
+            type: object
+            additionalProperties: true
+        "400":
+          description: 非法游标或筛选
+          schema:
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError"
+  /evaluation/tasks/{task_id}/export:
+    get:
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
+      description: 将终态任务与逐题事实导出为有界 JSON 或 CSV 文件
+      produces:
+        - application/json
+        - text/csv
+      tags:
+        - 评估
+      summary: 导出评估运行
+      parameters:
+        - type: string
+          description: 评估任务ID
+          name: task_id
+          in: path
+          required: true
+        - type: string
+          description: json 或 csv
+          name: format
+          in: query
+          required: true
+      responses:
+        "200":
+          description: 导出文件
+          schema:
+            type: file
+        "400":
+          description: 格式错误
+          schema:
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError"
+        "404":
+          description: 任务不存在
+          schema:
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError"
+        "409":
+          description: 任务仍在运行
+          schema:
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError"
+        "413":
+          description: 导出超过边界
+          schema:
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError"
+  /evaluation/tasks/{task_id}/labels:
+    put:
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
+      description: 在一个事务内全量替换规范化标签，不修改任务版本与更新时间
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      tags:
+        - 评估
+      summary: 替换评估任务标签
+      parameters:
+        - type: string
+          description: 评估任务ID
+          name: task_id
+          in: path
+          required: true
+        - description: 标签集合
+          name: request
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/internal_handler.ReplaceEvaluationTaskLabelsRequest"
+      responses:
+        "200":
+          description: 规范化后的标签
+          schema:
+            type: object
+            additionalProperties: true
+        "400":
+          description: 标签非法
+          schema:
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError"
+        "404":
+          description: 任务不存在
+          schema:
+            $ref: "#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError"
+  /evaluation/tasks/{task_id}/questions:
+    get:
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
+      description: 按 sample_index 升序分页读取一个评测任务的逐题结果
+      produces:
+        - application/json
+      tags:
+        - 评估
+      summary: 逐题结果分页
+      parameters:
+        - type: string
+          description: 任务 ID
+          name: task_id
+          in: path
+          required: true
+        - type: integer
+          description: 每页数量（默认 100，最大 500）
+          name: page_size
+          in: query
+          required: false
+        - type: string
+          description: keyset 游标
+          name: cursor
+          in: query
+          required: false
+      responses:
+        "200":
+          description: 逐题分页
+          schema:
+            type: object
+            additionalProperties: true
+  /evaluation/tasks/{task_id}/questions/{sample_index}/ratings:
+    get:
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
+      description: 按修订号倒序返回一个评测题目的不可变人工评分记录
+      produces:
+        - application/json
+      tags:
+        - 评估
+      summary: 列出逐题人工评分修订
+      parameters:
+        - type: string
+          description: 任务 ID
+          name: task_id
+          in: path
+          required: true
+        - type: integer
+          description: 样本序号
+          name: sample_index
+          in: path
+          required: true
+      responses:
+        "200":
+          description: 人工评分修订
+          schema:
+            type: object
+            additionalProperties: true
+    post:
+      security:
+        - Bearer: []
+        - ApiKeyAuth: []
+      description: 追加不可变评分记录，并关联同一 rubric 的上一修订
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      tags:
+        - 评估
+      summary: 追加逐题人工评分修订
+      parameters:
+        - type: string
+          description: 任务 ID
+          name: task_id
+          in: path
+          required: true
+        - type: integer
+          description: 样本序号
+          name: sample_index
+          in: path
+          required: true
+        - description: rubric_key、rubric_version、rubric_snapshot、score 和 comment
+          name: request
+          in: body
+          required: true
+          schema:
+            type: object
+            additionalProperties: true
+      responses:
+        "201":
+          description: 新增评分修订
+          schema:
+            type: object
+            additionalProperties: true
   /faq/import/progress/{task_id}:
     get:
       consumes:

@@ -1,189 +1,126 @@
-# 评估功能 API
+# 评测 API
 
-[返回目录](./README.md)
+评测应用程序编程接口（Application Programming Interface，API）统一使用 `/api/v1/evaluation` 前缀。应用程序编程接口密钥（API Key）需要 `run_evaluations` 能力或 full-access 权限。查看者（Viewer）可以读取数据，管理员（Admin）可以创建、取消和标注任务，并可以写入数据集版本与人工评分。`DELETE /evaluation/:task_id` 仅接受 Admin 用户登录令牌。
 
-| 方法 | 路径           | 描述                  |
-| ---- | -------------- | --------------------- |
-| GET  | `/evaluation/` | 获取评估任务结果       |
-| POST | `/evaluation/` | 创建评估任务          |
+导出接口支持 JavaScript 对象表示法（JavaScript Object Notation，JSON）和逗号分隔值（Comma-Separated Values，CSV）。
 
-> 注：服务端路由带尾斜杠（Gin 会自动从 `/evaluation` 重定向到 `/evaluation/`），下方示例为方便阅读用了 `/evaluation`。
+## 路由
 
-## GET `/evaluation` - 获取评估任务结果
-
-**参数说明（查询参数）**:
-
-| 字段     | 类型   | 必填 | 说明                                                |
-| -------- | ------ | ---- | --------------------------------------------------- |
-| task_id  | string | 是   | 从 `POST /evaluation` 返回的任务 ID                  |
-
-通用唯一标识符（Universally Unique Identifier，UUID）用于区分同一毫秒内创建的任务。任务 ID 格式为 `evaluation_<tenantID>_<Unix 毫秒时间戳>_<8 位 UUID 片段>_<datasetID>`。
-
-**请求**:
-
-```bash
-curl --location 'http://localhost:8080/api/v1/evaluation?task_id=evaluation_1_1787880000000_a1b2c3d4_default' \
---header 'X-API-Key: sk-xxxxx' \
---header 'Content-Type: application/json'
-```
-
-**响应**:
-
-```json
-{
-    "data": {
-        "task": {
-            "id": "evaluation_1_1787880000000_a1b2c3d4_default",
-            "tenant_id": 1,
-            "dataset_id": "default",
-            "start_time": "2025-08-12T14:54:26.221804768+08:00",
-            "status": 2,
-            "total": 1,
-            "finished": 1
-        },
-        "params": {
-            "session_id": "",
-            "knowledge_base_id": "2ef57434-8c8d-4442-b967-2f7fc578a2fc",
-            "vector_threshold": 0.5,
-            "keyword_threshold": 0.3,
-            "embedding_top_k": 10,
-            "vector_database": "",
-            "rerank_model_id": "b30171a1-787b-426e-a293-735cd5ac16c0",
-            "rerank_top_k": 5,
-            "rerank_threshold": 0.7,
-            "chat_model_id": "8aea788c-bb30-4898-809e-e40c14ffb48c",
-            "summary_config": {
-                "max_tokens": 0,
-                "repeat_penalty": 1,
-                "top_k": 0,
-                "top_p": 0,
-                "frequency_penalty": 0,
-                "presence_penalty": 0,
-                "prompt": "这是用户和助手之间的对话。",
-                "context_template": "你是一个专业的智能信息检索助手",
-                "no_match_prefix": "<think>\n</think>\nNO_MATCH",
-                "temperature": 0.3,
-                "seed": 0,
-                "max_completion_tokens": 2048
-            },
-            "fallback_strategy": "",
-            "fallback_response": "抱歉，我无法回答这个问题。"
-        },
-        "metric": {
-            "retrieval_metrics": {
-                "precision": 0,
-                "recall": 0,
-                "ndcg3": 0,
-                "ndcg10": 0,
-                "mrr": 0,
-                "map": 0
-            },
-            "generation_metrics": {
-                "bleu1": 0.037656734016532384,
-                "bleu2": 0.04067392145167686,
-                "bleu4": 0.048963321289052536,
-                "rouge1": 0,
-                "rouge2": 0,
-                "rougel": 0
-            }
-        }
-    },
-    "success": true
-}
-```
-
-检索指标按评估管道的结果顺序计算。无法归属到本次临时知识的结果和重复数据集段落标识（passage ID，PID）结果保留排名位置，并按未命中计分。
-
-## POST `/evaluation` - 创建评估任务
-
-**参数说明（请求体）**:
-
-| 字段              | 类型   | 必填 | 说明 |
-| ----------------- | ------ | ---- | ---- |
-| dataset_id        | string | 否   | 空值使用 `default`；当前固定加载 `dataset/samples/` |
-| knowledge_base_id | string | 否   | 空值使用默认模型创建临时评估知识库；提供时复制该知识库的模型配置创建临时知识库 |
-| chat_id           | string | 否   | 空值自动选择可用的知识问答（KnowledgeQA）模型；没有可用模型时任务创建失败 |
-| rerank_id         | string | 否   | 空值自动选择可用的重排序（Rerank）模型；没有可用模型时跳过重排 |
-
-**请求**:
-
-```bash
-curl --location 'http://localhost:8080/api/v1/evaluation' \
---header 'X-API-Key: sk-xxxxx' \
---header 'Content-Type: application/json' \
---data '{
-    "dataset_id": "default",
-    "knowledge_base_id": "kb-00000001",
-    "chat_id": "8aea788c-bb30-4898-809e-e40c14ffb48c",
-    "rerank_id": "b30171a1-787b-426e-a293-735cd5ac16c0"
-}'
-```
-
-**响应**:
-
-```json
-{
-    "data": {
-        "task": {
-            "id": "evaluation_1_1787880000000_a1b2c3d4_default",
-            "tenant_id": 1,
-            "dataset_id": "default",
-            "start_time": "2025-08-12T14:54:26.221804768+08:00",
-            "status": 1
-        },
-        "params": {
-            "session_id": "",
-            "knowledge_base_id": "2ef57434-8c8d-4442-b967-2f7fc578a2fc",
-            "vector_threshold": 0.5,
-            "keyword_threshold": 0.3,
-            "embedding_top_k": 10,
-            "vector_database": "",
-            "rerank_model_id": "b30171a1-787b-426e-a293-735cd5ac16c0",
-            "rerank_top_k": 5,
-            "rerank_threshold": 0.7,
-            "chat_model_id": "8aea788c-bb30-4898-809e-e40c14ffb48c",
-            "summary_config": {
-                "max_tokens": 0,
-                "repeat_penalty": 1,
-                "top_k": 0,
-                "top_p": 0,
-                "frequency_penalty": 0,
-                "presence_penalty": 0,
-                "prompt": "这是用户和助手之间的对话。",
-                "context_template": "你是一个专业的智能信息检索助手，xxx",
-                "no_match_prefix": "<think>\n</think>\nNO_MATCH",
-                "temperature": 0.3,
-                "seed": 0,
-                "max_completion_tokens": 2048
-            },
-            "fallback_strategy": "",
-            "fallback_response": "抱歉，我无法回答这个问题。"
-        }
-    },
-    "success": true
-}
-```
-
-## M5 指标、统计与人工评分入口
-
-里程碑 5（Milestone 5，M5）增加版本化指标目录、模型统计、价格版本和人工评分修订。下表中的 Viewer 表示查看者
-角色，Admin 表示管理员角色；应用程序编程接口密钥（Application Programming Interface Key，API Key）读取指标目录
-时需要 `run_evaluations` 能力。
-
-| 方法 | 路径 | 权限 | 说明 |
+| 方法 | 路径 | 权限 | 响应数据 |
 | --- | --- | --- | --- |
-| GET | `/api/v1/evaluation/metrics` | Viewer / API Key | 返回指标 key、version、类别、默认配置和配置 schema |
-| GET | `/api/v1/models/:id/usage?from=&to=` | Viewer | 返回单模型调用、Token、费用、缓存和延迟统计 |
-| GET | `/api/v1/models/usage?from=&to=&model_ids=` | Viewer | 返回一个或多个模型的时间区间统计 |
-| GET | `/api/v1/models/:id/pricing` | Viewer | 返回按生效时间倒序排列的价格版本 |
-| PUT | `/api/v1/models/:id/pricing` | Admin | 创建一个有效区间不重叠的价格版本 |
-| GET | `/api/v1/evaluation/tasks/:task_id/questions/:sample_index/ratings` | Viewer | 返回人工评分修订 |
-| POST | `/api/v1/evaluation/tasks/:task_id/questions/:sample_index/ratings` | Admin | 追加人工评分修订 |
+| POST | `/evaluation` | Admin | `EvaluationTask` |
+| GET | `/evaluation?task_id=...` | Viewer | `EvaluationDetail` |
+| GET | `/evaluation/metrics` | Viewer | `{items: EvaluationMetricDefinition[]}` |
+| GET | `/evaluation/tasks` | Viewer | `{items: EvaluationTask[], next_cursor}` |
+| PUT | `/evaluation/tasks/:task_id/labels` | Admin | `{task_id, labels}` |
+| POST | `/evaluation/comparisons` | Viewer | `EvaluationComparisonResponse` |
+| GET | `/evaluation/tasks/:task_id/export?format=json|csv` | Viewer | 下载文件 |
+| POST | `/evaluation/:task_id/cancel` | Admin | 当前 `EvaluationTask` |
+| DELETE | `/evaluation/:task_id` | Admin 用户令牌 | `204 No Content` |
+| GET | `/evaluation/tasks/:task_id/questions` | Viewer | `{items: EvaluationQuestionResultEntity[], next_cursor}` |
+| GET | `/evaluation/tasks/:task_id/questions/:sample_index/ratings` | Viewer | `{items: EvaluationHumanRatingRevision[]}` |
+| POST | `/evaluation/tasks/:task_id/questions/:sample_index/ratings` | Admin | `EvaluationHumanRatingRevision` |
+| POST | `/evaluation/datasets` | Admin | `EvaluationDataset` |
+| GET | `/evaluation/datasets` | Viewer | `{items: EvaluationDataset[]}` |
+| POST | `/evaluation/datasets/:id/versions` | Admin | `EvaluationDatasetVersion` |
+| GET | `/evaluation/datasets/:id/versions` | Viewer | `{items: EvaluationDatasetVersion[]}` |
 
-模型统计使用协调世界时（Coordinated Universal Time，UTC）半开区间 `[from, to)`。省略时间时返回最近 30 天，
-最长区间为 366 天。响应中的 `latency` 包含 p50、p95、p99 和可报告调用数。`provider_cache` 以厂商报告的 read 与
-miss Token 为分母；`application_cache` 以 hit 与 miss 项为分母，并独立返回 bypass 查询数。
+除下载和 `204` 响应外，接口使用 `{"success":true,"data":...}` 外层结构。
 
-价格单位为每百万输入或输出 Token 对应的整数微货币。调用开始时冻结有效价格；缺少价格或用量的调用返回空费用并计入
-`unpriced_calls`。人工评分请求包含 rubric key、rubric version、rubric snapshot、score 和 comment；服务端分配修订号并
-连接同一 rubric 的 `supersedes_id`。
+## 创建任务
+
+`POST /evaluation` 的 JSON 请求字段如下：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `dataset_id` | string | 否 | 数据集标识符（Identifier，ID） |
+| `dataset_version_id` | string | 否 | 不可变数据集版本 ID |
+| `knowledge_base_id` | string | 否 | 源知识库 ID |
+| `chat_id` | string | 否 | 对话模型 ID |
+| `rerank_id` | string | 否 | 重排序模型 ID |
+| `seed` | integer | 否 | 生成随机种子；省略值与显式 `0` 分开处理 |
+| `configuration.retrieval` | object | 否 | `vector_threshold`、`keyword_threshold`、`embedding_top_k` |
+| `configuration.rerank` | object | 否 | `rerank_top_k`、`rerank_threshold` |
+| `configuration.generation` | object | 否 | `temperature`、`top_p`、`top_k`、`max_tokens` |
+
+```bash
+curl -X POST 'http://localhost:8080/api/v1/evaluation' \
+  -H 'X-API-Key: sk-xxxxx' -H 'Content-Type: application/json' \
+  -d '{"dataset_id":"golden","dataset_version_id":"version-1","chat_id":"model-1","seed":0}'
+```
+
+模型提供方不支持请求种子时返回 `422`。数据集、版本或源知识库不可见时返回 `404`。
+
+## 任务 DTO
+
+数据传输对象（Data Transfer Object，DTO）`EvaluationTask` 包含 `id`、`tenant_id`、`dataset_id`、`start_time`、`status`、`labels`、`provenance_complete`、`total` 和 `finished`。可选字段包括 `end_time`、`err_msg`、`cancel_requested_at`、`cleanup_errors` 和 `dataset_version_id`。
+
+任务状态值如下：
+
+| 值 | 名称 | 含义 |
+| --- | --- | --- |
+| 0 | Pending | 等待执行 |
+| 1 | Running | 正在执行 |
+| 2 | Success | 成功结束 |
+| 3 | Failed | 执行失败 |
+| 4 | TimedOut | 达到任务期限 |
+| 5 | Interrupted | 租约到期且恢复清理完成 |
+| 6 | Canceled | 持久化取消请求已完成处理 |
+
+`EvaluationDetail` 在任务字段之外返回 `params`、可选 `metric`、可选 `runtime_metrics`、`experiment` 和 `provenance_complete`。`experiment` 保存数据集、模型、参数、指标计划、代码和运行环境快照。
+
+## 任务列表、标签、比较和导出
+
+`GET /evaluation/tasks` 按 `(start_time DESC, id DESC)` 使用不透明游标分页。查询参数包括：
+
+| 参数 | 说明 |
+| --- | --- |
+| `status` | 数值状态 |
+| `dataset_id` | 数据集 ID |
+| `dataset_version_id` | 数据集版本 ID |
+| `model_id` | 实验快照中的模型 ID |
+| `started_from` | 开始时间下界，含边界 |
+| `started_to` | 开始时间上界，不含边界 |
+| `label` | 标签交集筛选，可重复传入 |
+| `page_size` | 默认 20，最大 100 |
+| `cursor` | 上一页返回的不透明游标 |
+
+时间参数使用 RFC 3339（Request for Comments 3339）格式。标签请求为 `{"labels":[...]}`，服务执行全量替换并返回规范化结果。
+
+比较请求包含 2 至 10 个 `task_ids` 和可选 `baseline_task_id`。响应提供运行摘要、冻结参数差异、指标绝对值、相对基线变化、置信区间、延迟分位数和 Token 合计。导出接口要求 `format=json` 或 `format=csv`，只导出终态任务，并应用条数和文件大小上限。
+
+## 逐题结果与人工评分
+
+`GET /evaluation/tasks/:task_id/questions` 按 `sample_index` 升序分页，`page_size` 默认 100、最大 500。逐题记录包含问题和参考答案、ground truth 段落、检索与重排序结果、生成文本、逐样本指标、指标观测、阶段耗时、Token 用量、状态和结果哈希。
+
+人工评分请求字段为：
+
+| 字段 | 约束 |
+| --- | --- |
+| `rubric_key` | 必填字符串，最长 64 字符 |
+| `rubric_version` | 必填字符串，最长 32 字符 |
+| `rubric_snapshot` | 必填 JSON 对象 |
+| `score` | 必填整数，1 至 5 |
+| `comment` | 可选字符串，最长 4000 字符 |
+
+每次写入创建不可变修订。响应包含修订号、评分人、评分量表快照、分数、评论、创建时间和可选 `supersedes_id`。
+
+## 数据集与版本 DTO
+
+`POST /evaluation/datasets` 接受 `name` 和可选 `description`。数据集响应包含 `id`、`scope`、可选 `owner_tenant_id`、`name`、`description`、`current_version_id`、`created_at` 和 `updated_at`。
+
+`POST /evaluation/datasets/:id/versions` 接受以下结构：
+
+```json
+{
+  "passages": [{"pid":"p-1","content":"段落内容","metadata":{"source":"manual"}}],
+  "questions": [{"qid":"q-1","question":"问题文本","answer":"参考答案"}],
+  "relevance": [{"qid":"q-1","pid":"p-1","grade":1}]
+}
+```
+
+版本响应包含 `id`、`dataset_id`、`version_number`、`schema_version`、`artifact_sha256`、`content_sha256`、`manifest`、`passage_count`、`question_count`、`relevance_count` 和 `created_at`。
+
+## 指标目录
+
+`GET /evaluation/metrics` 返回版本化指标目录。每个定义包含 `key`、`version`、`kind`、`description`、`default_config` 和 `config_schema`。任务指标的 `scores` 字段以指标实例 ID 为键，值包含可空 `value`、`status` 和可选 `error_code`。
