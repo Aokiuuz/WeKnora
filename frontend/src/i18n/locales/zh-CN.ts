@@ -6684,6 +6684,7 @@ export default {
     viewRevisions: '查看修订记录',
     loadingRatings: '正在加载评分修订记录…',
     score: '分数',
+    ratingGuidance: '综合考虑正确性、相关性和依据充分度：1 分表示不可接受，3 分表示基本可接受但有明显问题，5 分表示三者均充分。',
     ratingComment: '评语',
     ratingCommentPlaceholder: '可选审计说明',
     appendRating: '追加修订',

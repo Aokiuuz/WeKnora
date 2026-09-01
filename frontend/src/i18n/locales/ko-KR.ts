@@ -6682,6 +6682,7 @@ export default {
     viewRevisions: '수정 이력 보기',
     loadingRatings: '평가 수정 이력 로드 중…',
     score: '점수',
+    ratingGuidance: '정확성, 관련성, 근거 충실도를 함께 판단합니다. 1점은 부적합, 3점은 눈에 띄는 문제가 있지만 수용 가능, 5점은 세 요소가 모두 충실함을 뜻합니다.',
     ratingComment: '의견',
     ratingCommentPlaceholder: '선택적 감사 메모',
     appendRating: '수정 추가',

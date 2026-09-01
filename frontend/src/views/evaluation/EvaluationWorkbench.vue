@@ -390,6 +390,9 @@
                       {{ t('evaluation.loadingRatings') }}
                     </div>
                     <template v-else>
+                      <p v-if="canManageLabels" class="human-rating__guidance">
+                        {{ t('evaluation.ratingGuidance') }}
+                      </p>
                       <form
                         v-if="canManageLabels"
                         class="human-rating__form"
@@ -492,6 +495,21 @@ import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+
+const ANSWER_QUALITY_RUBRIC_KEY = 'answer-quality'
+const ANSWER_QUALITY_RUBRIC_VERSION = '1.1.0'
+const ANSWER_QUALITY_RUBRIC_SNAPSHOT = {
+  title: 'Overall answer quality',
+  dimension: 'overall_answer_quality',
+  considerations: ['correctness', 'relevance', 'grounding'],
+  scale: {
+    1: 'Incorrect or unsupported',
+    2: 'Major quality issues',
+    3: 'Acceptable with notable issues',
+    4: 'Strong with minor issues',
+    5: 'Correct, relevant, and well grounded',
+  },
+}
 
 const filters = reactive({
   status: '',
@@ -851,7 +869,11 @@ async function toggleHumanRatings(sampleIndex: number) {
   try {
     panel.items = await listEvaluationHumanRatings(activeTaskId.value, sampleIndex)
     panel.loaded = true
-    if (panel.items[0]) panel.score = panel.items[0].score
+    const latest = panel.items[0]
+    panel.score = latest?.rubric_key === ANSWER_QUALITY_RUBRIC_KEY
+      && latest.rubric_version === ANSWER_QUALITY_RUBRIC_VERSION
+      ? latest.score
+      : 3
   } catch (error) {
     panel.error = errorMessage(error)
   } finally {
@@ -866,13 +888,9 @@ async function saveHumanRating(sampleIndex: number) {
   panel.error = ''
   try {
     const rating = await appendEvaluationHumanRating(activeTaskId.value, sampleIndex, {
-      rubric_key: 'answer-quality',
-      rubric_version: '1.0.0',
-      rubric_snapshot: {
-        title: 'Answer quality',
-        dimensions: ['correctness', 'relevance', 'grounding'],
-        scale: { 1: 'Incorrect', 2: 'Major issues', 3: 'Partially correct', 4: 'Mostly correct', 5: 'Fully correct' },
-      },
+      rubric_key: ANSWER_QUALITY_RUBRIC_KEY,
+      rubric_version: ANSWER_QUALITY_RUBRIC_VERSION,
+      rubric_snapshot: ANSWER_QUALITY_RUBRIC_SNAPSHOT,
       score: panel.score,
       comment: panel.comment,
     })
@@ -1060,6 +1078,7 @@ onBeforeUnmount(() => {
 .human-rating { margin-top: 10px; border: 1px solid var(--eval-line); border-radius: 8px; overflow: hidden; }
 .human-rating__toggle { display: flex; width: 100%; align-items: center; justify-content: space-between; padding: 8px 10px; border: 0; color: #315c4d; background: #f6faf8; cursor: pointer; font-size: 10px; font-weight: 650; span { color: var(--eval-muted); font: 9px monospace; } }
 .human-rating__panel { padding: 10px; }
+.human-rating__guidance { margin: 0 0 8px; color: var(--eval-muted); font-size: 9px; line-height: 1.45; }
 .human-rating__form { display: grid; grid-template-columns: 100px minmax(160px, 1fr) auto; align-items: end; gap: 8px; label { display: grid; gap: 4px; color: var(--eval-muted); font-size: 9px; } select, input { height: 30px; padding: 0 8px; border: 1px solid var(--eval-line); border-radius: 7px; background: #fff; font-size: 10px; } }
 .human-rating__history { display: grid; gap: 6px; padding: 0; margin: 10px 0 0; list-style: none; li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 8px; padding: 7px 8px; border-radius: 6px; background: #f8faf9; font-size: 9px; } strong { color: var(--eval-green); } time { color: var(--eval-muted); } p { grid-column: 2 / -1; margin: 0; color: #45574f; line-height: 1.45; } }
 .human-rating__error { margin: 8px 0 0; color: #ad4141; font-size: 10px; }

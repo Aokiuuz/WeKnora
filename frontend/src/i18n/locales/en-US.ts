@@ -85,6 +85,7 @@ export default {
     viewRevisions: 'View revisions',
     loadingRatings: 'Loading rating revisions…',
     score: 'Score',
+    ratingGuidance: 'Judge correctness, relevance, and grounding together: 1 is unacceptable, 3 is acceptable with notable issues, and 5 is strong on all three.',
     ratingComment: 'Comment',
     ratingCommentPlaceholder: 'Optional audit note',
     appendRating: 'Append revision',

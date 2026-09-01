@@ -18,6 +18,23 @@ interface EvaluationTaskStub {
   labels: string[]
 }
 
+interface HumanRatingRevisionStub {
+  rubric_key: string
+  rubric_version: string
+  score: number
+}
+
+interface HumanRatingPanelStub {
+  open: boolean
+  loading: boolean
+  saving: boolean
+  loaded: boolean
+  items: HumanRatingRevisionStub[]
+  score: number
+  comment: string
+  error: string
+}
+
 interface WorkbenchBindings {
   activeTaskId: { value: string }
   baselineTaskId: { value: string }
@@ -25,6 +42,7 @@ interface WorkbenchBindings {
   comparisonResult: { value: { runs: Array<{ task_id: string }> } | null }
   detail: { value: { task: EvaluationTaskStub } | null }
   filters: { datasetId: string }
+  ratingPanel: (sampleIndex: number) => HumanRatingPanelStub
   labelDraft: { value: string }
   listLoading: { value: boolean }
   loadTasks: (append?: boolean) => Promise<void>
@@ -32,9 +50,11 @@ interface WorkbenchBindings {
   openTask: (task: EvaluationTaskStub) => Promise<void>
   questions: { value: Array<{ qid: string }> }
   saveLabels: () => Promise<void>
+  saveHumanRating: (sampleIndex: number) => Promise<void>
   savingLabels: { value: boolean }
   selectedTaskIds: { value: string[] }
   tasks: { value: EvaluationTaskStub[] }
+  toggleHumanRatings: (sampleIndex: number) => Promise<void>
   runComparison: () => Promise<void>
 }
 
@@ -327,4 +347,69 @@ test('comparison responses remain bound to the selected runs and baseline', asyn
   } | null
   assert.deepEqual(completedComparison?.runs.map(run => run.task_id), ['task-a', 'task-c'])
   assert.equal(workbench.comparisonLoading.value, false)
+})
+
+test('human rating submits one holistic answer-quality score with concise anchors', async () => {
+  let submitted: unknown
+  installWorkbenchApi({
+    appendRating: async (taskId: string, sampleIndex: number, request: Record<string, unknown>) => {
+      submitted = { taskId, sampleIndex, request }
+      return {
+        id: 'rating-1', tenant_id: 1, task_id: taskId, sample_index: sampleIndex,
+        revision: 1, rater_id: 'admin', created_at: '2026-09-01T00:00:00Z',
+        ...request,
+      }
+    },
+  })
+  const component = await loadWorkbenchComponent()
+  const workbench = component.setup({}, { expose() {} })
+  workbench.activeTaskId.value = 'task-a'
+  const panel = workbench.ratingPanel(4)
+  panel.score = 4
+  panel.comment = 'Minor wording issue'
+
+  await workbench.saveHumanRating(4)
+
+  assert.deepEqual(submitted, {
+    taskId: 'task-a',
+    sampleIndex: 4,
+    request: {
+      rubric_key: 'answer-quality',
+      rubric_version: '1.1.0',
+      rubric_snapshot: {
+        title: 'Overall answer quality',
+        dimension: 'overall_answer_quality',
+        considerations: ['correctness', 'relevance', 'grounding'],
+        scale: {
+          1: 'Incorrect or unsupported',
+          2: 'Major quality issues',
+          3: 'Acceptable with notable issues',
+          4: 'Strong with minor issues',
+          5: 'Correct, relevant, and well grounded',
+        },
+      },
+      score: 4,
+      comment: 'Minor wording issue',
+    },
+  })
+})
+
+test('an older rubric revision stays in history without prefilling the current score', async () => {
+  installWorkbenchApi({
+    listRatings: async () => [{
+      id: 'rating-old', tenant_id: 1, task_id: 'task-a', sample_index: 4,
+      revision: 2, rater_id: 'admin', rubric_key: 'answer-quality',
+      rubric_version: '1.0.0', rubric_snapshot: {}, score: 5,
+      created_at: '2026-08-31T00:00:00Z',
+    }],
+  })
+  const component = await loadWorkbenchComponent()
+  const workbench = component.setup({}, { expose() {} })
+  workbench.activeTaskId.value = 'task-a'
+
+  await workbench.toggleHumanRatings(4)
+
+  const panel = workbench.ratingPanel(4)
+  assert.equal(panel.items[0]?.rubric_version, '1.0.0')
+  assert.equal(panel.score, 3)
 })
