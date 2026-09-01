@@ -17,6 +17,8 @@ on:
       - "Makefile"
       - "config/**"
       - "migrations/**"
+      - "scripts/migrate.sh"
+      - "scripts/check-migrate-secret-output.sh"
       - "skills/preloaded/**"
       - "testdata/**"
       - "docker/Dockerfile.app"
@@ -33,6 +35,8 @@ on:
       - "Makefile"
       - "config/**"
       - "migrations/**"
+      - "scripts/migrate.sh"
+      - "scripts/check-migrate-secret-output.sh"
       - "skills/preloaded/**"
       - "testdata/**"
       - "docker/Dockerfile.app"
@@ -68,6 +72,10 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
           # v6 defaults to go.mod for the cache key (more stable than go.sum).
+
+      - name: Check migration credential logging
+        shell: bash
+        run: bash scripts/check-migrate-secret-output.sh
 
       - name: Download modules
         run: go mod download

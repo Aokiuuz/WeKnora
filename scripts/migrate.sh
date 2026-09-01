@@ -63,9 +63,7 @@ fi
 case "$1" in
     up)
         echo "Running migrations up..."
-        echo "DB_URL: ${DB_URL}"
         echo "DB_USER: ${DB_USER}"
-        echo "DB_PASSWORD: ${DB_PASSWORD}"
         echo "DB_HOST: ${DB_HOST}"
         echo "DB_PORT: ${DB_PORT}"
         echo "DB_NAME: ${DB_NAME}"
@@ -119,4 +117,4 @@ case "$1" in
         ;;
 esac
 
-echo "Migration command completed successfully" 
+echo "Migration command completed successfully"
