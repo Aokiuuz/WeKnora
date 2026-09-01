@@ -22,6 +22,7 @@ type streamLLMResult struct {
 	Usage            *types.TokenUsage
 	FinishReason     string // actual finish_reason from LLM (captured from last stream chunk)
 	StreamError      string // error message from stream (e.g., timeout), kept separate from Content
+	StreamErrorFinal bool   // the provider marked the error as the terminal stream response
 }
 
 // streamLLMToEventBus streams LLM response through EventBus (generic method)
@@ -66,6 +67,7 @@ func (e *AgentEngine) streamLLMToEventBus(
 		// as if they were part of the LLM answer.
 		if chunk.ResponseType == types.ResponseTypeError {
 			result.StreamError = chunk.Content
+			result.StreamErrorFinal = result.StreamErrorFinal || chunk.Done
 			continue
 		}
 		if chunk.ResponseType == types.ResponseTypeThinking {
@@ -148,9 +150,11 @@ func (e *AgentEngine) streamLLMToEventBus(
 		chunkCount, len(result.Content), len(result.ToolCalls),
 		streamDuration.Milliseconds(), responseTypeCounts)
 
-	// If the stream produced an error and no usable content/tool calls,
-	// surface it as a Go error so the caller can retry or degrade gracefully.
-	if result.StreamError != "" && result.Content == "" && len(result.ToolCalls) == 0 {
+	// A terminal stream error invalidates any preceding partial output. A
+	// non-terminal diagnostic remains recoverable when the provider subsequently
+	// supplies usable content or tool calls.
+	if result.StreamError != "" &&
+		(result.StreamErrorFinal || (result.Content == "" && len(result.ToolCalls) == 0)) {
 		return result, fmt.Errorf("LLM stream error: %s", result.StreamError)
 	}
 

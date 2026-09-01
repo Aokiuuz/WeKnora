@@ -88,25 +88,32 @@ func (o *observedChat) ChatStream(
 		status := types.ModelCallStatusSuccess
 		var terminalErr error
 		var usage *types.TokenUsage
+		var strictTerminal *types.StreamResponse
 		defer func() {
 			finishErr := call.finish(ctx, status, terminalErr, usage)
-			if finishErr == nil {
+			if finishErr != nil {
+				if !strict {
+					logger.Errorf(ctx, "[modelobs] terminal stream accounting failed: %v", finishErr)
+					return
+				}
+				select {
+				case output <- types.StreamResponse{
+					ResponseType: types.ResponseTypeError,
+					Content:      "model call accounting failed",
+					Done:         true,
+					Data: map[string]interface{}{
+						"error_code": "model_call_accounting_failed",
+					},
+				}:
+				case <-ctx.Done():
+				}
 				return
 			}
-			if !strict {
-				logger.Errorf(ctx, "[modelobs] terminal stream accounting failed: %v", finishErr)
-				return
-			}
-			select {
-			case output <- types.StreamResponse{
-				ResponseType: types.ResponseTypeError,
-				Content:      "model call accounting failed",
-				Done:         true,
-				Data: map[string]interface{}{
-					"error_code": "model_call_accounting_failed",
-				},
-			}:
-			case <-ctx.Done():
+			if strictTerminal != nil {
+				select {
+				case output <- *strictTerminal:
+				case <-ctx.Done():
+				}
 			}
 		}()
 		for {
@@ -126,6 +133,11 @@ func (o *observedChat) ChatStream(
 				if response.ResponseType == types.ResponseTypeError {
 					status = types.ModelCallStatusError
 					terminalErr = errors.New("provider stream error")
+				}
+				if strict && response.Done {
+					cloned := response
+					strictTerminal = &cloned
+					continue
 				}
 				select {
 				case output <- response:

@@ -144,6 +144,34 @@ func TestStrictStreamingCompletionFailureIsTerminalStreamError(t *testing.T) {
 	assert.Equal(t, ledgerFinishAttempts, store.completeCalls)
 }
 
+func TestStrictStreamingCompletionFailureReplacesProviderTerminal(t *testing.T) {
+	stream := make(chan types.StreamResponse, 2)
+	stream <- types.StreamResponse{ResponseType: types.ResponseTypeAnswer, Content: "partial"}
+	stream <- types.StreamResponse{ResponseType: types.ResponseTypeAnswer, Content: " answer", Done: true}
+	close(stream)
+	store := &recorderStore{completeErr: errors.New("database unavailable")}
+	wrapped := NewRecorder(store).WrapChat(
+		&types.Model{ID: "model-1", TenantID: 7, Name: "safe", Type: types.ModelTypeKnowledgeQA},
+		&recorderChat{stream: stream},
+	)
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+	ctx = WithPurpose(ctx, PurposeEvaluation, true)
+
+	output, err := wrapped.ChatStream(ctx, nil, nil)
+	require.NoError(t, err)
+	responses := make([]types.StreamResponse, 0, 2)
+	for response := range output {
+		responses = append(responses, response)
+	}
+	require.Len(t, responses, 2)
+	assert.Equal(t, "partial", responses[0].Content)
+	assert.False(t, responses[0].Done)
+	assert.Equal(t, types.ResponseTypeError, responses[1].ResponseType)
+	assert.True(t, responses[1].Done)
+	assert.Equal(t, "model_call_accounting_failed", responses[1].Data["error_code"])
+	assert.Equal(t, ledgerFinishAttempts, store.completeCalls)
+}
+
 func TestStreamingCallCompletesLedgerExactlyOnce(t *testing.T) {
 	stream := make(chan types.StreamResponse, 2)
 	stream <- types.StreamResponse{Usage: &types.TokenUsage{PromptTokens: 4, CompletionTokens: 1, TotalTokens: 5}}
