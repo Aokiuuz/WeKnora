@@ -28,7 +28,7 @@
         <img src="https://img.shields.io/badge/License-MIT-ffffff?labelColor=d4eaf7&color=2e6cc4" alt="License">
     </a>
     <a href="./CHANGELOG.md">
-        <img alt="バージョン" src="https://img.shields.io/badge/version-0.7.2-2e6cc4?labelColor=d4eaf7">
+        <img alt="バージョン" src="https://img.shields.io/badge/version-0.7.3-2e6cc4?labelColor=d4eaf7">
     </a>
 </p>
 
@@ -56,6 +56,7 @@ Feishu、Notion、Yuqueなどの外部プラットフォームからのナレッ
 
 ## ✨ 最新アップデート
 
+- **v0.7.3** — ワークスペース横断認可とオブジェクトストレージ署名パスを強化し、再現可能な MAP/NDCG v2 評価と結果整合性検証を追加しました。モデルストリーム終端と呼び出し台帳を原子的に確定し、評価画面の並行リクエスト状態、Readiness Probe、Helm イメージ、リリース成果物、依存ロックを統一しました。
 - **v0.7.2** — **公式製品ドキュメントサイト**を公開（VitePress、6 セクション約 50 ページで約 360 の API エンドポイントと約 150 の環境変数を網羅、独立した Docker/Nginx デプロイ・クイックスタート用サンプルデータ・ローカル MCP デモを同梱）；**ナレッジベースのフォルダーツリー**（アップロードパスを独立したデータとして保存し、ファイルマネージャーのように参照・リネーム・再配置）；**チャンク編集とバージョン履歴**（UI で検索チャンクを編集、バージョン単位の差分とロールバック、編集後のインデックス自動再構築、ドキュメントのカスタムメタデータ）；**Wiki ページのバージョン履歴**（スナップショット + 行単位差分 + ワンクリックロールバック + ブラウザ内手動編集）；**ファイル直リンクモード** `resource_urls=public` / `RESOURCE_URL_MODE`（サードパーティアプリが認証プロキシへの二次リクエストなしで画像とファイルを表示）；**Feishu クラウドドライブデータソース**と docx の blocks API 同期；ドキュメントの一括タグ付け；**MCP Server 1.1.x**（mcp 2.x の高レベル API へ移行、公式 PyPI パッケージ `tencent-weknora-mcp`、`create_knowledge_from_text` と `list_shared_knowledge_bases` を追加し計 29 ツール）；AWS S3 デフォルト資格情報チェーン（IAM Role / IRSA）；ローカル HTML アップロード解析；QQBot の Markdown 返信；app / frontend / docreader / mcp-server の PR CI チェック追加。加えて router と `modelcontext` の大規模リファクタリング、リランクとチャンキングの品質改善、広範な安定性修正。詳細は [`CHANGELOG.md`](./CHANGELOG.md)。
 - **v0.7.1** — 新しい**Yunzhijia（云之家）IM 連携**（WebSocket + 画像メッセージ + Markdown 返信）；**Volcengine Rerank** プロバイダー（リクエストの自動分割）と **Zhipu AI Web 検索**プロバイダー；コントロールプレーン自動化向けの**プラットフォームスコープ API キー**（テナント管理、システム設定、ランタイムキュー、監査ログ）；**KB 単位のアクティビティ監査証跡**；FAQ 管理の強化（フィルタリング、タグ付け、エクスポート、インポート結果追跡）；**Langfuse OTLP/OTel トレーシング**への移行と W3C traceparent 伝播；チャットヘッダーアクションによるワンクリック **Markdown エクスポート**、参照ドロワーへの Wiki ツール結果表示；プロンプトキャッシュ可観測性；セッションチャネルガバナンス（IM/埋め込み/API セッションを管理者スコープで分離）；Feishu 大規模 Wiki 同期の堅牢化；レガシー Neo4j 会話メモリ依存の削除。加えて広範な slug 整合性・SSRF トランスポート・状態同期の強化。詳細は [`CHANGELOG.md`](./CHANGELOG.md)。
 - **v0.7.0** — きめ細かい**スコープ付き API キーと Principal モデル**（能力単位の付与 + KB 単位の制限 + API 連携プレイグラウンド）；**ランタイムタスクキュー可観測ダッシュボードと Worker プール統治**（ステージ別プール + モデル別並行度ガバナー + 失敗タスクの調査/再試行）；**マルチインスタンスストレージバックエンド**（ワークスペースごとに複数のストレージインスタンス、KB 単位のバインド、デフォルトインスタンス）；**セッションスコープの一時添付**（画像/ドキュメントの非同期解析 + 合算上限）；推奨質問とフォローアップ；安定リソースレジストリと LLM コンテキストのエイリアス圧縮；`@Skill / @MCP` メンションによるスコープ化 Agent ランタイム；会話中の MCP OAuth；QQBot と Lark（Feishu 国際版）IM 連携；Redis TLS；Requesty モデルプロバイダー + Keenable Web 検索；テナントレスプロビジョニングと制御されたセルフサービスワークスペース；管理者パスワードリセット；ナレッジベース複製フロー；`weknora` CLI v0.10。加えて大規模なセキュリティ強化（SSRF、シークレットのマスキング、SQL 検証、IDOR）。詳細は [`CHANGELOG.md`](./CHANGELOG.md)。

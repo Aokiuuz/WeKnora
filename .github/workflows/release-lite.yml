@@ -87,6 +87,7 @@ jobs:
           lock_package_version="$(jq -r '.packages[""].version' frontend/package-lock.json)"
           chart_version="$(awk '$1 == "appVersion:" {gsub(/"/, "", $2); print $2}' helm/Chart.yaml)"
           desktop_version="$(jq -r '.info.productVersion' cmd/desktop/wails.json)"
+          changelog_version="$(sed -n 's/^## \[\([^]]*\)\].*/\1/p' CHANGELOG.md | head -n 1)"
           expected_tag="v${version}"
 
           if [ "$RELEASE_TAG" != "$expected_tag" ]; then
@@ -98,7 +99,8 @@ jobs:
             "frontend/package-lock.json top-level:$lock_root_version:$version" \
             "frontend/package-lock.json root package:$lock_package_version:$version" \
             "helm/Chart.yaml:$chart_version:$RELEASE_TAG" \
-            "cmd/desktop/wails.json:$desktop_version:$version"; do
+            "cmd/desktop/wails.json:$desktop_version:$version" \
+            "CHANGELOG.md latest:$changelog_version:$version"; do
             file="${entry%%:*}"
             remainder="${entry#*:}"
             actual="${remainder%%:*}"
@@ -108,6 +110,19 @@ jobs:
               exit 1
             fi
           done
+
+          for readme in README.md README_CN.md README_JA.md README_KO.md; do
+            if ! grep -Fq "version-${version}-" "$readme"; then
+              echo "::error::$readme version badge does not match $version"
+              exit 1
+            fi
+          done
+          if ! grep -Fq "版本号 \`$version\`" website-docs/06-development/01-dev-guide.md || \
+             ! grep -Fq "（版本 $version）" website-docs/05-clients/01-frontend.md || \
+             ! grep -Fq "（当前为 v$version）" website-docs/01-getting-started/02-installation.md; then
+            echo "::error::Website documentation version does not match $version"
+            exit 1
+          fi
 
           {
             echo "tag=$RELEASE_TAG"

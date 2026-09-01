@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.3] - 2026-09-01
+
+### Security
+
+- Enforce configuration and user capability checks for cross-workspace access, and revalidate the target workspace on every authenticated request.
+- Validate canonical tenant-scoped storage paths before signing or opening objects across supported cloud storage providers.
+
+### Evaluation and observability
+
+- Add MAP and graded NDCG v2 metrics with complete relevance denominators and frozen metric-plan identities.
+- Verify successful evaluation rows, observations, hashes and aggregate recomputation before export or comparison.
+- Make strict model-stream completion atomic with model-call ledger persistence and account for started calls explicitly.
+
+### Reliability and delivery
+
+- Isolate concurrent token refresh, evaluation labels, comparisons and exports from stale frontend responses.
+- Add liveness and dependency-aware readiness probes, align Helm image versions, and harden release artifact validation.
+- Update audited frontend and documentation build dependencies within compatible version ranges.
+
 ## [0.7.2] - 2026-08-07
 
 ### New Features
