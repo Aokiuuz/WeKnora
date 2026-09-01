@@ -158,6 +158,7 @@ helm install weknora ./helm \
 | `serviceAccount.create` | Create ServiceAccount | `true` |
 | `serviceAccount.name` | ServiceAccount name | `""` |
 | `serviceAccount.annotations` | ServiceAccount annotations | `{}` |
+| `serviceAccount.automountServiceAccountToken` | Mount Kubernetes API credentials in component Pods | `false` |
 
 ### App (Backend)
 
@@ -178,7 +179,16 @@ helm install weknora ./helm \
 | `frontend.enabled` | Enable frontend | `true` |
 | `frontend.replicaCount` | Number of replicas | `1` |
 | `frontend.image.repository` | Image repository | `wechatopenai/weknora-ui` |
-| `frontend.image.tag` | Image tag | `latest` |
+| `frontend.image.tag` | Image tag | `""` (uses appVersion) |
+
+### Docreader
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `docreader.enabled` | Enable document parsing service | `true` |
+| `docreader.replicaCount` | Number of replicas | `1` |
+| `docreader.image.repository` | Image repository | `wechatopenai/weknora-docreader` |
+| `docreader.image.tag` | Image tag | `""` (uses appVersion) |
 
 ### PostgreSQL (ParadeDB)
 
@@ -194,7 +204,7 @@ helm install weknora ./helm \
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `redis.enabled` | Enable Redis | `true` |
+| `redis.enabled` | Deploy bundled Redis and configure the app to require it; `false` uses per-process in-memory streams that are not shared across replicas | `true` |
 | `redis.image.repository` | Image repository | `redis` |
 | `redis.image.tag` | Image tag | `7-alpine` |
 | `redis.persistence.enabled` | Enable persistence | `true` |
@@ -255,11 +265,13 @@ These map to docker-compose profiles:
 
 ### Pod Security
 
-The chart follows CNCF security best practices:
-- Runs as non-root user
-- Read-only root filesystem where possible
-- Drops all capabilities
-- Uses seccomp profiles
+The chart applies the controls supported by the published images:
+
+- Uses the `RuntimeDefault` seccomp profile.
+- Disables privilege escalation for every container.
+- Disables automatic ServiceAccount token mounts at both ServiceAccount and Pod level by default.
+
+The published images currently require writable filesystems and may run as root. Deployments that replace them with non-root-compatible images can add stricter component security contexts through `values.yaml`.
 
 ## Upgrading
 

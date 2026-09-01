@@ -216,7 +216,7 @@ docker compose up -d    # 启动核心服务
 若已有部署并下载了更新的 release：
 
 ```bash
-# 在 .env 中将 WEKNORA_VERSION 设为目标版本（如 0.7.0），或保持 latest
+# 在 .env 中将 WEKNORA_VERSION 设为目标版本（如 v0.7.0），或保持 latest
 docker compose pull     # 拉取与 WEKNORA_VERSION 匹配的镜像
 docker compose up -d    # 用新镜像重建容器
 ```

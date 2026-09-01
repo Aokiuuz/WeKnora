@@ -92,6 +92,7 @@ type RouterParams struct {
 	WeKnoraCloudHandler          *handler.WeKnoraCloudHandler
 	WikiPageHandler              *handler.WikiPageHandler
 	MemoryHandler                *handler.MemoryHandler
+	HealthChecker                *HealthChecker
 }
 
 // NewRouter 创建新的路由
@@ -132,9 +133,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 	r.Use(middleware.ErrorHandler())
 
 	// 健康检查（不需要认证）
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
-	})
+	registerHealthRoutes(r, params.HealthChecker)
 
 	// Swagger API 文档（仅在非生产环境下启用）
 	// 通过 GIN_MODE 环境变量判断：release 模式下禁用 Swagger

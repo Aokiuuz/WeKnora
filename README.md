@@ -239,7 +239,7 @@ Once started, visit **http://localhost** to get started.
 If you already have WeKnora running and downloaded a newer release:
 
 ```bash
-# Set WEKNORA_VERSION in .env to the target release (e.g. 0.7.0), or keep latest
+# Set WEKNORA_VERSION in .env to the target release (e.g. v0.7.0), or keep latest
 docker compose pull     # Pull images matching WEKNORA_VERSION
 docker compose up -d    # Recreate containers with new images
 ```

@@ -488,6 +488,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 
 	// Router configuration
 	logger.Debugf(ctx, "[Container] Registering router and starting task server...")
+	must(container.Provide(router.NewHealthChecker))
 	must(container.Provide(router.NewRouter))
 	if redisAvailable {
 		must(container.Invoke(router.RunAsynqServer))

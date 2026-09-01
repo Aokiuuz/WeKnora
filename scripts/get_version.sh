@@ -14,13 +14,12 @@ if [ -f "VERSION" ]; then
     VERSION=$(cat VERSION | tr -d '\n\r')
 fi
 
-# 获取commit ID
-if [ -n "$GITHUB_SHA" ]; then
-    # GitHub Actions环境
-    COMMIT_ID="${GITHUB_SHA:0:7}"
-elif command -v git >/dev/null 2>&1; then
-    # 本地环境
+# 获取当前构建工作树的 commit ID；显式 checkout tag/SHA 的 CI 任务中，
+# 事件 GITHUB_SHA 可能仍指向触发 workflow_dispatch 的分支。
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     COMMIT_ID=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+elif [ -n "${GITHUB_SHA:-}" ]; then
+    COMMIT_ID="${GITHUB_SHA:0:7}"
 fi
 
 # 获取构建时间

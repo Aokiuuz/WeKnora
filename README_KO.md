@@ -219,7 +219,7 @@ docker compose up -d    # 코어 서비스 시작
 기존 배포가 있고 새 release를 다운로드한 경우:
 
 ```bash
-# .env에서 WEKNORA_VERSION을 대상 버전(예: 0.7.0)으로 설정하거나 latest 유지
+# .env에서 WEKNORA_VERSION을 대상 버전(예: v0.7.0)으로 설정하거나 latest 유지
 docker compose pull     # WEKNORA_VERSION에 맞는 이미지 가져오기
 docker compose up -d    # 새 이미지로 컨테이너 재생성
 ```
