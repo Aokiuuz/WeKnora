@@ -12,6 +12,39 @@ export {
   type EvaluationTaskFilters,
 } from './query'
 
+export interface EvaluationRequestToken {
+  readonly key: string
+  readonly generation: number
+}
+
+export interface EvaluationRequestGate {
+  begin: (key: string) => EvaluationRequestToken
+  isCurrent: (token: EvaluationRequestToken) => boolean
+  invalidate: () => void
+}
+
+/**
+ * Gives each logical request a key and monotonically increasing generation.
+ * A response is applicable only while both values still identify the newest
+ * request owned by that UI surface.
+ */
+export function createEvaluationRequestGate(): EvaluationRequestGate {
+  let generation = 0
+  let currentKey = ''
+
+  return {
+    begin: (key: string) => {
+      currentKey = key
+      return { key, generation: ++generation }
+    },
+    isCurrent: token => token.generation === generation && token.key === currentKey,
+    invalidate: () => {
+      currentKey = ''
+      generation += 1
+    },
+  }
+}
+
 export const EVALUATION_STATUS = {
   pending: 0,
   running: 1,
@@ -302,14 +335,32 @@ export async function compareEvaluationTasks(
   return data
 }
 
-export async function downloadEvaluationArtifact(taskId: string, format: 'json' | 'csv'): Promise<void> {
+export const EVALUATION_EXPORT_TIMEOUT_MS = 10 * 60 * 1000
+
+export interface EvaluationExportOptions {
+  signal?: AbortSignal
+  timeoutMs?: number
+}
+
+export async function downloadEvaluationArtifact(
+  taskId: string,
+  format: 'json' | 'csv',
+  options: EvaluationExportOptions = {},
+): Promise<void> {
   const blob = await getDown(
     `/api/v1/evaluation/tasks/${encodeURIComponent(taskId)}/export?format=${format}`,
+    {
+      signal: options.signal,
+      timeout: options.timeoutMs ?? EVALUATION_EXPORT_TIMEOUT_MS,
+    },
   )
   const objectURL = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = objectURL
-  anchor.download = `evaluation-${taskId.replace(/[^a-zA-Z0-9_-]/g, '_')}.${format}`
-  anchor.click()
-  URL.revokeObjectURL(objectURL)
+  try {
+    const anchor = document.createElement('a')
+    anchor.href = objectURL
+    anchor.download = `evaluation-${taskId.replace(/[^a-zA-Z0-9_-]/g, '_')}.${format}`
+    anchor.click()
+  } finally {
+    URL.revokeObjectURL(objectURL)
+  }
 }

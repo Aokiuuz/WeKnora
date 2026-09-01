@@ -1,5 +1,5 @@
 // src/utils/request.js
-import axios from "axios";
+import axios, { type AxiosRequestConfig } from "axios";
 import { generateRandomString, MAX_FILE_SIZE_MB } from "./index";
 import i18n from '@/i18n'
 import { getApiBaseUrl } from './api-base';
@@ -67,9 +67,75 @@ instance.interceptors.request.use(
   }
 );
 
-// Token刷新标志，防止多个请求同时刷新token
-let isRefreshing = false;
-let failedQueue: Array<{ resolve: Function; reject: Function }> = [];
+interface RefreshWaiter {
+  resolve: (token: string) => void;
+  reject: (error: unknown) => void;
+}
+
+export interface TokenRefreshCoordinator {
+  begin: () => boolean;
+  wait: () => Promise<string>;
+  resolve: (token: string) => void;
+  reject: (error: unknown) => void;
+  finish: () => void;
+  isRefreshing: () => boolean;
+  pendingCount: () => number;
+}
+
+// A single coordinator owns both the refresh state and every request waiting
+// for it, so every terminal path can settle the queue before releasing the lock.
+export function createTokenRefreshCoordinator(): TokenRefreshCoordinator {
+  let refreshing = false;
+  let waiters: RefreshWaiter[] = [];
+
+  const takeWaiters = () => {
+    const pending = waiters;
+    waiters = [];
+    return pending;
+  };
+
+  return {
+    begin: () => {
+      if (refreshing) return false;
+      refreshing = true;
+      return true;
+    },
+    wait: () => new Promise<string>((resolve, reject) => {
+      waiters.push({ resolve, reject });
+    }),
+    resolve: (token: string) => {
+      takeWaiters().forEach(waiter => waiter.resolve(token));
+    },
+    reject: (error: unknown) => {
+      takeWaiters().forEach(waiter => waiter.reject(error));
+    },
+    finish: () => {
+      refreshing = false;
+    },
+    isRefreshing: () => refreshing,
+    pendingCount: () => waiters.length,
+  };
+}
+
+export async function coordinateTokenRefresh(
+  coordinator: TokenRefreshCoordinator,
+  refresh: () => Promise<string>,
+): Promise<string> {
+  if (!coordinator.begin()) return coordinator.wait();
+
+  try {
+    const token = await refresh();
+    coordinator.resolve(token);
+    return token;
+  } catch (error) {
+    coordinator.reject(error);
+    throw error;
+  } finally {
+    coordinator.finish();
+  }
+}
+
+const tokenRefresh = createTokenRefreshCoordinator();
 
 // Share-link endpoints (/auth/invitations/lookup, /auth/register-by-invite)
 // are reachable by anonymous users opening an invite link. A 401 from these
@@ -82,19 +148,6 @@ function isPublicAuthRequest(url?: string): boolean {
   if (!url) return false;
   return PUBLIC_AUTH_PATHS.some(p => url.includes(p));
 }
-
-// 处理队列中的请求
-const processQueue = (error: any, token: string | null = null) => {
-  failedQueue.forEach(({ resolve, reject }) => {
-    if (error) {
-      reject(error);
-    } else {
-      resolve(token);
-    }
-  });
-  
-  failedQueue = [];
-};
 
 function isEmbedPage(): boolean {
   if (typeof window === 'undefined') return false;
@@ -146,70 +199,42 @@ instance.interceptors.response.use(
 
     // 如果是401错误且不是刷新token的请求，尝试刷新token
     if (error.response.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/auth/refresh')) {
-      if (isRefreshing) {
-        // 如果正在刷新token，将请求加入队列
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        }).then(token => {
-          originalRequest.headers['Authorization'] = 'Bearer ' + token;
-          return instance(originalRequest);
-        }).catch(err => {
-          return Promise.reject(err);
-        });
-      }
-      
       originalRequest._retry = true;
-      isRefreshing = true;
-      
-      const refreshToken = localStorage.getItem('weknora_refresh_token');
-      
-      if (refreshToken) {
-        try {
+
+      try {
+        const token = await coordinateTokenRefresh(tokenRefresh, async () => {
+          const refreshToken = localStorage.getItem('weknora_refresh_token');
+          if (!refreshToken) throw { message: t('error.pleaseRelogin') };
+
           // 动态导入refresh token API
           const { refreshToken: refreshTokenAPI } = await import('../api/auth/index');
           const response = await refreshTokenAPI(refreshToken);
-          
+
           if (response.success && response.data) {
             const { token, refreshToken: newRefreshToken } = response.data;
-            
+
             // 更新localStorage中的token
             localStorage.setItem('weknora_token', token);
             localStorage.setItem('weknora_refresh_token', newRefreshToken);
-            
-            // 更新请求头
-            originalRequest.headers['Authorization'] = 'Bearer ' + token;
-            
-            // 处理队列中的请求
-            processQueue(null, token);
-            
-            return instance(originalRequest);
-          } else {
-            throw new Error(response.message || t('error.tokenRefreshFailed'));
+
+            return token;
           }
-        } catch (refreshError) {
-          // 刷新失败，清除所有token并跳转到登录页
-          localStorage.removeItem('weknora_token');
-          localStorage.removeItem('weknora_refresh_token');
-          localStorage.removeItem('weknora_user');
-          localStorage.removeItem('weknora_tenant');
-          
-          processQueue(refreshError, null);
-          
-          redirectToLogin();
-          
-          return Promise.reject(refreshError);
-        } finally {
-          isRefreshing = false;
-        }
-      } else {
-        // 没有refresh token，直接跳转到登录页
+
+          throw new Error(response.message || t('error.tokenRefreshFailed'));
+        });
+
+        originalRequest.headers['Authorization'] = 'Bearer ' + token;
+        return instance(originalRequest);
+      } catch (refreshError) {
+        // 刷新失败或缺少 refresh token 时，清除凭据并拒绝所有等待请求。
         localStorage.removeItem('weknora_token');
+        localStorage.removeItem('weknora_refresh_token');
         localStorage.removeItem('weknora_user');
         localStorage.removeItem('weknora_tenant');
-        
+
         redirectToLogin();
-        
-        return Promise.reject({ message: t('error.pleaseRelogin') });
+
+        return Promise.reject(refreshError);
       }
     }
     
@@ -250,8 +275,11 @@ export function get<T = any>(url: string, config?: any): Promise<T> {
   return instance.get<T>(url, config) as unknown as Promise<T>;
 }
 
-export async function getDown(url: string): Promise<Blob> {
+export type DownloadRequestConfig = Pick<AxiosRequestConfig, 'headers' | 'signal' | 'timeout'>;
+
+export async function getDown(url: string, config: DownloadRequestConfig = {}): Promise<Blob> {
   const res = await instance.get<Blob>(url, {
+    ...config,
     responseType: "blob",
   }) as unknown as Blob;
   return res

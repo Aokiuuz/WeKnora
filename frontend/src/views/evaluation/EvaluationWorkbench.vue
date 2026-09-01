@@ -51,7 +51,7 @@
         <button type="button" class="button button--quiet" @click="resetFilters">
           {{ t('evaluation.reset') }}
         </button>
-        <button type="submit" class="button button--primary" :disabled="listLoading">
+        <button type="submit" class="button button--primary">
           {{ t('evaluation.apply') }}
         </button>
       </div>
@@ -76,7 +76,7 @@
           </div>
           <label v-if="selectedTaskIds.length >= 2" class="baseline-select">
             <span>{{ t('evaluation.baseline') }}</span>
-            <select v-model="baselineTaskId">
+            <select v-model="baselineTaskId" @change="invalidateComparisonSelection">
               <option v-for="taskId in selectedTaskIds" :key="taskId" :value="taskId">
                 {{ shortTaskId(taskId) }}
               </option>
@@ -279,6 +279,14 @@
               >
                 <t-icon name="download" /> CSV
               </button>
+              <button
+                v-if="exporting"
+                type="button"
+                class="button button--quiet button--compact"
+                @click="cancelDownload"
+              >
+                {{ t('common.cancel') }}
+              </button>
             </div>
           </div>
 
@@ -456,7 +464,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 
@@ -464,6 +472,7 @@ import {
   EVALUATION_STATUS,
   appendEvaluationHumanRating,
   compareEvaluationTasks,
+  createEvaluationRequestGate,
   downloadEvaluationArtifact,
   getEvaluationDetail,
   listEvaluationQuestions,
@@ -477,6 +486,7 @@ import {
   type EvaluationHumanRatingRevision,
   type EvaluationTask,
   type EvaluationTaskFilters,
+  type EvaluationRequestToken,
 } from '@/api/evaluation'
 import { useAuthStore } from '@/stores/auth'
 
@@ -512,6 +522,14 @@ const comparisonLoading = ref(false)
 const exporting = ref<'json' | 'csv' | ''>('')
 const labelDraft = ref('')
 const savingLabels = ref(false)
+const taskListRequests = createEvaluationRequestGate()
+const taskDetailRequests = createEvaluationRequestGate()
+const questionRequests = createEvaluationRequestGate()
+const comparisonRequests = createEvaluationRequestGate()
+let activeExportController: AbortController | null = null
+let labelSaveSequence = 0
+let activeLabelSaveToken: { taskId: string; sequence: number } | null = null
+const latestLabelSaveByTask = new Map<string, number>()
 
 interface HumanRatingPanelState {
   open: boolean
@@ -560,24 +578,27 @@ function filterInput(cursor = ''): EvaluationTaskFilters {
 }
 
 async function loadTasks(append = false) {
-  if (listLoading.value) return
+  if (append && listLoading.value) return
+  const input = filterInput(append ? nextCursor.value : '')
+  const request = taskListRequests.begin(JSON.stringify(input))
   listLoading.value = true
   listError.value = ''
   try {
-    const page = await listEvaluationTasks(filterInput(append ? nextCursor.value : ''))
+    const page = await listEvaluationTasks(input)
+    if (!taskListRequests.isCurrent(request)) return
     tasks.value = append ? [...tasks.value, ...page.items] : page.items
     nextCursor.value = page.next_cursor
   } catch (error) {
-    listError.value = errorMessage(error)
+    if (taskListRequests.isCurrent(request)) listError.value = errorMessage(error)
   } finally {
-    listLoading.value = false
+    if (taskListRequests.isCurrent(request)) listLoading.value = false
   }
 }
 
 function applyFilters() {
   selectedTaskIds.value = []
   baselineTaskId.value = ''
-  comparisonResult.value = null
+  invalidateComparisonSelection()
   void loadTasks(false)
 }
 
@@ -590,44 +611,64 @@ function resetFilters() {
 
 async function openTask(task: EvaluationTask) {
   if (activeTaskId.value === task.id && detail.value) return
+  const detailRequest = taskDetailRequests.begin(task.id)
+  const questionRequest = questionRequests.begin(task.id)
   activeTaskId.value = task.id
   comparisonResult.value = null
   detailLoading.value = true
   detailError.value = ''
+  detail.value = null
+  activeLabelSaveToken = null
+  savingLabels.value = false
   activeTab.value = 'overview'
   questions.value = []
+  questionLoading.value = false
   for (const key of Object.keys(humanRatingPanels)) delete humanRatingPanels[Number(key)]
   questionCursor.value = ''
   const requestedTaskId = task.id
   try {
     const result = await getEvaluationDetail(task.id)
-    if (activeTaskId.value !== requestedTaskId) return
+    if (!taskDetailRequests.isCurrent(detailRequest) || activeTaskId.value !== requestedTaskId) return
     result.task.labels = task.labels ?? []
     detail.value = result
     labelDraft.value = result.task.labels.join(', ')
   } catch (error) {
-    if (activeTaskId.value === requestedTaskId) detailError.value = errorMessage(error)
+    if (taskDetailRequests.isCurrent(detailRequest) && activeTaskId.value === requestedTaskId) {
+      detailError.value = errorMessage(error)
+    }
   } finally {
-    if (activeTaskId.value === requestedTaskId) detailLoading.value = false
+    if (taskDetailRequests.isCurrent(detailRequest) && activeTaskId.value === requestedTaskId) {
+      detailLoading.value = false
+    }
   }
-  if (activeTaskId.value === requestedTaskId) void loadQuestions(false)
+  if (taskDetailRequests.isCurrent(detailRequest) && activeTaskId.value === requestedTaskId) {
+    void loadQuestions(false, questionRequest)
+  }
 }
 
-async function loadQuestions(append: boolean) {
-  if (!activeTaskId.value || questionLoading.value) return
+async function loadQuestions(append: boolean, initialRequest?: EvaluationRequestToken) {
+  const requestedTaskId = activeTaskId.value
+  if (!requestedTaskId || (append && questionLoading.value)) return
+  const request = initialRequest ?? questionRequests.begin(requestedTaskId)
+  const cursor = append ? questionCursor.value : ''
   questionLoading.value = true
   try {
     const page = await listEvaluationQuestions(
-      activeTaskId.value,
-      append ? questionCursor.value : '',
+      requestedTaskId,
+      cursor,
       100,
     )
+    if (!questionRequests.isCurrent(request) || activeTaskId.value !== requestedTaskId) return
     questions.value = append ? [...questions.value, ...page.items] : page.items
     questionCursor.value = page.next_cursor
   } catch (error) {
-    MessagePlugin.error(errorMessage(error))
+    if (questionRequests.isCurrent(request) && activeTaskId.value === requestedTaskId) {
+      MessagePlugin.error(errorMessage(error))
+    }
   } finally {
-    questionLoading.value = false
+    if (questionRequests.isCurrent(request) && activeTaskId.value === requestedTaskId) {
+      questionLoading.value = false
+    }
   }
 }
 
@@ -646,6 +687,17 @@ function onComparisonCheckbox(taskId: string, event: Event) {
   if (!selectedTaskIds.value.includes(baselineTaskId.value)) {
     baselineTaskId.value = selectedTaskIds.value[0] ?? ''
   }
+  invalidateComparisonSelection()
+}
+
+function comparisonSelectionSignature(taskIds = selectedTaskIds.value, baseline = baselineTaskId.value) {
+  return JSON.stringify({ taskIds, baseline: baseline || taskIds[0] || '' })
+}
+
+function invalidateComparisonSelection() {
+  comparisonRequests.invalidate()
+  comparisonResult.value = null
+  comparisonLoading.value = false
 }
 
 async function runComparison() {
@@ -653,47 +705,79 @@ async function runComparison() {
     MessagePlugin.warning(t('evaluation.selectAtLeastTwo'))
     return
   }
+  const taskIds = [...selectedTaskIds.value]
+  const baseline = baselineTaskId.value || taskIds[0]
+  const signature = comparisonSelectionSignature(taskIds, baseline)
+  const request = comparisonRequests.begin(signature)
   comparisonLoading.value = true
+  comparisonResult.value = null
   try {
-    comparisonResult.value = await compareEvaluationTasks({
-      task_ids: selectedTaskIds.value,
-      baseline_task_id: baselineTaskId.value || selectedTaskIds.value[0],
+    const result = await compareEvaluationTasks({
+      task_ids: taskIds,
+      baseline_task_id: baseline,
     })
+    if (!comparisonRequests.isCurrent(request) || comparisonSelectionSignature() !== signature) return
+    comparisonResult.value = result
   } catch (error) {
-    MessagePlugin.error(errorMessage(error))
+    if (comparisonRequests.isCurrent(request) && comparisonSelectionSignature() === signature) {
+      MessagePlugin.error(errorMessage(error))
+    }
   } finally {
-    comparisonLoading.value = false
+    if (comparisonRequests.isCurrent(request) && comparisonSelectionSignature() === signature) {
+      comparisonLoading.value = false
+    }
   }
 }
 
 async function saveLabels() {
   if (!detail.value) return
+  const taskId = detail.value.task.id
+  const labels = labelDraft.value.split(',').map(label => label.trim()).filter(Boolean)
+  const token = { taskId, sequence: ++labelSaveSequence }
+  latestLabelSaveByTask.set(taskId, token.sequence)
+  activeLabelSaveToken = token
   savingLabels.value = true
   try {
-    const labels = labelDraft.value.split(',').map(label => label.trim()).filter(Boolean)
-    const saved = await replaceEvaluationLabels(detail.value.task.id, labels)
-    detail.value.task.labels = saved
-    const listed = tasks.value.find(task => task.id === detail.value?.task.id)
+    const saved = await replaceEvaluationLabels(taskId, labels)
+    if (latestLabelSaveByTask.get(taskId) !== token.sequence) return
+    const listed = tasks.value.find(task => task.id === taskId)
     if (listed) listed.labels = saved
-    labelDraft.value = saved.join(', ')
-    MessagePlugin.success(t('evaluation.labelsSaved'))
+    if (activeTaskId.value === taskId && detail.value?.task.id === taskId) {
+      detail.value.task.labels = saved
+      labelDraft.value = saved.join(', ')
+      MessagePlugin.success(t('evaluation.labelsSaved'))
+    }
   } catch (error) {
-    MessagePlugin.error(errorMessage(error))
+    if (latestLabelSaveByTask.get(taskId) === token.sequence && activeTaskId.value === taskId) {
+      MessagePlugin.error(errorMessage(error))
+    }
   } finally {
-    savingLabels.value = false
+    if (activeLabelSaveToken === token) {
+      activeLabelSaveToken = null
+      savingLabels.value = false
+    }
   }
 }
 
 async function download(format: 'json' | 'csv') {
   if (!detail.value || exporting.value) return
+  const controller = new AbortController()
+  activeExportController = controller
   exporting.value = format
   try {
-    await downloadEvaluationArtifact(detail.value.task.id, format)
+    await downloadEvaluationArtifact(detail.value.task.id, format, { signal: controller.signal })
   } catch (error) {
-    MessagePlugin.error(errorMessage(error))
+    if (!controller.signal.aborted) MessagePlugin.error(errorMessage(error))
   } finally {
-    exporting.value = ''
+    if (activeExportController === controller) {
+      activeExportController = null
+      exporting.value = ''
+    }
   }
+}
+
+function cancelDownload() {
+  activeExportController?.abort()
 }
 
 function statusMeta(status: number) {
@@ -805,6 +889,13 @@ async function saveHumanRating(sampleIndex: number) {
 
 onMounted(() => {
   void loadTasks(false)
+})
+
+onBeforeUnmount(() => {
+  taskListRequests.invalidate()
+  taskDetailRequests.invalidate()
+  questionRequests.invalidate()
+  activeExportController?.abort()
 })
 </script>
 
