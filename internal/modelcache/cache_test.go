@@ -207,7 +207,7 @@ func TestEmbeddingCacheSingleflightIsSharedAcrossWrappers(t *testing.T) {
 	assert.Len(t, provider.batchInputs, 1)
 }
 
-func TestEmbeddingModelFingerprintTracksBehaviorHeadersWithoutTrackingIdentity(t *testing.T) {
+func TestEmbeddingModelFingerprintUsesExplicitBehaviorRevision(t *testing.T) {
 	model := &types.Model{
 		ID: "embedding-1", Name: "fixture", Source: types.ModelSourceOpenAI,
 		Parameters: types.ModelParameters{
@@ -219,10 +219,11 @@ func TestEmbeddingModelFingerprintTracksBehaviorHeadersWithoutTrackingIdentity(t
 				"X-Request-ID":  "request-1",
 			},
 			ExtraConfig: map[string]string{
-				"tokenizer":     "cl100k_base",
-				"max_tokens":    "2048",
-				"session_token": "secret-1",
-				"openaiApiKey":  "secret-2",
+				"behavior_revision": "route-v1",
+				"tokenizer":         "cl100k_base",
+				"max_tokens":        "2048",
+				"session_token":     "secret-1",
+				"openaiApiKey":      "secret-2",
 			},
 		},
 	}
@@ -238,19 +239,26 @@ func TestEmbeddingModelFingerprintTracksBehaviorHeadersWithoutTrackingIdentity(t
 	}
 	identityChanged.Parameters.ExtraConfig = map[string]string{
 		"tokenizer": "cl100k_base", "max_tokens": "2048",
-		"session_token": "secret-3", "openaiApiKey": "secret-4",
+		"behavior_revision": "route-v1", "session_token": "secret-3", "openaiApiKey": "secret-4",
 	}
 	require.Equal(t, baseline, EmbeddingModelFingerprint(&identityChanged))
 
-	routeChanged := identityChanged
-	routeChanged.Parameters = identityChanged.Parameters
-	routeChanged.Parameters.CustomHeaders = map[string]string{"X-Model-Route": "green"}
-	require.NotEqual(t, baseline, EmbeddingModelFingerprint(&routeChanged))
+	headerChanged := identityChanged
+	headerChanged.Parameters = identityChanged.Parameters
+	headerChanged.Parameters.CustomHeaders = map[string]string{"X-Model-Route": "another-route"}
+	require.Equal(t, baseline, EmbeddingModelFingerprint(&headerChanged))
+
+	behaviorChanged := identityChanged
+	behaviorChanged.Parameters = identityChanged.Parameters
+	behaviorChanged.Parameters.ExtraConfig = map[string]string{
+		"behavior_revision": "route-v2", "tokenizer": "cl100k_base", "max_tokens": "2048",
+	}
+	require.NotEqual(t, baseline, EmbeddingModelFingerprint(&behaviorChanged))
 
 	tokenizerChanged := identityChanged
 	tokenizerChanged.Parameters = identityChanged.Parameters
 	tokenizerChanged.Parameters.ExtraConfig = map[string]string{
-		"tokenizer": "o200k_base", "max_tokens": "2048",
+		"behavior_revision": "route-v1", "tokenizer": "o200k_base", "max_tokens": "2048",
 		"session_token": "secret-3", "openaiApiKey": "secret-4",
 	}
 	require.NotEqual(t, baseline, EmbeddingModelFingerprint(&tokenizerChanged))
@@ -258,7 +266,7 @@ func TestEmbeddingModelFingerprintTracksBehaviorHeadersWithoutTrackingIdentity(t
 	maxTokensChanged := identityChanged
 	maxTokensChanged.Parameters = identityChanged.Parameters
 	maxTokensChanged.Parameters.ExtraConfig = map[string]string{
-		"tokenizer": "cl100k_base", "max_tokens": "4096",
+		"behavior_revision": "route-v1", "tokenizer": "cl100k_base", "max_tokens": "4096",
 		"session_token": "secret-3", "openaiApiKey": "secret-4",
 	}
 	require.NotEqual(t, baseline, EmbeddingModelFingerprint(&maxTokensChanged))

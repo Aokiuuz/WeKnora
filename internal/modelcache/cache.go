@@ -324,18 +324,17 @@ func EmbeddingModelFingerprint(model *types.Model) string {
 	}
 	behavior := types.EvaluationModelBehaviorConfigFrom(model)
 	encoded, _ := json.Marshal(struct {
-		ID                   string                    `json:"id"`
-		Name                 string                    `json:"name"`
-		Source               types.ModelSource         `json:"source"`
-		Provider             string                    `json:"provider"`
-		BaseURL              string                    `json:"base_url"`
-		Embedding            types.EmbeddingParameters `json:"embedding"`
-		Extra                map[string]string         `json:"extra"`
-		BehaviorHeaderSHA256 map[string]string         `json:"behavior_header_sha256"`
+		ID        string                    `json:"id"`
+		Name      string                    `json:"name"`
+		Source    types.ModelSource         `json:"source"`
+		Provider  string                    `json:"provider"`
+		BaseURL   string                    `json:"base_url"`
+		Embedding types.EmbeddingParameters `json:"embedding"`
+		Extra     map[string]string         `json:"extra"`
 	}{
 		ID: model.ID, Name: model.Name, Source: model.Source, Provider: behavior.Provider,
 		BaseURL: behavior.BaseURL, Embedding: behavior.EmbeddingParameters,
-		Extra: behavior.ExtraConfig, BehaviorHeaderSHA256: behavior.BehaviorHeaderSHA256,
+		Extra: behavior.ExtraConfig,
 	})
 	return sha256Hex(encoded)
 }

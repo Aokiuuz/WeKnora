@@ -24,11 +24,12 @@ func evaluationModelFingerprintFixture() *Model {
 				"X-Model-Route": "blue",
 			},
 			ExtraConfig: map[string]string{
-				"organization":  "org-1",
-				"session_token": "drop-me",
-				"openaiApiKey":  "drop-me-too",
-				"tokenizer":     "cl100k_base",
-				"max_tokens":    "2048",
+				"organization":      "org-1",
+				"behavior_revision": "route-v1",
+				"session_token":     "drop-me",
+				"openaiApiKey":      "drop-me-too",
+				"tokenizer":         "cl100k_base",
+				"max_tokens":        "2048",
 			},
 			SupportsVision: true,
 			MaxConcurrency: 4,
@@ -36,7 +37,7 @@ func evaluationModelFingerprintFixture() *Model {
 	}
 }
 
-func TestEvaluationModelConfigSHA256ExcludesSecrets(t *testing.T) {
+func TestEvaluationModelConfigSHA256ExcludesCredentialsAndHeaders(t *testing.T) {
 	model := evaluationModelFingerprintFixture()
 	baseline := EvaluationModelConfigSHA256(model)
 
@@ -46,17 +47,21 @@ func TestEvaluationModelConfigSHA256ExcludesSecrets(t *testing.T) {
 	rotated.Parameters.AppSecret = "new-secret"
 	rotated.Parameters.ExtraConfig["session_token"] = "rotated-session"
 	rotated.Parameters.ExtraConfig["openaiApiKey"] = "rotated-api-key"
-	rotated.Parameters.CustomHeaders["X-Tenant-Auth"] = "bearer other"
-	rotated.Parameters.CustomHeaders["X-Request-ID"] = "request-2"
+	rotated.Parameters.CustomHeaders = map[string]string{
+		"X-Tenant-Auth": "bearer other",
+		"X-Request-ID":  "request-2",
+		"X-Model-Route": "green",
+	}
 	if got := EvaluationModelConfigSHA256(rotated); got != baseline {
-		t.Fatalf("fingerprint changed after credential rotation: %s != %s", got, baseline)
+		t.Fatalf("fingerprint changed after credential or request-header rotation: %s != %s", got, baseline)
 	}
 
 	// The fingerprint is stable regardless of the ExtraConfig assembly order.
 	reordered := evaluationModelFingerprintFixture()
 	reordered.Parameters.ExtraConfig = map[string]string{
 		"max_tokens": "2048", "tokenizer": "cl100k_base",
-		"session_token": "drop-me", "openaiApiKey": "drop-me-too", "organization": "org-1",
+		"behavior_revision": "route-v1", "session_token": "drop-me",
+		"openaiApiKey": "drop-me-too", "organization": "org-1",
 	}
 	if got := EvaluationModelConfigSHA256(reordered); got != baseline {
 		t.Fatal("fingerprint must not depend on map assembly order")
@@ -77,7 +82,7 @@ func TestEvaluationModelConfigSHA256CoversBehavior(t *testing.T) {
 		{"extra config", func(m *Model) { m.Parameters.ExtraConfig["organization"] = "org-2" }},
 		{"tokenizer config", func(m *Model) { m.Parameters.ExtraConfig["tokenizer"] = "o200k_base" }},
 		{"max tokens config", func(m *Model) { m.Parameters.ExtraConfig["max_tokens"] = "4096" }},
-		{"behavior routing header", func(m *Model) { m.Parameters.CustomHeaders["X-Model-Route"] = "green" }},
+		{"behavior revision", func(m *Model) { m.Parameters.ExtraConfig["behavior_revision"] = "route-v2" }},
 		{"embedding dimension", func(m *Model) { m.Parameters.EmbeddingParameters.Dimension = 1024 }},
 	}
 	for _, tc := range cases {
@@ -88,25 +93,6 @@ func TestEvaluationModelConfigSHA256CoversBehavior(t *testing.T) {
 				t.Fatalf("fingerprint did not change after %s mutation", tc.name)
 			}
 		})
-	}
-}
-
-func TestModelBehaviorHeaderSHA256ExcludesIdentityAndHidesRoutingValues(t *testing.T) {
-	digests := ModelBehaviorHeaderSHA256(map[string]string{
-		"Authorization":             "Bearer credential",
-		"Ocp-Apim-Subscription-Key": "gateway credential",
-		"X-Tenant-Auth":             "tenant credential",
-		"Traceparent":               "00-trace-span-01",
-		"X-Request-ID":              "request-1",
-		"X-Client-Request-ID":       "request-2",
-		"X-Model-Route":             "blue",
-	})
-	if len(digests) != 1 {
-		t.Fatalf("behavior header digests = %#v, want one routing header", digests)
-	}
-	digest := digests["x-model-route"]
-	if !strings.HasPrefix(digest, "sha256:") || strings.Contains(digest, "blue") {
-		t.Fatalf("routing header digest = %q, want irreversible SHA-256 value", digest)
 	}
 }
 
