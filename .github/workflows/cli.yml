@@ -8,10 +8,12 @@ on:
     branches: [main]
     paths:
       - 'cli/**'
+      - 'client/**'
       - '.github/workflows/cli.yml'
   pull_request:
     paths:
       - 'cli/**'
+      - 'client/**'
       - '.github/workflows/cli.yml'
 
 defaults:
