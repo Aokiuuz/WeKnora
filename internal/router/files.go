@@ -743,6 +743,14 @@ func presignedFileHandler(tenantService interfaces.TenantService, absDir string,
 			c.JSON(http.StatusForbidden, gin.H{"error": "invalid or expired signature"})
 			return
 		}
+		if err := secutils.ValidateStoragePathTenant(filePath, tenantID); err != nil {
+			logger.Warnf(
+				ctx,
+				"[Router] /files/presigned tenant/path mismatch: client_ip=%s tenant_id=%d file_path=%q err=%v",
+				clientIP, tenantID, filePath, err)
+			c.JSON(http.StatusForbidden, gin.H{"error": "file path is outside the signed workspace"})
+			return
+		}
 
 		tenant, err := tenantService.GetTenantByID(ctx, tenantID)
 		if err != nil {
@@ -807,6 +815,14 @@ func servePresignedPreview(r *gin.Engine, cfg *config.Config, storageResolver in
 			tenant, _ := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
 			if tenant == nil {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: workspace context missing"})
+				return
+			}
+			if err := secutils.ValidateStoragePathTenant(filePath, tenant.ID); err != nil {
+				logger.Warnf(
+					ctx,
+					"[Router] presigned preview denied path outside workspace: tenant_id=%d file_path=%q err=%v",
+					tenant.ID, filePath, err)
+				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: file path not accessible"})
 				return
 			}
 
