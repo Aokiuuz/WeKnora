@@ -12,7 +12,7 @@ All notable changes to this project will be documented in this file.
 ### Evaluation and observability
 
 - Add MAP and graded NDCG v2 metrics with complete relevance denominators and frozen metric-plan identities.
-- Verify successful evaluation rows, observations, hashes and aggregate recomputation before export or comparison.
+- Publish each evaluation question result and its task counter in one transaction, require bounded unique sample indices with an exact counter step, and allow Success only when both `finished` and the persisted result-row count equal `total`.
 - Make strict model-stream completion atomic with model-call ledger persistence and account for started calls explicitly.
 
 ### Reliability and delivery
