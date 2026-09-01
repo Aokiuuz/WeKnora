@@ -81,6 +81,9 @@ func TestModelObservabilityRepositoryRejectsOverlappingPriceVersions(t *testing.
 	require.NoError(t, err)
 	require.Len(t, prices, 1)
 	assert.Equal(t, "USD", prices[0].Currency)
+	modelPriceScopeLocks.Lock()
+	defer modelPriceScopeLocks.Unlock()
+	assert.Empty(t, modelPriceScopeLocks.values)
 }
 
 func TestModelObservabilityRepositoryRequiresASCIICurrencyCode(t *testing.T) {

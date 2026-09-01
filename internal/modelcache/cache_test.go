@@ -206,3 +206,60 @@ func TestEmbeddingCacheSingleflightIsSharedAcrossWrappers(t *testing.T) {
 	defer provider.mu.Unlock()
 	assert.Len(t, provider.batchInputs, 1)
 }
+
+func TestEmbeddingModelFingerprintTracksBehaviorHeadersWithoutTrackingIdentity(t *testing.T) {
+	model := &types.Model{
+		ID: "embedding-1", Name: "fixture", Source: types.ModelSourceOpenAI,
+		Parameters: types.ModelParameters{
+			Provider: "openai",
+			BaseURL:  "https://user:password@api.example.test/v1",
+			CustomHeaders: map[string]string{
+				"X-Model-Route": "blue",
+				"X-Tenant-Auth": "credential-1",
+				"X-Request-ID":  "request-1",
+			},
+			ExtraConfig: map[string]string{
+				"tokenizer":     "cl100k_base",
+				"max_tokens":    "2048",
+				"session_token": "secret-1",
+				"openaiApiKey":  "secret-2",
+			},
+		},
+	}
+	baseline := EmbeddingModelFingerprint(model)
+
+	identityChanged := *model
+	identityChanged.Parameters = model.Parameters
+	identityChanged.Parameters.BaseURL = "https://other:new-password@api.example.test/v1"
+	identityChanged.Parameters.CustomHeaders = map[string]string{
+		"X-Model-Route": "blue",
+		"X-Tenant-Auth": "credential-2",
+		"X-Request-ID":  "request-2",
+	}
+	identityChanged.Parameters.ExtraConfig = map[string]string{
+		"tokenizer": "cl100k_base", "max_tokens": "2048",
+		"session_token": "secret-3", "openaiApiKey": "secret-4",
+	}
+	require.Equal(t, baseline, EmbeddingModelFingerprint(&identityChanged))
+
+	routeChanged := identityChanged
+	routeChanged.Parameters = identityChanged.Parameters
+	routeChanged.Parameters.CustomHeaders = map[string]string{"X-Model-Route": "green"}
+	require.NotEqual(t, baseline, EmbeddingModelFingerprint(&routeChanged))
+
+	tokenizerChanged := identityChanged
+	tokenizerChanged.Parameters = identityChanged.Parameters
+	tokenizerChanged.Parameters.ExtraConfig = map[string]string{
+		"tokenizer": "o200k_base", "max_tokens": "2048",
+		"session_token": "secret-3", "openaiApiKey": "secret-4",
+	}
+	require.NotEqual(t, baseline, EmbeddingModelFingerprint(&tokenizerChanged))
+
+	maxTokensChanged := identityChanged
+	maxTokensChanged.Parameters = identityChanged.Parameters
+	maxTokensChanged.Parameters.ExtraConfig = map[string]string{
+		"tokenizer": "cl100k_base", "max_tokens": "4096",
+		"session_token": "secret-3", "openaiApiKey": "secret-4",
+	}
+	require.NotEqual(t, baseline, EmbeddingModelFingerprint(&maxTokensChanged))
+}

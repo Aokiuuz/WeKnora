@@ -25,6 +25,7 @@ func NewModelStatisticsRepository(db *gorm.DB) modelstats.Store {
 type modelUsageRow struct {
 	ModelID                  string
 	CallCount                int64
+	StartedCalls             int64
 	SuccessCalls             int64
 	ErrorCalls               int64
 	CanceledCalls            int64
@@ -81,11 +82,12 @@ func (r *modelStatisticsRepository) QueryModelUsage(
 	err := base.Select(`
 		model_id,
 		COUNT(*) AS call_count,
+		SUM(CASE WHEN status = 'started' THEN 1 ELSE 0 END) AS started_calls,
 		SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success_calls,
 		SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS error_calls,
 		SUM(CASE WHEN status = 'canceled' THEN 1 ELSE 0 END) AS canceled_calls,
 		SUM(CASE WHEN total_tokens IS NOT NULL THEN 1 ELSE 0 END) AS usage_reported_calls,
-		SUM(CASE WHEN total_tokens IS NULL THEN 1 ELSE 0 END) AS usage_unreported_calls,
+		SUM(CASE WHEN status <> 'started' AND total_tokens IS NULL THEN 1 ELSE 0 END) AS usage_unreported_calls,
 		SUM(CASE WHEN accounting_complete THEN 1 ELSE 0 END) AS accounting_complete_calls,
 		SUM(CASE WHEN total_tokens IS NOT NULL AND cost_microunits IS NULL THEN 1 ELSE 0 END) AS unpriced_calls,
 		COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
@@ -104,8 +106,9 @@ func (r *modelStatisticsRepository) QueryModelUsage(
 	for _, row := range usageRows {
 		observedProvider := row.ProviderCacheReadTokens + row.ProviderCacheMissTokens
 		stat := &types.ModelUsageStatistics{
-			ModelID: row.ModelID, CallCount: row.CallCount, SuccessCalls: row.SuccessCalls,
-			ErrorCalls: row.ErrorCalls, CanceledCalls: row.CanceledCalls,
+			ModelID: row.ModelID, CallCount: row.CallCount, StartedCalls: row.StartedCalls,
+			SuccessCalls: row.SuccessCalls,
+			ErrorCalls:   row.ErrorCalls, CanceledCalls: row.CanceledCalls,
 			UsageReportedCalls: row.UsageReportedCalls, UsageUnreportedCalls: row.UsageUnreportedCalls,
 			AccountingCompleteCalls: row.AccountingCompleteCalls, UnpricedCalls: row.UnpricedCalls,
 			PromptTokens: row.PromptTokens, CompletionTokens: row.CompletionTokens, TotalTokens: row.TotalTokens,

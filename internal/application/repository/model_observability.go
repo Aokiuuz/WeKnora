@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Tencent/WeKnora/internal/modelobs"
@@ -14,6 +17,16 @@ import (
 )
 
 type modelObservabilityRepository struct{ db *gorm.DB }
+
+type modelPriceScopeLock struct {
+	mutex sync.Mutex
+	users int
+}
+
+var modelPriceScopeLocks = struct {
+	sync.Mutex
+	values map[string]*modelPriceScopeLock
+}{values: make(map[string]*modelPriceScopeLock)}
 
 // NewModelObservabilityRepository creates the model call ledger and pricing store.
 func NewModelObservabilityRepository(db *gorm.DB) modelobs.Store {
@@ -149,7 +162,15 @@ func (r *modelObservabilityRepository) CreateModelPrice(
 	} else {
 		price.CreatedAt = price.CreatedAt.UTC()
 	}
+	scope := strconv.FormatUint(price.TenantID, 10) + "\x00" + price.ModelID
+	if r.db.Name() != "postgres" {
+		release := acquireModelPriceScopeLock(scope)
+		defer release()
+	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockModelPriceScope(tx, scope); err != nil {
+			return err
+		}
 		query := tx.Model(&types.ModelPriceVersion{}).
 			Where("tenant_id = ? AND model_id = ?", price.TenantID, price.ModelID).
 			Where("valid_to IS NULL OR valid_to > ?", price.ValidFrom)
@@ -168,6 +189,40 @@ func (r *modelObservabilityRepository) CreateModelPrice(
 		}
 		return nil
 	})
+}
+
+func acquireModelPriceScopeLock(scope string) func() {
+	modelPriceScopeLocks.Lock()
+	entry := modelPriceScopeLocks.values[scope]
+	if entry == nil {
+		entry = &modelPriceScopeLock{}
+		modelPriceScopeLocks.values[scope] = entry
+	}
+	entry.users++
+	modelPriceScopeLocks.Unlock()
+
+	entry.mutex.Lock()
+	return func() {
+		entry.mutex.Unlock()
+		modelPriceScopeLocks.Lock()
+		entry.users--
+		if entry.users == 0 {
+			delete(modelPriceScopeLocks.values, scope)
+		}
+		modelPriceScopeLocks.Unlock()
+	}
+}
+
+func lockModelPriceScope(tx *gorm.DB, scope string) error {
+	if tx.Name() != "postgres" {
+		return nil
+	}
+	hasher := fnv.New64a()
+	_, _ = hasher.Write([]byte(scope))
+	if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", int64(hasher.Sum64())).Error; err != nil {
+		return fmt.Errorf("lock model price validity scope: %w", err)
+	}
+	return nil
 }
 
 func isCurrencyCode(value string) bool {

@@ -80,6 +80,7 @@ type ModelLatencyStatistics struct {
 type ModelUsageStatistics struct {
 	ModelID                 string                     `json:"model_id"`
 	CallCount               int64                      `json:"call_count"`
+	StartedCalls            int64                      `json:"started_calls"`
 	SuccessCalls            int64                      `json:"success_calls"`
 	ErrorCalls              int64                      `json:"error_calls"`
 	CanceledCalls           int64                      `json:"canceled_calls"`

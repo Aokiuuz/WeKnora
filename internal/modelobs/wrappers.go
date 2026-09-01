@@ -3,7 +3,9 @@ package modelobs
 import (
 	"context"
 	"errors"
+	"fmt"
 
+	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/asr"
 	"github.com/Tencent/WeKnora/internal/models/chat"
 	"github.com/Tencent/WeKnora/internal/models/embedding"
@@ -11,6 +13,26 @@ import (
 	"github.com/Tencent/WeKnora/internal/models/vlm"
 	"github.com/Tencent/WeKnora/internal/types"
 )
+
+func finishProviderCall(
+	ctx context.Context,
+	call *activeCall,
+	strict bool,
+	status string,
+	providerErr error,
+	usage *types.TokenUsage,
+) error {
+	finishErr := call.finish(ctx, status, providerErr, usage)
+	if finishErr == nil {
+		return providerErr
+	}
+	if strict {
+		accountingErr := fmt.Errorf("model call accounting: %w", finishErr)
+		return errors.Join(providerErr, accountingErr)
+	}
+	logger.Errorf(ctx, "[modelobs] terminal accounting failed: %v", finishErr)
+	return providerErr
+}
 
 type observedChat struct {
 	recorder *Recorder
@@ -40,8 +62,9 @@ func (o *observedChat) Chat(
 	if response != nil {
 		usage = &response.Usage
 	}
-	call.finish(ctx, statusForError(providerErr), providerErr, usage)
-	return response, providerErr
+	return response, finishProviderCall(
+		ctx, call, strict, statusForError(providerErr), providerErr, usage,
+	)
 }
 
 func (o *observedChat) ChatStream(
@@ -55,8 +78,9 @@ func (o *observedChat) ChatStream(
 	}
 	upstream, providerErr := o.inner.ChatStream(ctx, messages, opts)
 	if providerErr != nil {
-		call.finish(ctx, statusForError(providerErr), providerErr, nil)
-		return nil, providerErr
+		return nil, finishProviderCall(
+			ctx, call, strict, statusForError(providerErr), providerErr, nil,
+		)
 	}
 	output := make(chan types.StreamResponse)
 	go func() {
@@ -64,7 +88,27 @@ func (o *observedChat) ChatStream(
 		status := types.ModelCallStatusSuccess
 		var terminalErr error
 		var usage *types.TokenUsage
-		defer func() { call.finish(ctx, status, terminalErr, usage) }()
+		defer func() {
+			finishErr := call.finish(ctx, status, terminalErr, usage)
+			if finishErr == nil {
+				return
+			}
+			if !strict {
+				logger.Errorf(ctx, "[modelobs] terminal stream accounting failed: %v", finishErr)
+				return
+			}
+			select {
+			case output <- types.StreamResponse{
+				ResponseType: types.ResponseTypeError,
+				Content:      "model call accounting failed",
+				Done:         true,
+				Data: map[string]interface{}{
+					"error_code": "model_call_accounting_failed",
+				},
+			}:
+			case <-ctx.Done():
+			}
+		}()
 		for {
 			select {
 			case <-ctx.Done():
@@ -119,8 +163,9 @@ func (o *observedEmbedder) Embed(ctx context.Context, text string) ([]float32, e
 		return nil, err
 	}
 	result, providerErr := o.inner.Embed(ctx, text)
-	call.finish(ctx, statusForError(providerErr), providerErr, nil)
-	return result, providerErr
+	return result, finishProviderCall(
+		ctx, call, strict, statusForError(providerErr), providerErr, nil,
+	)
 }
 
 func (o *observedEmbedder) BatchEmbed(ctx context.Context, texts []string) ([][]float32, error) {
@@ -129,8 +174,9 @@ func (o *observedEmbedder) BatchEmbed(ctx context.Context, texts []string) ([][]
 		return nil, err
 	}
 	result, providerErr := o.inner.BatchEmbed(ctx, texts)
-	call.finish(ctx, statusForError(providerErr), providerErr, nil)
-	return result, providerErr
+	return result, finishProviderCall(
+		ctx, call, strict, statusForError(providerErr), providerErr, nil,
+	)
 }
 
 func (o *observedEmbedder) BatchEmbedWithPool(
@@ -143,8 +189,9 @@ func (o *observedEmbedder) BatchEmbedWithPool(
 		return nil, err
 	}
 	result, providerErr := o.inner.BatchEmbedWithPool(ctx, o.inner, texts)
-	call.finish(ctx, statusForError(providerErr), providerErr, nil)
-	return result, providerErr
+	return result, finishProviderCall(
+		ctx, call, strict, statusForError(providerErr), providerErr, nil,
+	)
 }
 func (o *observedEmbedder) GetModelName() string { return o.inner.GetModelName() }
 func (o *observedEmbedder) GetDimensions() int   { return o.inner.GetDimensions() }
@@ -170,8 +217,9 @@ func (o *observedReranker) Rerank(ctx context.Context, query string, documents [
 		return nil, err
 	}
 	result, providerErr := o.inner.Rerank(ctx, query, documents)
-	call.finish(ctx, statusForError(providerErr), providerErr, nil)
-	return result, providerErr
+	return result, finishProviderCall(
+		ctx, call, strict, statusForError(providerErr), providerErr, nil,
+	)
 }
 func (o *observedReranker) GetModelName() string { return o.inner.GetModelName() }
 func (o *observedReranker) GetModelID() string   { return o.inner.GetModelID() }
@@ -196,8 +244,9 @@ func (o *observedVLM) Predict(ctx context.Context, images [][]byte, prompt strin
 		return "", err
 	}
 	result, providerErr := o.inner.Predict(ctx, images, prompt)
-	call.finish(ctx, statusForError(providerErr), providerErr, nil)
-	return result, providerErr
+	return result, finishProviderCall(
+		ctx, call, strict, statusForError(providerErr), providerErr, nil,
+	)
 }
 func (o *observedVLM) GetModelName() string { return o.inner.GetModelName() }
 func (o *observedVLM) GetModelID() string   { return o.inner.GetModelID() }
@@ -222,8 +271,9 @@ func (o *observedASR) Transcribe(ctx context.Context, audio []byte, fileName str
 		return nil, err
 	}
 	result, providerErr := o.inner.Transcribe(ctx, audio, fileName)
-	call.finish(ctx, statusForError(providerErr), providerErr, nil)
-	return result, providerErr
+	return result, finishProviderCall(
+		ctx, call, strict, statusForError(providerErr), providerErr, nil,
+	)
 }
 func (o *observedASR) GetModelName() string { return o.inner.GetModelName() }
 func (o *observedASR) GetModelID() string   { return o.inner.GetModelID() }

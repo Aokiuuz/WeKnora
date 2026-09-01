@@ -15,6 +15,8 @@ import (
 
 const ledgerFinishTimeout = 5 * time.Second
 
+const ledgerFinishAttempts = 3
+
 // Store persists started and completed calls and resolves effective prices.
 type Store interface {
 	StartModelCall(context.Context, *types.ModelCallRecord) error
@@ -31,10 +33,11 @@ type Recorder struct{ store Store }
 func NewRecorder(store Store) *Recorder { return &Recorder{store: store} }
 
 type activeCall struct {
-	recorder *Recorder
-	record   *types.ModelCallRecord
-	started  time.Time
-	once     sync.Once
+	recorder  *Recorder
+	record    *types.ModelCallRecord
+	started   time.Time
+	once      sync.Once
+	finishErr error
 }
 
 func (r *Recorder) start(ctx context.Context, model *types.Model, operation string) (*activeCall, bool, error) {
@@ -91,9 +94,9 @@ func (r *Recorder) start(ctx context.Context, model *types.Model, operation stri
 	return &activeCall{recorder: r, record: record, started: started}, policy.strict, nil
 }
 
-func (c *activeCall) finish(ctx context.Context, status string, callErr error, usage *types.TokenUsage) {
+func (c *activeCall) finish(ctx context.Context, status string, callErr error, usage *types.TokenUsage) error {
 	if c == nil {
-		return
+		return nil
 	}
 	c.once.Do(func() {
 		ended := time.Now()
@@ -127,8 +130,29 @@ func (c *activeCall) finish(ctx context.Context, status string, callErr error, u
 		}
 		finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ledgerFinishTimeout)
 		defer cancel()
-		_ = c.recorder.store.CompleteModelCall(finishCtx, completion)
+		var err error
+		for attempt := 0; attempt < ledgerFinishAttempts; attempt++ {
+			err = c.recorder.store.CompleteModelCall(finishCtx, completion)
+			if err == nil {
+				break
+			}
+			if attempt+1 < ledgerFinishAttempts {
+				delay := time.Duration(attempt+1) * 25 * time.Millisecond
+				timer := time.NewTimer(delay)
+				select {
+				case <-finishCtx.Done():
+					timer.Stop()
+					err = finishCtx.Err()
+					attempt = ledgerFinishAttempts
+				case <-timer.C:
+				}
+			}
+		}
+		if err != nil {
+			c.finishErr = fmt.Errorf("persist model call completion %s: %w", c.record.ID, err)
+		}
 	})
+	return c.finishErr
 }
 
 func modelUsageReported(usage *types.TokenUsage) bool {

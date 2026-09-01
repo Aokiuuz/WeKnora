@@ -14,11 +14,13 @@ import (
 )
 
 type recorderStore struct {
-	mu          sync.Mutex
-	startErr    error
-	starts      []*types.ModelCallRecord
-	completions []types.ModelCallCompletion
-	price       *types.ModelPriceVersion
+	mu            sync.Mutex
+	startErr      error
+	completeErr   error
+	completeCalls int
+	starts        []*types.ModelCallRecord
+	completions   []types.ModelCallCompletion
+	price         *types.ModelPriceVersion
 }
 
 func (s *recorderStore) StartModelCall(_ context.Context, record *types.ModelCallRecord) error {
@@ -35,6 +37,10 @@ func (s *recorderStore) StartModelCall(_ context.Context, record *types.ModelCal
 func (s *recorderStore) CompleteModelCall(_ context.Context, completion types.ModelCallCompletion) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.completeCalls++
+	if s.completeErr != nil {
+		return s.completeErr
+	}
 	s.completions = append(s.completions, completion)
 	return nil
 }
@@ -96,6 +102,46 @@ func TestStrictRecorderFailurePreventsProviderCall(t *testing.T) {
 	_, err := wrapped.Chat(ctx, nil, nil)
 	require.Error(t, err)
 	assert.Zero(t, provider.calls)
+}
+
+func TestStrictRecorderCompletionFailureFailsProviderCall(t *testing.T) {
+	store := &recorderStore{completeErr: errors.New("database unavailable")}
+	provider := &recorderChat{}
+	wrapped := NewRecorder(store).WrapChat(
+		&types.Model{ID: "model-1", TenantID: 7, Name: "safe", Type: types.ModelTypeKnowledgeQA},
+		provider,
+	)
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+	ctx = WithPurpose(ctx, PurposeEvaluation, true)
+
+	response, err := wrapped.Chat(ctx, nil, nil)
+	require.ErrorContains(t, err, "model call accounting")
+	require.NotNil(t, response)
+	assert.Equal(t, 1, provider.calls)
+	assert.Equal(t, ledgerFinishAttempts, store.completeCalls)
+}
+
+func TestStrictStreamingCompletionFailureIsTerminalStreamError(t *testing.T) {
+	stream := make(chan types.StreamResponse)
+	close(stream)
+	store := &recorderStore{completeErr: errors.New("database unavailable")}
+	wrapped := NewRecorder(store).WrapChat(
+		&types.Model{ID: "model-1", TenantID: 7, Name: "safe", Type: types.ModelTypeKnowledgeQA},
+		&recorderChat{stream: stream},
+	)
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+	ctx = WithPurpose(ctx, PurposeEvaluation, true)
+
+	output, err := wrapped.ChatStream(ctx, nil, nil)
+	require.NoError(t, err)
+	responses := make([]types.StreamResponse, 0, 1)
+	for response := range output {
+		responses = append(responses, response)
+	}
+	require.Len(t, responses, 1)
+	assert.Equal(t, types.ResponseTypeError, responses[0].ResponseType)
+	assert.Equal(t, "model_call_accounting_failed", responses[0].Data["error_code"])
+	assert.Equal(t, ledgerFinishAttempts, store.completeCalls)
 }
 
 func TestStreamingCallCompletesLedgerExactlyOnce(t *testing.T) {

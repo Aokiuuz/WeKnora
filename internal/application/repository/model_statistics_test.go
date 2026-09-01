@@ -43,6 +43,12 @@ func TestModelStatisticsSeparatesProviderAndApplicationCacheDenominators(t *test
 		HitItems: 8, MissItems: 2, Status: types.EmbeddingCacheLookupStatusPartial,
 		DurationMs: 4, OccurredAt: now.Add(-time.Hour),
 	}).Error)
+	require.NoError(t, db.Create(&types.ModelCallRecord{
+		ID: "call-started", TenantID: 7, ModelID: "model-1", ModelSnapshot: types.JSON(`{}`),
+		Purpose: "general", Operation: "chat", StartedAt: now.Add(-time.Hour),
+		Status: types.ModelCallStatusStarted, ProviderCacheStatus: "unreported",
+		ApplicationCacheStatus: types.ApplicationCacheStatusUnavailable, CreatedAt: now, UpdatedAt: now,
+	}).Error)
 	require.NoError(t, db.Create(&types.EmbeddingCacheLookupRecord{
 		ID: "cache-2", TenantID: 7, ModelID: "model-1", RequestedItems: 3, UniqueItems: 3,
 		BypassItems: 3, Status: types.EmbeddingCacheLookupStatusBypass,
@@ -55,6 +61,11 @@ func TestModelStatisticsSeparatesProviderAndApplicationCacheDenominators(t *test
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	item := items[0]
+	require.Equal(t, int64(4), item.CallCount)
+	require.Equal(t, int64(1), item.StartedCalls)
+	require.Equal(t, item.CallCount,
+		item.StartedCalls+item.SuccessCalls+item.ErrorCalls+item.CanceledCalls)
+	require.Equal(t, int64(2), item.UsageUnreportedCalls)
 	require.Equal(t, int64(100), item.ProviderCache.ObservedTokens)
 	require.NotNil(t, item.ProviderCache.HitRate)
 	require.InDelta(t, 0.25, *item.ProviderCache.HitRate, 0.0001)

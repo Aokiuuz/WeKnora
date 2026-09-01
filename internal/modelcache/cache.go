@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -323,34 +322,26 @@ func EmbeddingModelFingerprint(model *types.Model) string {
 	if model == nil {
 		return sha256Hex(nil)
 	}
+	behavior := types.EvaluationModelBehaviorConfigFrom(model)
 	encoded, _ := json.Marshal(struct {
-		ID          string                    `json:"id"`
-		Name        string                    `json:"name"`
-		Source      types.ModelSource         `json:"source"`
-		Provider    string                    `json:"provider"`
-		BaseURL     string                    `json:"base_url"`
-		Embedding   types.EmbeddingParameters `json:"embedding"`
-		Extra       map[string]string         `json:"extra"`
-		HeaderNames []string                  `json:"header_names"`
+		ID                   string                    `json:"id"`
+		Name                 string                    `json:"name"`
+		Source               types.ModelSource         `json:"source"`
+		Provider             string                    `json:"provider"`
+		BaseURL              string                    `json:"base_url"`
+		Embedding            types.EmbeddingParameters `json:"embedding"`
+		Extra                map[string]string         `json:"extra"`
+		BehaviorHeaderSHA256 map[string]string         `json:"behavior_header_sha256"`
 	}{
-		ID: model.ID, Name: model.Name, Source: model.Source, Provider: model.Parameters.Provider,
-		BaseURL: model.Parameters.BaseURL, Embedding: model.Parameters.EmbeddingParameters,
-		Extra: model.Parameters.ExtraConfig, HeaderNames: sortedMapKeys(model.Parameters.CustomHeaders),
+		ID: model.ID, Name: model.Name, Source: model.Source, Provider: behavior.Provider,
+		BaseURL: behavior.BaseURL, Embedding: behavior.EmbeddingParameters,
+		Extra: behavior.ExtraConfig, BehaviorHeaderSHA256: behavior.BehaviorHeaderSHA256,
 	})
 	return sha256Hex(encoded)
 }
 
 func requestOptionsSHA256(dimensions int) string {
 	return sha256Hex([]byte(fmt.Sprintf("schema=1;encoding=float32-le;dimensions=%d", dimensions)))
-}
-
-func sortedMapKeys(values map[string]string) []string {
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, strings.ToLower(key))
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func singleflightBatchKey(prefix CachePrefix, hashes []string) string {
