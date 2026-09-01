@@ -2,11 +2,10 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"math"
 	"sort"
 	"strings"
@@ -283,44 +282,66 @@ func (e *EvaluationService) loadEvaluationComparisonStatistics(
 ) error {
 	successes := 0
 	trials := 0
-	rows, err := e.verifySuccessfulEvaluationResults(ctx, tenantID, input.entity, input.experiment)
-	if err != nil {
-		return fmt.Errorf(
-			"%w: task %s result integrity: %v",
-			types.ErrEvaluationComparisonConflict,
+	sampleIndexFrom := 0
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		rows, err := e.questionResultRepository.ListQuestionResults(
+			ctx,
+			tenantID,
 			input.entity.ID,
-			err,
+			sampleIndexFrom,
+			types.EvaluationQuestionPageMaxSize,
 		)
-	}
-	for _, row := range rows {
-		trials++
-		if row.TotalMs != nil {
-			input.totalLatencies = append(input.totalLatencies, float64(*row.TotalMs))
+		if err != nil {
+			return err
 		}
-		if row.TotalTokens != nil {
-			input.tokenTotals.NValid++
-			input.tokenTotals.Total += int64(*row.TotalTokens)
-			if row.PromptTokens != nil {
-				input.tokenTotals.Prompt += int64(*row.PromptTokens)
+		if len(rows) == 0 {
+			break
+		}
+		for _, row := range rows {
+			trials++
+			if row.TotalMs != nil {
+				input.totalLatencies = append(input.totalLatencies, float64(*row.TotalMs))
 			}
-			if row.CompletionTokens != nil {
-				input.tokenTotals.Completion += int64(*row.CompletionTokens)
+			if row.TotalTokens != nil {
+				input.tokenTotals.NValid++
+				input.tokenTotals.Total += int64(*row.TotalTokens)
+				if row.PromptTokens != nil {
+					input.tokenTotals.Prompt += int64(*row.PromptTokens)
+				}
+				if row.CompletionTokens != nil {
+					input.tokenTotals.Completion += int64(*row.CompletionTokens)
+				}
+			}
+			if row.Status != types.EvaluationQuestionStatusSuccess {
+				continue
+			}
+			successes++
+			metrics, flattenErr := evaluationAvailableNumericMetrics(
+				row.PerSampleMetrics,
+				input.experiment.MetricPlan,
+			)
+			if flattenErr != nil {
+				return fmt.Errorf("task %s sample %d metrics: %w", input.entity.ID, row.SampleIndex, flattenErr)
+			}
+			for pointer, value := range metrics {
+				input.metricSamples[pointer] = append(input.metricSamples[pointer], value)
 			}
 		}
-		if row.Status != types.EvaluationQuestionStatusSuccess {
-			continue
+		if len(rows) < types.EvaluationQuestionPageMaxSize {
+			break
 		}
-		successes++
-		metrics, flattenErr := evaluationAvailableNumericMetrics(
-			row.PerSampleMetrics,
-			input.experiment.MetricPlan,
-		)
-		if flattenErr != nil {
-			return fmt.Errorf("task %s sample %d metrics: %w", input.entity.ID, row.SampleIndex, flattenErr)
+		next := rows[len(rows)-1].SampleIndex + 1
+		if next <= sampleIndexFrom {
+			return fmt.Errorf(
+				"%w: task %s question pagination did not advance",
+				types.ErrEvaluationComparisonDataInvalid,
+				input.entity.ID,
+			)
 		}
-		for pointer, value := range metrics {
-			input.metricSamples[pointer] = append(input.metricSamples[pointer], value)
-		}
+		sampleIndexFrom = next
 	}
 	input.questionTotal = trials
 	input.tokenTotals.NTotal = trials
@@ -374,8 +395,19 @@ func evaluationAvailableNumericMetrics(
 			}
 			continue
 		}
-		if score.Status != types.EvaluationMetricObservationValid {
+		switch score.Status {
+		case types.EvaluationMetricObservationMissing,
+			types.EvaluationMetricObservationSkipped,
+			types.EvaluationMetricObservationFailed:
 			continue
+		case types.EvaluationMetricObservationValid:
+		default:
+			return nil, fmt.Errorf(
+				"%w: metric %s has unknown status %q",
+				types.ErrEvaluationComparisonDataInvalid,
+				spec.InstanceID,
+				score.Status,
+			)
 		}
 		if score.Value == nil {
 			return nil, fmt.Errorf(
@@ -388,16 +420,7 @@ func evaluationAvailableNumericMetrics(
 		if !hasFixedPointer || fixedCounts[fixedPointer] != 1 {
 			continue
 		}
-		fixedValue, _ := types.EvaluationMetricFixedValue(&result, fixedPointer)
-		if fixedValue != *score.Value {
-			return nil, fmt.Errorf(
-				"%w: fixed metric %s disagrees with %s",
-				types.ErrEvaluationComparisonDataInvalid,
-				fixedPointer,
-				spec.InstanceID,
-			)
-		}
-		metrics[fixedPointer] = fixedValue
+		metrics[fixedPointer] = *score.Value
 	}
 	return metrics, nil
 }
@@ -416,9 +439,14 @@ func evaluationLatencyPercentiles(values []float64, total int) *types.Evaluation
 	}
 }
 
+// evaluationStatisticsSeed derives a repeatable bootstrap seed. It carries no
+// integrity or security meaning, so a stable non-cryptographic hash is enough.
 func evaluationStatisticsSeed(taskID, pointer string) int64 {
-	digest := sha256.Sum256([]byte(taskID + "\x00" + pointer))
-	return int64(binary.BigEndian.Uint64(digest[:8]) & ((1 << 63) - 1))
+	hasher := fnv.New64a()
+	_, _ = hasher.Write([]byte(taskID))
+	_, _ = hasher.Write([]byte{0})
+	_, _ = hasher.Write([]byte(pointer))
+	return int64(hasher.Sum64() & ((1 << 63) - 1))
 }
 
 func evaluationConfidenceInterval(interval *evaluationstats.Interval) *types.EvaluationConfidenceInterval {

@@ -337,6 +337,41 @@ func TestEvaluationTaskRepositoryRejectsTerminalTimeBeforeLatestActivity(t *test
 	assert.Nil(t, terminal)
 }
 
+func TestEvaluationTaskRepositoryRejectsSuccessfulTerminalWithoutAllResultRows(t *testing.T) {
+	db := setupEvaluationTaskRepositoryTestDB(t)
+	repo := NewEvaluationTaskRepository(db)
+	ctx := context.Background()
+	task := newEvaluationTaskEntity(29, "incomplete-success")
+	require.NoError(t, repo.CreateTask(ctx, task.TenantID, task))
+	started, err := repo.TryStartTask(ctx, types.EvaluationTaskStartCommand{
+		TenantID: task.TenantID, TaskID: task.ID, OwnerID: task.OwnerID,
+		ExpectedVersion: task.Version, Now: task.HeartbeatAt.Add(time.Second),
+		LeaseExpiresAt: task.HeartbeatAt.Add(time.Minute),
+	})
+	require.NoError(t, err)
+	progress, err := repo.PublishProgress(ctx, types.EvaluationTaskProgressCommand{
+		TenantID: task.TenantID, TaskID: task.ID, OwnerID: task.OwnerID,
+		ExpectedVersion: started.Version, Total: 2, Finished: 2,
+		Now: started.HeartbeatAt.Add(time.Second), LeaseExpiresAt: started.HeartbeatAt.Add(time.Minute),
+	})
+	require.NoError(t, err)
+
+	terminal, err := repo.PublishTerminal(ctx, types.EvaluationTaskTerminalCommand{
+		TenantID: task.TenantID, TaskID: task.ID, OwnerID: task.OwnerID,
+		ExpectedVersion: progress.Version, Status: types.EvaluationStatueSuccess,
+		EndTime: progress.HeartbeatAt.Add(time.Second), CleanupErrors: types.JSON(`[]`),
+	})
+	require.ErrorIs(t, err, ErrEvaluationTaskStateConflict)
+	require.Nil(t, terminal)
+	persisted, getErr := repo.GetTask(ctx, task.TenantID, task.ID)
+	require.NoError(t, getErr)
+	assert.Equal(t, types.EvaluationStatueRunning, persisted.Status)
+	assert.Equal(t, 2, persisted.Total)
+	assert.Equal(t, 2, persisted.Finished)
+	assert.Equal(t, progress.Version, persisted.Version)
+	assert.NotNil(t, persisted.LeaseExpiresAt)
+}
+
 func TestEvaluationTaskRepositoryClassifiesLifecycleConflicts(t *testing.T) {
 	db := setupEvaluationTaskRepositoryTestDB(t)
 	repo := NewEvaluationTaskRepository(db)
@@ -494,6 +529,7 @@ func TestEvaluationTaskRepositoryAllowsOnlyOneConcurrentProgressWriter(t *testin
 func TestEvaluationTaskLifecycleNeverModifiesExperimentSnapshot(t *testing.T) {
 	db := setupEvaluationTaskRepositoryTestDB(t)
 	repo := NewEvaluationTaskRepository(db)
+	questionRepo := NewEvaluationQuestionResultRepository(db)
 	ctx := context.Background()
 	now := time.Date(2026, 8, 28, 9, 0, 0, 0, time.UTC)
 
@@ -528,14 +564,17 @@ func TestEvaluationTaskLifecycleNeverModifiesExperimentSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	assertFrozen("TryStartTask", started)
 
-	progress, err := repo.PublishProgress(ctx, types.EvaluationTaskProgressCommand{
-		TenantID: task.TenantID, TaskID: task.ID, OwnerID: task.OwnerID,
-		ExpectedVersion: started.Version, Total: 2, Finished: 1,
-		Metric: types.JSON(`{"retrieval_metrics":{"precision":0.5}}`),
-		Now:    now.Add(10 * time.Second), LeaseExpiresAt: now.Add(time.Minute),
-	})
-	require.NoError(t, err)
-	assertFrozen("PublishProgress", progress)
+	progress := started
+	for sampleIndex := 0; sampleIndex < 2; sampleIndex++ {
+		command := newEvaluationQuestionCommandFixture(task, progress.Version, sampleIndex)
+		command.Total = 2
+		command.Metric = types.JSON(`{"retrieval_metrics":{"precision":0.5}}`)
+		command.Now = now.Add(time.Duration(sampleIndex+1) * time.Second)
+		command.LeaseExpiresAt = now.Add(time.Minute)
+		progress, _, err = questionRepo.PublishQuestionResult(ctx, command)
+		require.NoError(t, err)
+	}
+	assertFrozen("PublishQuestionResult", progress)
 
 	terminal, err := repo.PublishTerminal(ctx, types.EvaluationTaskTerminalCommand{
 		TenantID: task.TenantID, TaskID: task.ID, OwnerID: task.OwnerID,

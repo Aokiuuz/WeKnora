@@ -31,7 +31,8 @@ func NewEvaluationQuestionResultRepository(db *gorm.DB) interfaces.EvaluationQue
 // PublishQuestionResult atomically inserts one per-question row and advances
 // the owning task's finished counter, aggregate metric, and version inside
 // one transaction. The task update requires the tenant, owner, Running status,
-// version, unexpired lease, and absence of a cancellation request.
+// version, the preceding finished value, an unexpired lease, and absence of a
+// cancellation request.
 func (r *evaluationQuestionResultRepository) PublishQuestionResult(
 	ctx context.Context,
 	command interfaces.EvaluationQuestionResultCommand,
@@ -40,8 +41,8 @@ func (r *evaluationQuestionResultRepository) PublishQuestionResult(
 		command.TenantID, command.TaskID, command.OwnerID, command.ExpectedVersion); err != nil {
 		return nil, false, fmt.Errorf("publish evaluation question result: %w", err)
 	}
-	if command.Result == nil || command.Result.SampleIndex < 0 {
-		return nil, false, errors.New("publish evaluation question result: result with sample_index is required")
+	if command.Result == nil {
+		return nil, false, errors.New("publish evaluation question result: result is required")
 	}
 	if command.Now.IsZero() || command.LeaseExpiresAt.IsZero() {
 		return nil, false, errors.New("publish evaluation question result: now and lease_expires_at are required")
@@ -53,6 +54,9 @@ func (r *evaluationQuestionResultRepository) PublishQuestionResult(
 	}
 	if command.Total < 1 || command.Finished < 1 || command.Finished > command.Total {
 		return nil, false, errors.New("publish evaluation question result: expected 1 <= finished <= total")
+	}
+	if command.Result.SampleIndex < 0 || command.Result.SampleIndex >= command.Total {
+		return nil, false, errors.New("publish evaluation question result: expected 0 <= sample_index < total")
 	}
 	if err := validateEvaluationTaskJSONObject(command.Metric, true); err != nil {
 		return nil, false, fmt.Errorf("publish evaluation question result: metric: %w", err)
@@ -102,7 +106,7 @@ func (r *evaluationQuestionResultRepository) PublishQuestionResult(
 			Where("status = ?", types.EvaluationStatueRunning).
 			Where("lease_expires_at > ?", now).
 			Where("cancel_requested_at IS NULL").
-			Where("(total = 0 OR total = ?) AND finished < ?", command.Total, command.Finished).
+			Where("(total = 0 OR total = ?) AND finished = ?", command.Total, command.Finished-1).
 			Updates(map[string]any{
 				"total":           command.Total,
 				"finished":        command.Finished,

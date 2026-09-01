@@ -130,6 +130,12 @@ func TestEvaluationTaskRepositoryTerminalPublishRequiresMatchingCancelTruth(t *t
 		LeaseExpiresAt:  startedAt.Add(2 * time.Minute),
 	})
 	require.NoError(t, err)
+	started, err = repo.PublishProgress(ctx, types.EvaluationTaskProgressCommand{
+		TenantID: task.TenantID, TaskID: task.ID, OwnerID: task.OwnerID,
+		ExpectedVersion: started.Version, Total: 2, Finished: 1,
+		Now: startedAt.Add(20 * time.Second), LeaseExpiresAt: startedAt.Add(2 * time.Minute),
+	})
+	require.NoError(t, err)
 
 	// Canceled without a persistent cancel request is rejected.
 	endTime := startedAt.Add(time.Minute)
@@ -187,6 +193,8 @@ func TestEvaluationTaskRepositoryTerminalPublishRequiresMatchingCancelTruth(t *t
 	})
 	require.NoError(t, err)
 	assert.Equal(t, types.EvaluationStatueCanceled, canceled.Status)
+	assert.Equal(t, 2, canceled.Total)
+	assert.Equal(t, 1, canceled.Finished)
 	require.NotNil(t, canceled.CancelRequestedAt)
 	assert.Nil(t, canceled.LeaseExpiresAt)
 

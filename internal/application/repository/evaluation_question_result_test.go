@@ -100,6 +100,57 @@ func TestEvaluationQuestionResultPublishesAtomically(t *testing.T) {
 	assert.Equal(t, -1, searchRanked[2].PID, "duplicate PID keeps pid=-1")
 }
 
+func TestEvaluationQuestionResultRejectsSampleIndexEqualToTotal(t *testing.T) {
+	db := setupEvaluationTaskRepositoryTestDB(t)
+	taskRepo := NewEvaluationTaskRepository(db)
+	repo := NewEvaluationQuestionResultRepository(db)
+	ctx := context.Background()
+
+	task := newEvaluationTaskEntity(31, "question-index-boundary")
+	started := startEvaluationQuestionTask(t, taskRepo, task)
+	command := newEvaluationQuestionCommandFixture(started, started.Version, 0)
+	command.Result.SampleIndex = command.Total
+
+	updated, inserted, err := repo.PublishQuestionResult(ctx, command)
+	require.EqualError(t, err, "publish evaluation question result: expected 0 <= sample_index < total")
+	require.Nil(t, updated)
+	require.False(t, inserted)
+	rows, listErr := repo.ListQuestionResults(ctx, task.TenantID, task.ID, 0, 10)
+	require.NoError(t, listErr)
+	require.Empty(t, rows)
+	persisted, getErr := taskRepo.GetTask(ctx, task.TenantID, task.ID)
+	require.NoError(t, getErr)
+	assert.Equal(t, started.Version, persisted.Version)
+	assert.Zero(t, persisted.Finished)
+}
+
+func TestEvaluationQuestionResultRejectsFinishedJumpAndRollsBack(t *testing.T) {
+	db := setupEvaluationTaskRepositoryTestDB(t)
+	taskRepo := NewEvaluationTaskRepository(db)
+	repo := NewEvaluationQuestionResultRepository(db)
+	ctx := context.Background()
+
+	task := newEvaluationTaskEntity(31, "question-finished-jump")
+	started := startEvaluationQuestionTask(t, taskRepo, task)
+	command := newEvaluationQuestionCommandFixture(started, started.Version, 0)
+	command.Finished = 2
+
+	updated, inserted, err := repo.PublishQuestionResult(ctx, command)
+	require.ErrorIs(t, err, ErrEvaluationTaskStateConflict)
+	require.Nil(t, updated)
+	require.False(t, inserted)
+	rows, listErr := repo.ListQuestionResults(ctx, task.TenantID, task.ID, 0, 10)
+	require.NoError(t, listErr)
+	require.Empty(t, rows)
+	persisted, getErr := taskRepo.GetTask(ctx, task.TenantID, task.ID)
+	require.NoError(t, getErr)
+	assert.Equal(t, started.Version, persisted.Version)
+	assert.Zero(t, persisted.Total)
+	assert.Zero(t, persisted.Finished)
+	assert.Empty(t, persisted.Metric)
+	assert.Empty(t, persisted.RuntimeMetrics)
+}
+
 func TestEvaluationQuestionResultIdempotentRetryAndConflict(t *testing.T) {
 	db := setupEvaluationTaskRepositoryTestDB(t)
 	taskRepo := NewEvaluationTaskRepository(db)

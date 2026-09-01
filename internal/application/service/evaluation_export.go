@@ -105,16 +105,6 @@ func (e *EvaluationService) prepareEvaluationExport(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if entity.Status == types.EvaluationStatueSuccess {
-		if _, err := e.verifySuccessfulEvaluationResults(ctx, tenantID, entity, experiment); err != nil {
-			return nil, fmt.Errorf(
-				"%w: task %s result integrity: %v",
-				types.ErrEvaluationExportTaskConflict,
-				taskID,
-				err,
-			)
-		}
-	}
 	exportContext := evaluationExportContext{
 		ExportedAt: time.Now().UTC(),
 		Task:       evaluationExportTaskFromEntity(entity, provenanceComplete),

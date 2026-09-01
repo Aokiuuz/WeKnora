@@ -497,6 +497,17 @@ func (r *evaluationTaskRepository) PublishTerminal(
 	if command.Status == types.EvaluationStatueCanceled {
 		cancelCondition = "cancel_requested_at IS NOT NULL"
 	}
+	stateCondition := "start_time <= ? AND heartbeat_at <= ? AND lease_expires_at > ? AND " + cancelCondition
+	if command.Status == types.EvaluationStatueSuccess {
+		// The terminal compare-and-swap checks the persisted row set once in the
+		// same statement. Failure and cancellation retain their partial rows.
+		stateCondition += ` AND finished = total AND (
+			SELECT COUNT(*) FROM evaluation_question_results AS question_results
+			WHERE question_results.tenant_id = evaluation_tasks.tenant_id
+				AND question_results.task_id = evaluation_tasks.id
+				AND question_results.deleted_at IS NULL
+		) = total`
+	}
 
 	return r.updateEvaluationTask(
 		ctx,
@@ -505,7 +516,7 @@ func (r *evaluationTaskRepository) PublishTerminal(
 		command.OwnerID,
 		command.ExpectedVersion,
 		[]types.EvaluationStatue{types.EvaluationStatuePending, types.EvaluationStatueRunning},
-		"start_time <= ? AND heartbeat_at <= ? AND lease_expires_at > ? AND "+cancelCondition,
+		stateCondition,
 		[]any{command.EndTime, command.EndTime, command.EndTime},
 		map[string]any{
 			"status":           command.Status,
@@ -532,7 +543,8 @@ func (r *evaluationTaskRepository) PublishTerminal(
 			if command.Status == types.EvaluationStatueCanceled {
 				return task.CancelRequestedAt != nil
 			}
-			return task.CancelRequestedAt == nil
+			return task.CancelRequestedAt == nil &&
+				(command.Status != types.EvaluationStatueSuccess || task.Finished == task.Total)
 		},
 		"publish terminal state for",
 	)

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
@@ -58,6 +59,17 @@ func TestEvaluationQuestionResultPostgresContract(t *testing.T) {
 	require.True(t, inserted)
 	assert.Equal(t, 1, updated.Finished)
 
+	jump := newEvaluationQuestionCommandFixture(updated, updated.Version, 1)
+	jump.Finished = 3
+	jumped, inserted, err := repo.PublishQuestionResult(ctx, jump)
+	require.ErrorIs(t, err, ErrEvaluationTaskStateConflict)
+	require.Nil(t, jumped)
+	require.False(t, inserted)
+	current, err := taskRepo.GetTask(ctx, task.TenantID, task.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, current.Finished)
+	assert.Equal(t, updated.Version, current.Version)
+
 	// Idempotent retry and conflict semantics hold on PostgreSQL as on SQLite.
 	retry := newEvaluationQuestionCommandFixture(updated, updated.Version, 0)
 	_, inserted, err = repo.PublishQuestionResult(ctx, retry)
@@ -73,6 +85,38 @@ func TestEvaluationQuestionResultPostgresContract(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, time.UTC, rows[0].CreatedAt.Location())
+
+	withoutRows := newEvaluationTaskEntity(41, "postgres-success-without-rows")
+	withoutRowsStarted := startEvaluationQuestionTask(t, taskRepo, withoutRows)
+	progressAt := withoutRowsStarted.HeartbeatAt.Add(time.Second)
+	withoutRowsProgress, err := taskRepo.PublishProgress(ctx, types.EvaluationTaskProgressCommand{
+		TenantID: withoutRows.TenantID, TaskID: withoutRows.ID, OwnerID: withoutRows.OwnerID,
+		ExpectedVersion: withoutRowsStarted.Version, Total: 2, Finished: 2,
+		Now: progressAt, LeaseExpiresAt: progressAt.Add(time.Minute),
+	})
+	require.NoError(t, err)
+	terminal, err := taskRepo.PublishTerminal(ctx, types.EvaluationTaskTerminalCommand{
+		TenantID: withoutRows.TenantID, TaskID: withoutRows.ID, OwnerID: withoutRows.OwnerID,
+		ExpectedVersion: withoutRowsProgress.Version, Status: types.EvaluationStatueSuccess,
+		EndTime: progressAt.Add(time.Second), CleanupErrors: types.JSON(`[]`),
+	})
+	require.ErrorIs(t, err, ErrEvaluationTaskStateConflict)
+	require.Nil(t, terminal)
+
+	current = updated
+	for sampleIndex := 1; sampleIndex < 3; sampleIndex++ {
+		command := newEvaluationQuestionCommandFixture(current, current.Version, sampleIndex)
+		current, inserted, err = repo.PublishQuestionResult(ctx, command)
+		require.NoError(t, err)
+		require.True(t, inserted)
+	}
+	terminal, err = taskRepo.PublishTerminal(ctx, types.EvaluationTaskTerminalCommand{
+		TenantID: task.TenantID, TaskID: task.ID, OwnerID: task.OwnerID,
+		ExpectedVersion: current.Version, Status: types.EvaluationStatueSuccess,
+		EndTime: time.Now().UTC(), CleanupErrors: types.JSON(`[]`),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, types.EvaluationStatueSuccess, terminal.Status)
 
 	// The composite foreign key rejects dangling rows at the database level.
 	require.Error(t, tx.Exec(`INSERT INTO evaluation_question_results (

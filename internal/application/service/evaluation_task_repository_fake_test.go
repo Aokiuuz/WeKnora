@@ -388,6 +388,9 @@ func (r *fakeEvaluationTaskRepository) PublishTerminal(
 		command.Status != types.EvaluationStatueCanceled {
 		return nil, interfaces.ErrEvaluationTaskStateConflict
 	}
+	if command.Status == types.EvaluationStatueSuccess && task.Finished != task.Total {
+		return nil, interfaces.ErrEvaluationTaskStateConflict
+	}
 	if command.Status == types.EvaluationStatueCanceled {
 		if task.CancelRequestedAt == nil {
 			return nil, interfaces.ErrEvaluationTaskStateConflict
