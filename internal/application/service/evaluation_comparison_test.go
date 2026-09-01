@@ -209,7 +209,8 @@ func TestEvaluationAvailableNumericMetricsKeepsZeroAndExcludesMissing(t *testing
 	zero := 0.0
 	result := types.MetricResult{Scores: make(map[string]types.EvaluationMetricScore, len(plan.Metrics))}
 	result.RetrievalMetrics.Precision = 1
-	var precisionSpec, mapSpec types.EvaluationMetricSpecSnapshot
+	result.RetrievalMetrics.Recall = 0.875
+	var precisionSpec, recallSpec, mapSpec types.EvaluationMetricSpecSnapshot
 	for _, spec := range plan.Metrics {
 		switch spec.Key {
 		case "retrieval.precision":
@@ -223,6 +224,8 @@ func TestEvaluationAvailableNumericMetricsKeepsZeroAndExcludesMissing(t *testing
 				Status:    types.EvaluationMetricObservationMissing,
 				ErrorCode: "relevance_labels_missing",
 			}
+		case "retrieval.recall":
+			recallSpec = spec
 		}
 	}
 	raw, err := json.Marshal(result)
@@ -235,6 +238,22 @@ func TestEvaluationAvailableNumericMetricsKeepsZeroAndExcludesMissing(t *testing
 	require.Contains(t, metrics, types.EvaluationMetricScoreValuePointer(precisionSpec.InstanceID))
 	require.NotContains(t, metrics, "/retrieval_metrics/map")
 	require.NotContains(t, metrics, types.EvaluationMetricScoreValuePointer(mapSpec.InstanceID))
+	require.NotContains(t, metrics, "/retrieval_metrics/recall")
+	require.NotContains(t, metrics, types.EvaluationMetricScoreValuePointer(recallSpec.InstanceID))
+}
+
+func TestEvaluationAvailableNumericMetricsSupportsEntireLegacyFixedResult(t *testing.T) {
+	plan, err := types.DefaultEvaluationMetricPlan()
+	require.NoError(t, err)
+	raw, err := json.Marshal(types.MetricResult{
+		RetrievalMetrics: types.RetrievalMetrics{Precision: 0.625},
+	})
+	require.NoError(t, err)
+
+	metrics, err := evaluationAvailableNumericMetrics(types.JSON(raw), plan)
+	require.NoError(t, err)
+	require.Contains(t, metrics, "/retrieval_metrics/precision")
+	require.Equal(t, 0.625, metrics["/retrieval_metrics/precision"])
 }
 
 func TestEvaluationAvailableNumericMetricsRejectsInvalidJSON(t *testing.T) {

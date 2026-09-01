@@ -381,6 +381,7 @@ func evaluationAvailableNumericMetrics(
 			fixedCounts[pointer]++
 		}
 	}
+	legacyFixedOnly := len(result.Scores) == 0
 
 	metrics := make(map[string]float64, len(plan.Metrics)*2)
 	for _, spec := range plan.Metrics {
@@ -388,8 +389,8 @@ func evaluationAvailableNumericMetrics(
 		fixedPointer, hasFixedPointer := types.EvaluationMetricFixedPointer(spec)
 		if !exists {
 			// Version 1 fixed fields are the defined compatibility representation
-			// for persisted results that do not carry dynamic score state.
-			if spec.Version == "1.0.0" && hasFixedPointer && fixedCounts[fixedPointer] == 1 {
+			// only for persisted results that carry no dynamic score state at all.
+			if legacyFixedOnly && spec.Version == "1.0.0" && hasFixedPointer && fixedCounts[fixedPointer] == 1 {
 				value, _ := types.EvaluationMetricFixedValue(&result, fixedPointer)
 				metrics[fixedPointer] = value
 			}
