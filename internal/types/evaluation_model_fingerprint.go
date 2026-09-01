@@ -9,9 +9,9 @@ import (
 // EvaluationModelBehaviorConfig is the sanitized behavior configuration that
 // participates in the model config fingerprint. It deliberately excludes API
 // keys, app secrets, app IDs, custom headers, and URL-embedded credentials:
-// the fingerprint explains output behavior, never authentication. Deployments
-// whose routing headers change model behavior can set the non-secret
-// ExtraConfig key behavior_revision explicitly.
+// the fingerprint explains output behavior, never authentication. The model
+// write paths maintain a non-secret behavior revision when effective custom
+// headers change.
 type EvaluationModelBehaviorConfig struct {
 	BaseURL             string              `json:"base_url"`
 	InterfaceType       string              `json:"interface_type"`
@@ -23,9 +23,10 @@ type EvaluationModelBehaviorConfig struct {
 	MaxConcurrency      int                 `json:"max_concurrency"`
 }
 
-// EvaluationModelSanitizeBaseURL strips userinfo credentials from an upstream
-// base URL. The remaining scheme/host/path identifies the endpoint without
-// carrying secrets into snapshots or hashes.
+// EvaluationModelSanitizeBaseURL strips credentials and the client-only
+// fragment from an upstream base URL. Non-sensitive query parameters remain
+// part of the endpoint identity because values such as api-version can change
+// provider behavior.
 func EvaluationModelSanitizeBaseURL(rawURL string) string {
 	if rawURL == "" {
 		return ""
@@ -37,6 +38,18 @@ func EvaluationModelSanitizeBaseURL(rawURL string) string {
 		return rawURL
 	}
 	parsed.User = nil
+	query := parsed.Query()
+	for key := range query {
+		if evaluationModelConfigKeyIsSensitive(key) {
+			query.Del(key)
+		}
+	}
+	parsed.RawQuery = query.Encode()
+	if parsed.RawQuery == "" {
+		parsed.ForceQuery = false
+	}
+	parsed.Fragment = ""
+	parsed.RawFragment = ""
 	return parsed.String()
 }
 

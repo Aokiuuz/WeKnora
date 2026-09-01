@@ -97,12 +97,28 @@ func TestEvaluationModelConfigSHA256CoversBehavior(t *testing.T) {
 }
 
 func TestEvaluationModelSanitizeBaseURLStripsUserinfo(t *testing.T) {
-	rawURL := "https://user:secret@api.example.test/v1"
-	if got := EvaluationModelSanitizeBaseURL(rawURL); got != "https://api.example.test/v1" {
+	rawURL := "https://user:secret@api.example.test/v1?api_key=secret&api-version=2026-08-01#client-only"
+	if got := EvaluationModelSanitizeBaseURL(rawURL); got != "https://api.example.test/v1?api-version=2026-08-01" {
 		t.Fatalf("SanitizeBaseURL = %q, want credentials stripped", got)
 	}
 	if got := EvaluationModelSanitizeBaseURL(""); got != "" {
 		t.Fatalf("SanitizeBaseURL(empty) = %q, want empty", got)
+	}
+}
+
+func TestEvaluationModelConfigSHA256KeepsOnlyBehavioralBaseURLQuery(t *testing.T) {
+	first := evaluationModelFingerprintFixture()
+	first.Parameters.BaseURL = "https://api.example.test/v1?api-version=2026-08-01&access_token=first#one"
+	rotatedSecret := evaluationModelFingerprintFixture()
+	rotatedSecret.Parameters.BaseURL = "https://api.example.test/v1?access_token=second&api-version=2026-08-01#two"
+	if EvaluationModelConfigSHA256(first) != EvaluationModelConfigSHA256(rotatedSecret) {
+		t.Fatal("credential query rotation or fragment changed the model fingerprint")
+	}
+
+	changedVersion := evaluationModelFingerprintFixture()
+	changedVersion.Parameters.BaseURL = "https://api.example.test/v1?api-version=2026-09-01&access_token=second"
+	if EvaluationModelConfigSHA256(first) == EvaluationModelConfigSHA256(changedVersion) {
+		t.Fatal("behavioral api-version query did not change the model fingerprint")
 	}
 }
 
