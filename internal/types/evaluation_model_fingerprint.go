@@ -2,7 +2,6 @@ package types
 
 import (
 	"net/url"
-	"sort"
 	"strings"
 	"unicode"
 )
@@ -71,16 +70,6 @@ func EvaluationModelBehaviorConfigFrom(model *Model) *EvaluationModelBehaviorCon
 // model's sanitized behavior configuration.
 func EvaluationModelConfigSHA256(model *Model) string {
 	config := EvaluationModelBehaviorConfigFrom(model)
-	keys := make([]string, 0, len(config.ExtraConfig))
-	for key := range config.ExtraConfig {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	ordered := make(map[string]string, len(config.ExtraConfig))
-	// Map marshaling order is irrelevant: the canonical serializer sorts keys.
-	for _, key := range keys {
-		ordered[key] = config.ExtraConfig[key]
-	}
 	encoded := canonicalEvaluationJSONBytes(map[string]any{
 		"base_url":       config.BaseURL,
 		"interface_type": config.InterfaceType,
@@ -91,7 +80,7 @@ func EvaluationModelConfigSHA256(model *Model) string {
 			"truncate_prompt_tokens":      config.EmbeddingParameters.TruncatePromptTokens,
 			"supports_dimension_override": config.EmbeddingParameters.SupportsDimensionOverride,
 		},
-		"extra_config":    evaluationStringMapToAny(ordered),
+		"extra_config":    evaluationStringMapToAny(config.ExtraConfig),
 		"supports_vision": config.SupportsVision,
 		"max_concurrency": config.MaxConcurrency,
 	})
