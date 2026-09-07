@@ -42,15 +42,15 @@ func TestEvaluationTaskRepositoryPostgresRetentionMigrationAndPlan(t *testing.T)
 	})
 	require.NoError(t, db.Exec("SET search_path = "+schema+", pg_catalog").Error)
 
-	migrationDir := filepath.Join("..", "..", "..", "migrations", "versioned")
+	migrationDir := filepath.Join("..", "..", "..", "migrations", "topic3", "postgres")
 	for _, name := range []string{
-		"000090_evaluation_tasks.up.sql",
-		"000091_evaluation_task_cancellation.up.sql",
-		"000092_evaluation_task_list.up.sql",
-		"000093_evaluation_task_retention.up.sql",
-		"000095_evaluation_experiment_snapshot.up.sql",
-		"000096_evaluation_question_results.up.sql",
-		"000098_evaluation_runtime_metrics.up.sql",
+		"000001_evaluation_tasks.up.sql",
+		"000002_evaluation_task_cancellation.up.sql",
+		"000003_evaluation_task_list.up.sql",
+		"000004_evaluation_task_retention.up.sql",
+		"000006_evaluation_experiment_snapshot.up.sql",
+		"000007_evaluation_question_results.up.sql",
+		"000009_evaluation_runtime_metrics.up.sql",
 	} {
 		migrationSQL, err := os.ReadFile(filepath.Join(migrationDir, name))
 		require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestEvaluationTaskRepositoryPostgresRetentionMigrationAndPlan(t *testing.T)
 	require.NoError(t, db.Raw("SELECT COUNT(*) FROM evaluation_tasks").Scan(&remaining).Error)
 	assert.Equal(t, int64(1), remaining, "the active task survives retention")
 
-	downSQL, err := os.ReadFile(filepath.Join(migrationDir, "000093_evaluation_task_retention.down.sql"))
+	downSQL, err := os.ReadFile(filepath.Join(migrationDir, "000004_evaluation_task_retention.down.sql"))
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(string(downSQL)).Error)
 	var indexExists bool
@@ -110,5 +110,5 @@ func TestEvaluationTaskRepositoryPostgresRetentionMigrationAndPlan(t *testing.T)
 			"WHERE n.nspname = ? AND i.relname = 'idx_evaluation_tasks_retention')",
 		schema,
 	).Scan(&indexExists).Error)
-	assert.False(t, indexExists, "000093 down must drop the retention index")
+	assert.False(t, indexExists, "000004 down must drop the retention index")
 }

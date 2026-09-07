@@ -243,8 +243,8 @@ func (e *cachedEmbedder) cachedBatch(
 		hitItems, missItems, bypassItems, lookupDuration,
 	)
 	if len(missingTexts) > 0 {
-		batchKey := singleflightBatchKey(prefix, missingHashes)
-		value, err, _ := e.coordinator.requests.Do(batchKey, func() (any, error) {
+		batchKey := modelobs.SharingScope(ctx) + "\x00" + singleflightBatchKey(prefix, missingHashes)
+		resultCh := e.coordinator.requests.DoChan(batchKey, func() (any, error) {
 			callCtx := modelobs.WithApplicationCacheStatus(ctx, lookupStatus)
 			vectors, err := provider(callCtx, missingTexts)
 			if err != nil {
@@ -261,10 +261,16 @@ func (e *cachedEmbedder) cachedBatch(
 			_ = e.coordinator.store.PutEmbeddingCache(writeCtx, entries)
 			return vectors, nil
 		})
-		if err != nil {
-			return nil, err
+		var shared singleflight.Result
+		select {
+		case shared = <-resultCh:
+		case <-ctx.Done():
+			return nil, context.Cause(ctx)
 		}
-		vectors := value.([][]float32)
+		if shared.Err != nil {
+			return nil, shared.Err
+		}
+		vectors := shared.Val.([][]float32)
 		if len(vectors) != len(missingHashes) {
 			return nil, errors.New("embedding cache: provider result count mismatch")
 		}

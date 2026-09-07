@@ -1,3 +1,4 @@
+import { lucideMarkup } from '../components/icons/lucide-markup';
 /**
  * 把回答正文里对「沙箱生成文件」的引用，接到 artifact 下载链路上。
  *
@@ -235,13 +236,7 @@ function blobCacheKey(ctx: ArtifactRefContext, index: number): string {
 }
 
 function fileIconSvg(): string {
-  return (
-    '<svg class="artifact-ref-card__glyph" viewBox="0 0 24 24" aria-hidden="true">'
-    + '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" '
-    + 'fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>'
-    + '<path d="M14 2v6h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>'
-    + '</svg>'
-  );
+  return lucideMarkup.file;
 }
 
 // 与 chatMarkdownRenderer 的流式图片骨架同一个类名，样式复用。

@@ -16,7 +16,7 @@ import (
 )
 
 // TestEvaluationDatasetRepositoryPostgresContract verifies the registry
-// against the real PostgreSQL 000094 migration in an isolated schema with
+// against the real PostgreSQL 000005 migration in an isolated schema with
 // transactional rollback.
 func TestEvaluationDatasetRepositoryPostgresContract(t *testing.T) {
 	dsn := os.Getenv("TEST_POSTGRES_DSN")
@@ -34,7 +34,9 @@ func TestEvaluationDatasetRepositoryPostgresContract(t *testing.T) {
 	require.NoError(t, tx.Exec("CREATE SCHEMA "+schema).Error)
 	require.NoError(t, tx.Exec("SET LOCAL search_path = "+schema+", pg_catalog").Error)
 
-	migrationPath := filepath.Join("..", "..", "..", "migrations", "versioned", "000094_evaluation_datasets.up.sql")
+	migrationPath := filepath.Join(
+		"..", "..", "..", "migrations", "topic3", "postgres", "000005_evaluation_datasets.up.sql",
+	)
 	migrationSQL, err := os.ReadFile(migrationPath)
 	require.NoError(t, err)
 	require.NoError(t, tx.Exec(string(migrationSQL)).Error)
@@ -48,6 +50,9 @@ func TestEvaluationDatasetRepositoryPostgresContract(t *testing.T) {
 		OwnerTenantID: &tenant, Name: "Postgres fixture",
 	}))
 	version, content := newEvaluationDatasetVersionFixture("dataset-postgres", "postgres-v1")
+	content.Relevance = append(content.Relevance, types.EvaluationDatasetRelevanceInput{QID: "q2", PID: "p1", Grade: 0})
+	version.ContentSHA256 = types.CanonicalEvaluationDatasetContentSHA256(content)
+	version.RelevanceCount = len(content.Relevance)
 	require.NoError(t, repo.CreateVersion(ctx, version, content))
 
 	got, err := repo.GetVersion(ctx, tenant, version.ID)
@@ -59,6 +64,14 @@ func TestEvaluationDatasetRepositoryPostgresContract(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, full.Questions, 2)
 	assert.Equal(t, "q1", full.Questions[0].QID)
+	foundZero := false
+	for _, relevance := range full.Relevance {
+		if relevance.QID == "q2" && relevance.PID == "p1" {
+			assert.Zero(t, relevance.Grade, "explicit zero relevance must survive PostgreSQL persistence")
+			foundZero = true
+		}
+	}
+	require.True(t, foundZero)
 
 	// Unique constraints hold on PostgreSQL as on SQLite.
 	duplicate, sameContent := newEvaluationDatasetVersionFixture("dataset-postgres", "postgres-dup")

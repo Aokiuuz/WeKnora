@@ -57,6 +57,7 @@ type EvaluationDatasetSnapshot struct {
 // configuration fingerprint. Config SHA-256 never covers API keys, app
 // secrets, custom authorization headers, or credentials embedded in URLs.
 type EvaluationModelSnapshot struct {
+	ConfigVersion int       `json:"config_version,omitempty"`
 	ID            string    `json:"id"`
 	UpstreamName  string    `json:"upstream_name"`
 	Type          string    `json:"type"`

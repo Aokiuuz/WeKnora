@@ -31,30 +31,32 @@ func TestEvaluationTaskRepositoryPostgresContract(t *testing.T) {
 	require.NoError(t, tx.Exec("CREATE SCHEMA "+schema).Error)
 	require.NoError(t, tx.Exec("SET LOCAL search_path = "+schema+", pg_catalog").Error)
 
-	migrationPath := filepath.Join("..", "..", "..", "migrations", "versioned", "000090_evaluation_tasks.up.sql")
+	migrationPath := filepath.Join(
+		"..", "..", "..", "migrations", "topic3", "postgres", "000001_evaluation_tasks.up.sql",
+	)
 	migrationSQL, err := os.ReadFile(migrationPath)
 	require.NoError(t, err)
 	require.NoError(t, tx.Exec(string(migrationSQL)).Error)
 	cancelMigrationPath := filepath.Join(
-		"..", "..", "..", "migrations", "versioned", "000091_evaluation_task_cancellation.up.sql",
+		"..", "..", "..", "migrations", "topic3", "postgres", "000002_evaluation_task_cancellation.up.sql",
 	)
 	cancelMigrationSQL, err := os.ReadFile(cancelMigrationPath)
 	require.NoError(t, err)
 	require.NoError(t, tx.Exec(string(cancelMigrationSQL)).Error)
 
-	// 000095 adds the nullable experiment snapshot columns on top of 000090.
+	// 000006 adds the nullable experiment snapshot columns on top of 000001.
 	snapshotMigrationPath := filepath.Join(
-		"..", "..", "..", "migrations", "versioned", "000095_evaluation_experiment_snapshot.up.sql")
+		"..", "..", "..", "migrations", "topic3", "postgres", "000006_evaluation_experiment_snapshot.up.sql")
 	snapshotMigrationSQL, err := os.ReadFile(snapshotMigrationPath)
 	require.NoError(t, err)
 	require.NoError(t, tx.Exec(string(snapshotMigrationSQL)).Error)
 	questionMigrationPath := filepath.Join(
-		"..", "..", "..", "migrations", "versioned", "000096_evaluation_question_results.up.sql")
+		"..", "..", "..", "migrations", "topic3", "postgres", "000007_evaluation_question_results.up.sql")
 	questionMigrationSQL, err := os.ReadFile(questionMigrationPath)
 	require.NoError(t, err)
 	require.NoError(t, tx.Exec(string(questionMigrationSQL)).Error)
 	runtimeMigrationPath := filepath.Join(
-		"..", "..", "..", "migrations", "versioned", "000098_evaluation_runtime_metrics.up.sql")
+		"..", "..", "..", "migrations", "topic3", "postgres", "000009_evaluation_runtime_metrics.up.sql")
 	runtimeMigrationSQL, err := os.ReadFile(runtimeMigrationPath)
 	require.NoError(t, err)
 	require.NoError(t, tx.Exec(string(runtimeMigrationSQL)).Error)

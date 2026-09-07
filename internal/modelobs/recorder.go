@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Tencent/WeKnora/internal/logger"
+	"github.com/Tencent/WeKnora/internal/models/call"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/google/uuid"
 )
@@ -38,11 +40,12 @@ type Recorder struct{ store Store }
 func NewRecorder(store Store) *Recorder { return &Recorder{store: store} }
 
 type activeCall struct {
-	recorder  *Recorder
-	record    *types.ModelCallRecord
-	started   time.Time
-	once      sync.Once
-	finishErr error
+	recorder     *Recorder
+	record       *types.ModelCallRecord
+	started      time.Time
+	once         sync.Once
+	finishErr    error
+	cachePricing *types.ModelCachePricing
 }
 
 func (r *Recorder) start(ctx context.Context, model *types.Model, operation string) (*activeCall, bool, error) {
@@ -58,13 +61,26 @@ func (r *Recorder) start(ctx context.Context, model *types.Model, operation stri
 	price, err := r.store.EffectiveModelPrice(ctx, tenantID, model.ID, started.UTC())
 	if err != nil {
 		if policy.strict {
-			return nil, true, fmt.Errorf("resolve model price before provider call: %w", err)
+			return nil, true, types.RecordModelAccountingError(
+				ctx,
+				fmt.Errorf(
+					"resolve model price before provider call: %w",
+					err,
+				),
+			)
 		}
+		logger.Errorf(ctx, "[modelobs] price lookup failed: %v", err)
 		return nil, false, nil
+	}
+	callPurpose, _ := types.LLMCallMetadataFromContext(ctx)
+	var cachePricing *types.ModelCachePricing
+	if price != nil {
+		cachePricing = price.CachePricing
 	}
 	snapshot, err := json.Marshal(types.ModelCallModelSnapshot{
 		ID: model.ID, Name: model.Name, Type: model.Type, Source: model.Source,
-		Provider: model.Parameters.Provider,
+		Provider: model.Parameters.Provider, ConfigSHA256: types.EvaluationModelConfigSHA256(model),
+		CallPurpose: callPurpose, CachePricing: cachePricing, RequestMetadata: call.Metadata(ctx),
 	})
 	if err != nil {
 		return nil, policy.strict, err
@@ -78,10 +94,10 @@ func (r *Recorder) start(ctx context.Context, model *types.Model, operation stri
 		ApplicationCacheStatus: types.ApplicationCacheStatusUnavailable,
 		CreatedAt:              now, UpdatedAt: now,
 	}
-	if taskID, _ := ctx.Value(taskContextKey{}).(string); taskID != "" {
+	if taskID, _ := ctx.Value(types.ModelEvaluationTaskContextKey).(string); taskID != "" {
 		record.EvaluationTaskID = taskID
 	}
-	if status, _ := ctx.Value(applicationCacheContextKey{}).(string); status != "" {
+	if status, _ := ctx.Value(types.ModelApplicationCacheContextKey).(string); status != "" {
 		record.ApplicationCacheStatus = status
 	}
 	if price != nil {
@@ -92,11 +108,12 @@ func (r *Recorder) start(ctx context.Context, model *types.Model, operation stri
 	}
 	if err := r.store.StartModelCall(ctx, record); err != nil {
 		if policy.strict {
-			return nil, true, fmt.Errorf("persist model call start: %w", err)
+			return nil, true, types.RecordModelAccountingError(ctx, fmt.Errorf("persist model call start: %w", err))
 		}
+		logger.Errorf(ctx, "[modelobs] start accounting failed: %v", err)
 		return nil, false, nil
 	}
-	return &activeCall{recorder: r, record: record, started: started}, policy.strict, nil
+	return &activeCall{recorder: r, record: record, started: started, cachePricing: cachePricing}, policy.strict, nil
 }
 
 func (c *activeCall) finish(ctx context.Context, status string, callErr error, usage *types.TokenUsage) error {
@@ -111,10 +128,16 @@ func (c *activeCall) finish(ctx context.Context, status string, callErr error, u
 			ProviderCacheStatus:    string(types.PromptCacheStatusUnreported),
 			ApplicationCacheStatus: c.record.ApplicationCacheStatus,
 		}
-		if usage != nil && modelUsageReported(usage) {
-			completion.PromptTokens = intPointer(usage.PromptTokens)
-			completion.CompletionTokens = intPointer(usage.CompletionTokens)
-			completion.TotalTokens = intPointer(usage.TotalTokens)
+		if usage != nil {
+			var snapshot map[string]any
+			if err := json.Unmarshal(c.record.ModelSnapshot, &snapshot); err == nil {
+				cloned := *usage
+				snapshot["billing_usage"] = &cloned
+				encoded, marshalErr := json.Marshal(snapshot)
+				if marshalErr == nil {
+					completion.ModelSnapshot = types.JSON(encoded)
+				}
+			}
 			completion.ProviderCacheStatus = string(usage.CacheStatus)
 			if completion.ProviderCacheStatus == "" {
 				completion.ProviderCacheStatus = string(types.PromptCacheStatusUnreported)
@@ -124,9 +147,19 @@ func (c *activeCall) finish(ctx context.Context, status string, callErr error, u
 				completion.ProviderCacheWriteTokens = intPointer(usage.CacheWriteTokens)
 				completion.ProviderCacheMissTokens = intPointer(usage.CacheMissTokens)
 			}
-			if c.record.InputMicrounitsPerMillion != nil && c.record.OutputMicrounitsPerMillion != nil {
-				cost, err := CalculateCostMicrounits(usage.PromptTokens, usage.CompletionTokens,
-					*c.record.InputMicrounitsPerMillion, *c.record.OutputMicrounitsPerMillion)
+		}
+		if modelUsageReported(usage) {
+			completion.PromptTokens = intPointer(usage.PromptTokens)
+			completion.CompletionTokens = intPointer(usage.CompletionTokens)
+			completion.TotalTokens = intPointer(usage.TotalTokens)
+			if status ==
+				types.ModelCallStatusSuccess &&
+				c.record.InputMicrounitsPerMillion !=
+					nil &&
+				c.record.OutputMicrounitsPerMillion !=
+					nil {
+				cost, err := CalculateUsageCostMicrounits(usage,
+					*c.record.InputMicrounitsPerMillion, *c.record.OutputMicrounitsPerMillion, c.cachePricing)
 				if err == nil {
 					completion.CostMicrounits = &cost
 					completion.AccountingComplete = true
@@ -161,7 +194,15 @@ func (c *activeCall) finish(ctx context.Context, status string, callErr error, u
 }
 
 func modelUsageReported(usage *types.TokenUsage) bool {
-	return usage != nil && (usage.PromptTokens > 0 || usage.CompletionTokens > 0 || usage.TotalTokens > 0)
+	return usage !=
+		nil &&
+		(usage.UsageReported ||
+			usage.PromptTokens >
+				0 ||
+			usage.CompletionTokens >
+				0 ||
+			usage.TotalTokens >
+				0)
 }
 
 func stableErrorCode(err error) string {
@@ -197,6 +238,78 @@ func CalculateCostMicrounits(promptTokens, completionTokens int, inputPrice, out
 	}
 	numerator := new(big.Int).Mul(big.NewInt(int64(promptTokens)), big.NewInt(inputPrice))
 	numerator.Add(numerator, new(big.Int).Mul(big.NewInt(int64(completionTokens)), big.NewInt(outputPrice)))
+	numerator.Add(numerator, big.NewInt(500_000))
+	numerator.Quo(numerator, big.NewInt(1_000_000))
+	if !numerator.IsInt64() {
+		return 0, errors.New("model call cost overflows int64")
+	}
+	return numerator.Int64(), nil
+}
+
+// CalculateUsageCostMicrounits prices disjoint ordinary-input, read, write and output buckets.
+// Cache misses include writes for some providers, so they are never billed as an extra bucket.
+func CalculateUsageCostMicrounits(
+	u *types.TokenUsage,
+	inputPrice, outputPrice int64,
+	cache *types.ModelCachePricing,
+) (
+	int64,
+	error,
+) {
+	if u == nil {
+		return 0, errors.New("usage is unavailable")
+	}
+	if u.CacheStatus == types.PromptCacheStatusUnreported {
+		return 0, errors.New("provider cache billing usage is unreported")
+	}
+	read, write := u.CacheReadTokens, u.CacheWriteTokens
+	if read == 0 && write == 0 {
+		return CalculateCostMicrounits(u.PromptTokens, u.CompletionTokens, inputPrice, outputPrice)
+	}
+	if !u.CacheReported || cache == nil || cache.Version != 1 || read < 0 || write < 0 || read+write > u.PromptTokens {
+		return 0, errors.New("cache usage or cache price is incomplete")
+	}
+	numerator := new(big.Int)
+	add := func(tokens int, price *int64) error {
+		if tokens == 0 {
+			return nil
+		}
+		if tokens < 0 || price == nil || *price < 0 {
+			return errors.New("cache billing bucket is unpriced")
+		}
+		numerator.Add(numerator, new(big.Int).Mul(big.NewInt(int64(tokens)), big.NewInt(*price)))
+		return nil
+	}
+	ordinary := u.PromptTokens - read - write
+	if inputPrice < 0 || outputPrice < 0 || u.CompletionTokens < 0 {
+		return 0, errors.New("negative tokens or prices")
+	}
+	if err := add(ordinary, &inputPrice); err != nil {
+		return 0, err
+	}
+	if err := add(u.CompletionTokens, &outputPrice); err != nil {
+		return 0, err
+	}
+	if err := add(read, cache.ReadMicrounitsPerMillion); err != nil {
+		return 0, err
+	}
+	if write > 0 {
+		if u.CacheWrite5mTokens ==
+			nil ||
+			u.CacheWrite1hTokens ==
+				nil ||
+			*u.CacheWrite5mTokens+
+				*u.CacheWrite1hTokens !=
+				write {
+			return 0, errors.New("cache write retention buckets are unreported")
+		}
+		if err := add(*u.CacheWrite5mTokens, cache.Write5mMicrounitsPerMillion); err != nil {
+			return 0, err
+		}
+		if err := add(*u.CacheWrite1hTokens, cache.Write1hMicrounitsPerMillion); err != nil {
+			return 0, err
+		}
+	}
 	numerator.Add(numerator, big.NewInt(500_000))
 	numerator.Quo(numerator, big.NewInt(1_000_000))
 	if !numerator.IsInt64() {

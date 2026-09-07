@@ -53,7 +53,9 @@ func (s *recorderStore) EffectiveModelPrice(
 ) (*types.ModelPriceVersion, error) {
 	return s.price, nil
 }
+
 func (s *recorderStore) CreateModelPrice(context.Context, *types.ModelPriceVersion) error { return nil }
+
 func (s *recorderStore) ListModelPrices(context.Context, uint64, string) ([]*types.ModelPriceVersion, error) {
 	return nil, nil
 }
@@ -174,7 +176,15 @@ func TestStrictStreamingCompletionFailureReplacesProviderTerminal(t *testing.T) 
 
 func TestStreamingCallCompletesLedgerExactlyOnce(t *testing.T) {
 	stream := make(chan types.StreamResponse, 2)
-	stream <- types.StreamResponse{Usage: &types.TokenUsage{PromptTokens: 4, CompletionTokens: 1, TotalTokens: 5}}
+	stream <- types.StreamResponse{
+		ResponseType: types.ResponseTypeAnswer,
+		Done:         true,
+		Usage: &types.TokenUsage{
+			PromptTokens:     4,
+			CompletionTokens: 1,
+			TotalTokens:      5,
+		},
+	}
 	close(stream)
 	store := &recorderStore{price: &types.ModelPriceVersion{
 		ID: "price-1", InputMicrounitsPerMillion: 1_000_000, OutputMicrounitsPerMillion: 2_000_000,

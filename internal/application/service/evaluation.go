@@ -12,6 +12,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/evaluation/metricregistry"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/modelobs"
+	"github.com/Tencent/WeKnora/internal/models/call"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 	"github.com/Tencent/WeKnora/internal/utils"
@@ -235,7 +236,7 @@ func (e *EvaluationService) runEvaluation(
 		errEvaluationTaskTimeout,
 	)
 	defer cancelTask()
-	runCtx, cancelRun := context.WithCancelCause(taskCtx)
+	runCtx, cancelRun := context.WithCancelCause(types.WithModelAccountingState(taskCtx))
 	defer cancelRun(nil)
 
 	entity, err := e.evaluationTaskRepository.GetTask(runCtx, detail.Task.TenantID, taskID)
@@ -334,6 +335,7 @@ func (e *EvaluationService) runEvaluation(
 		return heartbeatErr
 	}
 	endTime := time.Now().UTC()
+	runErr = errors.Join(runErr, types.ModelAccountingError(runCtx))
 	terminalErr := runErr
 	status := types.EvaluationStatueSuccess
 	errMsg := ""
@@ -378,6 +380,13 @@ func (e *EvaluationService) runEvaluation(
 			return costErr
 		}
 		runtimeMetrics.Cost = cost
+		if cost != nil && cost.StartedCalls > 0 && status == types.EvaluationStatueSuccess {
+			terminalErr = fmt.Errorf(
+				"%w: %d provider calls have no persisted terminal", types.ErrModelAccounting, cost.StartedCalls,
+			)
+			status = types.EvaluationStatueFailed
+			errMsg = terminalErr.Error()
+		}
 	}
 	runtimeMetricsJSON, encodeErr := encodeEvaluationRuntimeMetrics(runtimeMetrics)
 	if encodeErr != nil {
@@ -934,6 +943,7 @@ func (e *EvaluationService) evalDataset(
 		qaPair := qaPair
 		i := i
 		g.Go(func() error {
+			workerCtx := call.WithMetadata(workerCtx, map[string]any{"sample_index": i})
 			if err := workerCtx.Err(); err != nil {
 				return err
 			}

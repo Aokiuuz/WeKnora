@@ -171,3 +171,32 @@ test('read-only users do not request or mutate model pricing', async () => {
   assert.equal(calls, 0)
   assert.equal(state.watches[0].options.immediate, true)
 })
+
+test('cache prices preserve unknown, free and priced fields without inventing a zero', async () => {
+  const calls: any[] = []
+  const {vm} = await setup({putModelPrice: async (...args) => {calls.push(args); return {}}})
+  vm.priceModelId.value = 'a'; vm.inputPrice.value = 1; vm.outputPrice.value = 2
+  await vm.savePrice()
+  assert.equal(calls[0][1].cache_pricing, undefined)
+  vm.cacheReadPrice.value = 0
+  vm.cacheWrite5mPrice.value = 1.25
+  await vm.savePrice()
+  assert.deepEqual(calls[1][1].cache_pricing, {
+    version: 1, read_microunits_per_million: 0,
+    write_5m_microunits_per_million: 1250000,
+    write_1h_microunits_per_million: undefined,
+  })
+  for (const invalid of [-1, NaN, Infinity, 1e15]) {
+    vm.cacheWrite1hPrice.value = invalid
+    assert.equal(vm.canSavePrice.value, false)
+    await vm.savePrice()
+  }
+  assert.equal(calls.length, 2)
+})
+
+test('historical usage remains readable after its model is absent from the active model list', async () => {
+  const {vm} = await setup({listModelUsage: async () => ({items: [{model_id: 'deleted-model', call_count: 2}]})})
+  await vm.loadUsage()
+  assert.equal(vm.rows.value[0].model_id, 'deleted-model')
+  assert.equal(vm.modelName('deleted-model'), 'deleted-model')
+})

@@ -2,21 +2,6 @@ name: Evaluation regression
 
 on:
   pull_request:
-    paths:
-      - "cmd/evaluation-reproduce/**"
-      - "dataset/golden/**"
-      - "evaluation/regression/**"
-      - "internal/application/service/metric/**"
-      - "internal/application/service/metric_hook.go"
-      - "internal/application/service/knowledgebase_search*.go"
-      - "internal/application/service/chat_pipeline/**"
-      - "internal/evaluation/**"
-      - "internal/retrieval/fusion/**"
-      - "internal/models/embedding/**"
-      - "internal/models/rerank/**"
-      - "internal/types/evaluation*.go"
-      - "Makefile"
-      - ".github/workflows/evaluation-regression.yml"
   schedule:
     - cron: "23 3 * * 1"
   workflow_dispatch:
@@ -30,6 +15,7 @@ permissions:
 
 env:
   GO_VERSION: "1.26"
+  CGO_ENABLED: "1"
   GOPROXY: https://proxy.golang.org,direct
   LOG_FORMAT: ""
 
@@ -37,7 +23,7 @@ jobs:
   regression:
     name: Deterministic golden evaluation
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
         with:
@@ -51,10 +37,18 @@ jobs:
       - name: Run the reproducible evaluation gate
         run: make evaluation-reproduce
 
+      - name: Run persistent HTTP evaluation and cache rebuild
+        run: python3 scripts/evaluation-rag-http-smoke.py --output artifacts/evaluation-rag-http
+
+      - name: Check product version consistency
+        run: python3 scripts/check-product-version.py
+
       - name: Upload authoritative and rendered reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: evaluation-regression-${{ github.run_id }}
-          path: artifacts/evaluation-regression/
+          path: |
+            artifacts/evaluation-regression/
+            artifacts/evaluation-rag-http/
           if-no-files-found: error

@@ -3,7 +3,10 @@ package modelobs
 import (
 	"context"
 	"errors"
-	"fmt"
+	"sync/atomic"
+
+	"github.com/Tencent/WeKnora/internal/models/call"
+	"github.com/google/uuid"
 
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/asr"
@@ -27,7 +30,7 @@ func finishProviderCall(
 		return providerErr
 	}
 	if strict {
-		accountingErr := fmt.Errorf("model call accounting: %w", finishErr)
+		accountingErr := types.RecordModelAccountingError(ctx, finishErr)
 		return errors.Join(providerErr, accountingErr)
 	}
 	logger.Errorf(ctx, "[modelobs] terminal accounting failed: %v", finishErr)
@@ -53,6 +56,10 @@ func (o *observedChat) Chat(
 	messages []chat.Message,
 	opts *chat.ChatOptions,
 ) (*types.ChatResponse, error) {
+	if supported, ok := o.inner.(interface{ RequestAccountingSupported() bool }); ok &&
+		supported.RequestAccountingSupported() {
+		return o.inner.Chat(o.recorder.attemptContext(ctx, o.model), messages, opts)
+	}
 	call, strict, err := o.recorder.start(ctx, o.model, "chat")
 	if err != nil && strict {
 		return nil, err
@@ -72,6 +79,10 @@ func (o *observedChat) ChatStream(
 	messages []chat.Message,
 	opts *chat.ChatOptions,
 ) (<-chan types.StreamResponse, error) {
+	if supported, ok := o.inner.(interface{ RequestAccountingSupported() bool }); ok &&
+		supported.RequestAccountingSupported() {
+		return o.inner.ChatStream(o.recorder.attemptContext(ctx, o.model), messages, opts)
+	}
 	call, strict, err := o.recorder.start(ctx, o.model, "chat_stream")
 	if err != nil && strict {
 		return nil, err
@@ -88,32 +99,42 @@ func (o *observedChat) ChatStream(
 		status := types.ModelCallStatusSuccess
 		var terminalErr error
 		var usage *types.TokenUsage
-		var strictTerminal *types.StreamResponse
+		var terminal *types.StreamResponse
+		send := func(r types.StreamResponse) bool {
+			select {
+			case output <- r:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
 		defer func() {
+			if terminal == nil && terminalErr == nil {
+				terminalErr = errors.New("provider stream closed without a terminal response")
+				status = types.ModelCallStatusError
+			}
 			finishErr := call.finish(ctx, status, terminalErr, usage)
-			if finishErr != nil {
-				if !strict {
-					logger.Errorf(ctx, "[modelobs] terminal stream accounting failed: %v", finishErr)
-					return
-				}
-				select {
-				case output <- types.StreamResponse{
-					ResponseType: types.ResponseTypeError,
-					Content:      "model call accounting failed",
-					Done:         true,
-					Data: map[string]interface{}{
-						"error_code": "model_call_accounting_failed",
-					},
-				}:
-				case <-ctx.Done():
-				}
+			if finishErr != nil && strict {
+				_ = types.RecordModelAccountingError(ctx, finishErr)
+				send(types.StreamResponse{
+					ResponseType: types.ResponseTypeError, Content: "model call accounting failed", Done: true,
+					Usage: usage, FinishReason: types.FinishReasonIncomplete,
+					Data: map[string]interface{}{"error_code": "model_call_accounting_failed"},
+				})
 				return
 			}
-			if strictTerminal != nil {
-				select {
-				case output <- *strictTerminal:
-				case <-ctx.Done():
+			if finishErr != nil {
+				logger.Errorf(ctx, "[modelobs] terminal stream accounting failed: %v", finishErr)
+			}
+			if terminalErr != nil && (terminal == nil || terminal.ResponseType != types.ResponseTypeError) {
+				terminal = &types.StreamResponse{
+					ResponseType: types.ResponseTypeError, Content: terminalErr.Error(),
+					Done: true, FinishReason: types.FinishReasonIncomplete,
 				}
+			}
+			if terminal != nil {
+				terminal.Usage = usage
+				send(*terminal)
 			}
 		}()
 		for {
@@ -132,16 +153,23 @@ func (o *observedChat) ChatStream(
 				}
 				if response.ResponseType == types.ResponseTypeError {
 					status = types.ModelCallStatusError
-					terminalErr = errors.New("provider stream error")
+					terminalErr = errors.New(response.Content)
+					if response.Data["error_code"] == "model_call_accounting_failed" {
+						terminalErr = types.RecordModelAccountingError(ctx, terminalErr)
+					}
 				}
-				if strict && response.Done {
-					cloned := response
-					strictTerminal = &cloned
+				// Thinking Done terminates a segment. Answer/error Done terminates the call.
+				if response.Done && response.ResponseType != types.ResponseTypeThinking {
+					if terminal == nil || terminal.ResponseType != types.ResponseTypeError {
+						cloned := response
+						terminal = &cloned
+					}
 					continue
 				}
-				select {
-				case output <- response:
-				case <-ctx.Done():
+				if terminal != nil {
+					continue
+				}
+				if !send(response) {
 					status = types.ModelCallStatusCanceled
 					terminalErr = context.Cause(ctx)
 					return
@@ -170,6 +198,11 @@ func (r *Recorder) WrapEmbedder(model *types.Model, inner embedding.Embedder) em
 }
 
 func (o *observedEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+	if supported, ok := o.inner.(interface{ RequestAccountingSupported() bool }); ok &&
+		supported.RequestAccountingSupported() {
+		ctx = o.recorder.attemptContext(ctx, o.model)
+		return o.inner.Embed(ctx, text)
+	}
 	call, strict, err := o.recorder.start(ctx, o.model, "embedding")
 	if err != nil && strict {
 		return nil, err
@@ -181,6 +214,11 @@ func (o *observedEmbedder) Embed(ctx context.Context, text string) ([]float32, e
 }
 
 func (o *observedEmbedder) BatchEmbed(ctx context.Context, texts []string) ([][]float32, error) {
+	if supported, ok := o.inner.(interface{ RequestAccountingSupported() bool }); ok &&
+		supported.RequestAccountingSupported() {
+		ctx = o.recorder.attemptContext(ctx, o.model)
+		return o.inner.BatchEmbed(ctx, texts)
+	}
 	call, strict, err := o.recorder.start(ctx, o.model, "embedding_batch")
 	if err != nil && strict {
 		return nil, err
@@ -196,6 +234,11 @@ func (o *observedEmbedder) BatchEmbedWithPool(
 	_ embedding.Embedder,
 	texts []string,
 ) ([][]float32, error) {
+	if supported, ok := o.inner.(interface{ RequestAccountingSupported() bool }); ok &&
+		supported.RequestAccountingSupported() {
+		ctx = o.recorder.attemptContext(ctx, o.model)
+		return o.inner.BatchEmbedWithPool(ctx, o.inner, texts)
+	}
 	call, strict, err := o.recorder.start(ctx, o.model, "embedding_batch")
 	if err != nil && strict {
 		return nil, err
@@ -224,6 +267,10 @@ func (r *Recorder) WrapReranker(model *types.Model, inner rerank.Reranker) reran
 }
 
 func (o *observedReranker) Rerank(ctx context.Context, query string, documents []string) ([]rerank.RankResult, error) {
+	if supported, ok := o.inner.(interface{ RequestAccountingSupported() bool }); ok &&
+		supported.RequestAccountingSupported() {
+		return o.inner.Rerank(o.recorder.attemptContext(ctx, o.model), query, documents)
+	}
 	call, strict, err := o.recorder.start(ctx, o.model, "rerank")
 	if err != nil && strict {
 		return nil, err
@@ -289,3 +336,38 @@ func (o *observedASR) Transcribe(ctx context.Context, audio []byte, fileName str
 }
 func (o *observedASR) GetModelName() string { return o.inner.GetModelName() }
 func (o *observedASR) GetModelID() string   { return o.inner.GetModelID() }
+
+func (r *Recorder) attemptContext(ctx context.Context, model *types.Model) context.Context {
+	logicalID := uuid.NewString()
+	var sequence atomic.Int64
+	return call.WithObserver(ctx, func(attemptCtx context.Context, operation string) (call.Finish, error) {
+		metadata := map[string]any{"logical_operation_id": logicalID, "attempt_sequence": sequence.Add(1)}
+		for key, value := range call.Metadata(attemptCtx) {
+			if key != "logical_operation_id" && key != "attempt_sequence" {
+				metadata[key] = value
+			}
+		}
+		attemptCtx = call.WithMetadata(attemptCtx, metadata)
+		types.StreamActivity(attemptCtx, false)
+		active, strict, err := r.start(attemptCtx, model, operation)
+		types.StreamActivity(attemptCtx, true)
+		if err != nil && strict {
+			return nil, err
+		}
+		return func(providerErr error, usage *types.TokenUsage) error {
+			types.StreamActivity(attemptCtx, false)
+			return finishProviderCall(attemptCtx, active, strict, statusForError(providerErr), providerErr, usage)
+		}, nil
+	})
+}
+
+func (o *observedChat) OutputTokenLimit() int {
+	if bounded, ok := o.inner.(interface{ OutputTokenLimit() int }); ok {
+		return bounded.OutputTokenLimit()
+	}
+	return o.model.Parameters.MaxOutputTokens
+}
+
+func (o *observedChat) BehaviorFingerprint() string {
+	return types.EvaluationModelConfigSHA256(o.model)
+}

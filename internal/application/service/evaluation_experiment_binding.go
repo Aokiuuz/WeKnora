@@ -149,6 +149,12 @@ func (e *EvaluationService) buildExperimentForTask(
 	if err != nil {
 		return nil, "", fmt.Errorf("build evaluation experiment: indexing snapshot: %w", err)
 	}
+	if chatModel != nil {
+		limit := chatModel.Parameters.MaxOutputTokens
+		if limit > 0 && (detail.Params.SummaryConfig.MaxTokens <= 0 || detail.Params.SummaryConfig.MaxTokens > limit) {
+			detail.Params.SummaryConfig.MaxTokens = limit
+		}
+	}
 	return BuildEvaluationExperimentSnapshot(&EvaluationExperimentInput{
 		Dataset:               datasetSnapshot,
 		SourceKnowledgeBaseID: options.KnowledgeBaseID,

@@ -324,6 +324,11 @@ func TestGetEvaluationResultParsesNestedDetail(t *testing.T) {
 				"generation_metrics": map[string]any{"bleu1": 0.25},
 			},
 			"runtime_metrics": map[string]any{
+				"cost": map[string]any{
+					"call_count": 2, "accounting_complete_calls": 1, "unpriced_calls": 1,
+					"usage_unreported_calls": 1, "started_calls": 0,
+					"totals": []map[string]any{{"currency": "CNY", "cost_microunits": 0}},
+				},
 				"schema_version": 1,
 				"started_at":     "2026-08-28T08:00:00Z",
 				"durations":      map[string]any{"total_ms": 125},
@@ -362,6 +367,10 @@ func TestGetEvaluationResultParsesNestedDetail(t *testing.T) {
 	if result.RuntimeMetrics == nil || result.RuntimeMetrics.Durations.TotalMs == nil ||
 		*result.RuntimeMetrics.Durations.TotalMs != 125 {
 		t.Fatalf("EvaluationResult.RuntimeMetrics = %#v, want total_ms=125", result.RuntimeMetrics)
+	}
+	if cost := result.RuntimeMetrics.Cost; cost == nil || cost.CallCount != 2 || cost.UnpricedCalls != 1 ||
+		cost.UsageUnreportedCalls != 1 || len(cost.Totals) != 1 || cost.Totals[0].CostMicrounits != 0 {
+		t.Fatalf("runtime accounting coverage or explicit zero cost lost: %#v", cost)
 	}
 }
 

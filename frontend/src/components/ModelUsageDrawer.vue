@@ -1,8 +1,8 @@
 <template>
   <SettingDrawer
     v-model:visible="drawerVisible"
-    :title="t('modelSettings.usage.title')"
-    :description="t('modelSettings.usage.description')"
+    :title="t('modelSettings.observability.title')"
+    :description="t('modelSettings.observability.description')"
     class="model-usage-drawer"
     :close-btn="renderCloseIcon"
     width="920px"
@@ -14,17 +14,17 @@
     <template #headerIcon><ChartNoAxesCombined :size="22" :stroke-width="1.7" aria-hidden="true" /></template>
     <div class="usage-toolbar">
       <label class="usage-field usage-model-filter">
-        <span>{{ t('modelSettings.usage.selectModel') }}</span>
+        <span>{{ t('modelSettings.observability.selectModel') }}</span>
         <select v-model="usageModelId" @change="loadUsage">
-          <option value="">{{ t('modelSettings.usage.allModels') }}</option>
+          <option value="">{{ t('modelSettings.observability.allModels') }}</option>
           <option v-for="model in models" :key="model.id" :value="model.id">{{ modelLabel(model) }}</option>
         </select>
       </label>
       <t-radio-group v-model="windowDays" variant="default-filled" @change="loadUsage">
-        <t-radio-button :value="7">7 {{ t('modelSettings.usage.days') }}</t-radio-button>
-        <t-radio-button :value="30">30 {{ t('modelSettings.usage.days') }}</t-radio-button>
-        <t-radio-button :value="90">90 {{ t('modelSettings.usage.days') }}</t-radio-button>
-        <t-radio-button :value="0">{{ t('modelSettings.usage.customRange') }}</t-radio-button>
+        <t-radio-button :value="7">7 {{ t('modelSettings.observability.days') }}</t-radio-button>
+        <t-radio-button :value="30">30 {{ t('modelSettings.observability.days') }}</t-radio-button>
+        <t-radio-button :value="90">90 {{ t('modelSettings.observability.days') }}</t-radio-button>
+        <t-radio-button :value="0">{{ t('modelSettings.observability.customRange') }}</t-radio-button>
       </t-radio-group>
       <t-button variant="outline" :disabled="loading" @click="loadUsage">
         <template #icon><RefreshCw :size="16" :class="{ 'icon-spinning': loading }" aria-hidden="true" /></template>
@@ -33,22 +33,22 @@
     </div>
     <div v-if="windowDays === 0" class="usage-range">
       <label class="usage-field">
-        <span>{{ t('modelSettings.usage.from') }}</span>
+        <span>{{ t('modelSettings.observability.from') }}</span>
         <input v-model="rangeFrom" type="datetime-local" @change="loadUsage" />
       </label>
       <label class="usage-field">
-        <span>{{ t('modelSettings.usage.to') }}</span>
+        <span>{{ t('modelSettings.observability.to') }}</span>
         <input v-model="rangeTo" type="datetime-local" @change="loadUsage" />
       </label>
     </div>
-    <p class="usage-hint">{{ t('modelSettings.usage.timezoneHint') }}</p>
+    <p class="usage-hint">{{ t('modelSettings.observability.timezoneHint') }}</p>
     <p v-if="usageError" class="usage-error" role="alert">{{ usageError }}</p>
 
     <div :aria-busy="loading">
       <div v-if="loading" class="usage-loading" role="status"><LoaderCircle :size="22" class="icon-spinning" aria-hidden="true" /><span>{{ t('evaluation.loading') }}</span></div>
       <div v-if="!loading && !usageError && rows.length === 0" class="usage-empty">
         <ChartNoAxesCombined :size="40" :stroke-width="1.2" aria-hidden="true" />
-        <p>{{ t('modelSettings.usage.empty') }}</p>
+        <p>{{ t('modelSettings.observability.empty') }}</p>
       </div>
       <div v-else class="usage-list">
         <article v-for="row in rows" :key="row.model_id" class="usage-card">
@@ -58,31 +58,34 @@
               <span>{{ modelType(row.model_id) }}</span>
             </div>
             <div class="usage-card__cost">
-              <span>{{ t('modelSettings.usage.recordedCost') }}</span>
+              <span>{{ t('modelSettings.observability.recordedCost') }}</span>
               <strong>{{ formatCosts(row.costs) }}</strong>
-              <small>{{ t('modelSettings.usage.accountedCalls', { complete: integer(row.accounting_complete_calls), total: integer(row.call_count) }) }}</small>
+              <small>{{ t('modelSettings.observability.accountedCalls', { complete: integer(row.accounting_complete_calls), total: integer(row.call_count) }) }}</small>
             </div>
           </header>
           <div class="usage-metrics">
-            <div><span>{{ t('modelSettings.usage.calls') }}</span><strong>{{ integer(row.call_count) }}</strong></div>
-            <div><span>{{ t('modelSettings.usage.tokens') }}</span><strong>{{ integer(row.total_tokens) }}</strong></div>
+            <div><span>{{ t('modelSettings.observability.calls') }}</span><strong>{{ integer(row.call_count) }}</strong></div>
+            <div><span>{{ t('modelSettings.observability.tokens') }}</span><strong>{{ integer(row.total_tokens) }}</strong></div>
             <div><span>p50</span><strong>{{ latency(row.latency.p50_ms) }}</strong></div>
             <div><span>p95</span><strong>{{ latency(row.latency.p95_ms) }}</strong></div>
             <div><span>p99</span><strong>{{ latency(row.latency.p99_ms) }}</strong></div>
-            <div><span>{{ t('modelSettings.usage.unpriced') }}</span><strong>{{ integer(row.unpriced_calls) }}</strong></div>
+            <div><span>{{ t('modelSettings.observability.unpriced') }}</span><strong>{{ integer(row.unpriced_calls) }}</strong></div>
           </div>
+          <dl class="call-status" :aria-label="t('modelSettings.observability.callStatus')">
+            <div v-for="item in callStatuses" :key="item.key"><dt>{{ t(`modelSettings.observability.${item.label}`) }}</dt><dd>{{ integer(row[item.key]) }}</dd></div>
+          </dl>
           <div class="cache-grid">
             <section>
-              <h5><Layers3 :size="15" aria-hidden="true" />{{ t('modelSettings.usage.providerCache') }}</h5>
+              <h5><Layers3 :size="15" aria-hidden="true" />{{ t('modelSettings.observability.providerCache') }}</h5>
               <strong>{{ percent(row.provider_cache.hit_rate) }}</strong>
-              <progress v-if="row.provider_cache.hit_rate != null" :value="row.provider_cache.hit_rate" :max="1" :aria-label="t('modelSettings.usage.providerCache')" />
-              <p>{{ t('modelSettings.usage.providerDenominator', { value: integer(row.provider_cache.observed_tokens) }) }}</p>
+              <progress v-if="row.provider_cache.hit_rate != null" :value="row.provider_cache.hit_rate" :max="1" :aria-label="t('modelSettings.observability.providerCache')" />
+              <p>{{ t('modelSettings.observability.providerDenominator', { value: integer(row.provider_cache.observed_tokens) }) }}</p>
             </section>
             <section>
-              <h5><Database :size="15" aria-hidden="true" />{{ t('modelSettings.usage.applicationCache') }}</h5>
+              <h5><Database :size="15" aria-hidden="true" />{{ t('modelSettings.observability.applicationCache') }}</h5>
               <strong>{{ percent(row.application_cache.hit_rate) }}</strong>
-              <progress v-if="row.application_cache.hit_rate != null" :value="row.application_cache.hit_rate" :max="1" :aria-label="t('modelSettings.usage.applicationCache')" />
-              <p>{{ t('modelSettings.usage.applicationDenominator', { value: integer(row.application_cache.observed_items), bypass: integer(row.application_cache.bypass_items) }) }}</p>
+              <progress v-if="row.application_cache.hit_rate != null" :value="row.application_cache.hit_rate" :max="1" :aria-label="t('modelSettings.observability.applicationCache')" />
+              <p>{{ t('modelSettings.observability.applicationDenominator', { value: integer(row.application_cache.observed_items), bypass: integer(row.application_cache.bypass_items) }) }}</p>
             </section>
           </div>
         </article>
@@ -90,35 +93,47 @@
     </div>
 
     <details v-if="canEditPricing" class="pricing-section">
-      <summary>{{ t('modelSettings.usage.pricingTitle') }}</summary>
-      <p>{{ t('modelSettings.usage.pricingDescription') }}</p>
+      <summary>{{ t('modelSettings.observability.pricingTitle') }}</summary>
+      <p>{{ t('modelSettings.observability.pricingDescription') }}</p>
       <div class="pricing-form">
         <label class="usage-field">
-          <span>{{ t('modelSettings.usage.selectModel') }}</span>
+          <span>{{ t('modelSettings.observability.selectModel') }}</span>
           <select v-model="priceModelId" :disabled="savingPrice" @change="loadPrices">
-            <option value="" disabled>{{ t('modelSettings.usage.selectModel') }}</option>
+            <option value="" disabled>{{ t('modelSettings.observability.selectModel') }}</option>
             <option v-for="model in models" :key="model.id" :value="model.id">{{ modelLabel(model) }}</option>
           </select>
         </label>
-        <label class="usage-field"><span>{{ t('modelSettings.usage.currency') }}</span><input v-model="currency" maxlength="3" :disabled="savingPrice" /></label>
-        <label class="usage-field"><span>{{ t('modelSettings.usage.inputPrice') }}</span><input v-model.number="inputPrice" type="number" min="0" step="0.000001" :disabled="savingPrice" /></label>
-        <label class="usage-field"><span>{{ t('modelSettings.usage.outputPrice') }}</span><input v-model.number="outputPrice" type="number" min="0" step="0.000001" :disabled="savingPrice" /></label>
-        <label class="usage-field"><span>{{ t('modelSettings.usage.validFrom') }}</span><input v-model="validFrom" type="datetime-local" :disabled="savingPrice" /></label>
-        <label class="usage-field"><span>{{ t('modelSettings.usage.validTo') }}</span><input v-model="validTo" type="datetime-local" :disabled="savingPrice" /></label>
+        <label class="usage-field"><span>{{ t('modelSettings.observability.currency') }}</span><input v-model="currency" maxlength="3" :disabled="savingPrice" /></label>
+        <label class="usage-field"><span>{{ t('modelSettings.observability.inputPrice') }}</span><input v-model.number="inputPrice" type="number" min="0" step="0.000001" :disabled="savingPrice" /></label>
+        <label class="usage-field"><span>{{ t('modelSettings.observability.outputPrice') }}</span><input v-model.number="outputPrice" type="number" min="0" step="0.000001" :disabled="savingPrice" /></label>
+        <label class="usage-field"><span>{{ t('modelSettings.observability.validFrom') }}</span><input v-model="validFrom" type="datetime-local" :disabled="savingPrice" /></label>
+        <label class="usage-field"><span>{{ t('modelSettings.observability.validTo') }}</span><input v-model="validTo" type="datetime-local" :disabled="savingPrice" /></label>
       </div>
+      <fieldset class="cache-pricing-fields" :disabled="savingPrice">
+        <legend>{{ t('modelSettings.observability.cachePricingTitle') }}</legend>
+        <p id="cache-pricing-hint">{{ t('modelSettings.observability.cachePricingHint') }}</p>
+        <div class="pricing-form">
+          <label class="usage-field"><span>{{ t('modelSettings.observability.cacheReadPrice') }}</span><input v-model.number="cacheReadPrice" type="number" min="0" step="0.000001" aria-describedby="cache-pricing-hint" /></label>
+          <label class="usage-field"><span>{{ t('modelSettings.observability.cacheWrite5mPrice') }}</span><input v-model.number="cacheWrite5mPrice" type="number" min="0" step="0.000001" aria-describedby="cache-pricing-hint" /></label>
+          <label class="usage-field"><span>{{ t('modelSettings.observability.cacheWrite1hPrice') }}</span><input v-model.number="cacheWrite1hPrice" type="number" min="0" step="0.000001" aria-describedby="cache-pricing-hint" /></label>
+        </div>
+      </fieldset>
       <p v-if="priceValidationError" class="usage-error" role="alert">{{ priceValidationError }}</p>
       <div class="pricing-actions">
         <t-button theme="primary" :disabled="!canSavePrice" @click="savePrice">
           <template #icon><LoaderCircle v-if="savingPrice" :size="16" class="icon-spinning" aria-hidden="true" /><Plus v-else :size="16" aria-hidden="true" /></template>
-          {{ t('modelSettings.usage.addPrice') }}
+          {{ t('modelSettings.observability.addPrice') }}
         </t-button>
       </div>
       <p v-if="priceError" class="usage-error" role="alert">{{ priceError }}</p>
       <LoaderCircle v-if="priceLoading" :size="20" class="icon-spinning" role="status" :aria-label="t('evaluation.loading')" />
       <div v-else-if="prices.length" class="price-history">
         <div v-for="price in prices" :key="price.id" class="price-version">
-          <span>{{ new Date(price.valid_from).toLocaleString() }} → {{ price.valid_to ? new Date(price.valid_to).toLocaleString() : t('modelSettings.usage.openEnded') }}</span>
+          <span>{{ new Date(price.valid_from).toLocaleString() }} → {{ price.valid_to ? new Date(price.valid_to).toLocaleString() : t('modelSettings.observability.openEnded') }}</span>
           <strong>{{ price.currency }} {{ micros(price.input_microunits_per_million) }} / {{ micros(price.output_microunits_per_million) }}</strong>
+          <dl class="cache-price-history">
+            <div v-for="field in cachePriceFields" :key="field.key"><dt>{{ t(`modelSettings.observability.${field.label}`) }}</dt><dd>{{ price.cache_pricing?.[field.key] == null ? t('modelSettings.observability.unknownPrice') : `${price.currency} ${micros(price.cache_pricing[field.key]!)}` }}</dd></div>
+          </dl>
         </div>
       </div>
     </details>
@@ -158,6 +173,9 @@ const priceModelId = ref('')
 const prices = ref<ModelPriceVersion[]>([])
 const inputPrice = ref<number | string>('')
 const outputPrice = ref<number | string>('')
+const cacheReadPrice = ref<number | string>('')
+const cacheWrite5mPrice = ref<number | string>('')
+const cacheWrite1hPrice = ref<number | string>('')
 const currency = ref('USD')
 const validFrom = ref(localDateTime(new Date()))
 const validTo = ref('')
@@ -169,9 +187,9 @@ let priceSequence = 0
 let sessionSequence = 0
 
 const priceValidationError = computed(() => {
-  if (!validRange(validFrom.value, validTo.value, true)) return t('modelSettings.usage.invalidPriceDates')
-  if (!/^[A-Za-z]{3}$/.test(currency.value.trim())) return t('modelSettings.usage.invalidCurrency')
-  if ([inputPrice.value, outputPrice.value].some(value => value !== '' && !validPrice(value))) return t('modelSettings.usage.invalidPrice')
+  if (!validRange(validFrom.value, validTo.value, true)) return t('modelSettings.observability.invalidPriceDates')
+  if (!/^[A-Za-z]{3}$/.test(currency.value.trim())) return t('modelSettings.observability.invalidCurrency')
+  if ([inputPrice.value, outputPrice.value, cacheReadPrice.value, cacheWrite5mPrice.value, cacheWrite1hPrice.value].some(value => value !== '' && !validPrice(value))) return t('modelSettings.observability.invalidPrice')
   return ''
 })
 const canSavePrice = computed(() => props.canEditPricing && !savingPrice.value && Boolean(
@@ -208,7 +226,7 @@ async function loadUsage() {
   loading.value = false
   if (!props.visible) return
   if (windowDays.value === 0 && !validRange(rangeFrom.value, rangeTo.value)) {
-    usageError.value = t('modelSettings.usage.invalidRange')
+    usageError.value = t('modelSettings.observability.invalidRange')
     return
   }
   loading.value = true
@@ -218,7 +236,7 @@ async function loadUsage() {
     const result = await listModelUsage({ from: from.toISOString(), to: to.toISOString(), modelIds: usageModelId.value ? [usageModelId.value] : undefined })
     if (sequence === usageSequence) rows.value = result.items ?? []
   } catch (error: any) {
-    if (sequence === usageSequence) usageError.value = error?.message || t('modelSettings.usage.loadFailed')
+    if (sequence === usageSequence) usageError.value = error?.message || t('modelSettings.observability.loadFailed')
   } finally {
     if (sequence === usageSequence) loading.value = false
   }
@@ -235,7 +253,7 @@ async function loadPrices() {
     const result = await listModelPrices(priceModelId.value)
     if (sequence === priceSequence) prices.value = result
   } catch (error: any) {
-    if (sequence === priceSequence) priceError.value = error?.message || t('modelSettings.usage.priceLoadFailed')
+    if (sequence === priceSequence) priceError.value = error?.message || t('modelSettings.observability.priceLoadFailed')
   } finally {
     if (sequence === priceSequence) priceLoading.value = false
   }
@@ -253,13 +271,19 @@ async function savePrice() {
       input_microunits_per_million: Math.round(Number(inputPrice.value) * 1_000_000),
       output_microunits_per_million: Math.round(Number(outputPrice.value) * 1_000_000),
       currency: currency.value.trim().toUpperCase(),
+      cache_pricing: [cacheReadPrice.value, cacheWrite5mPrice.value, cacheWrite1hPrice.value].some(value => value !== '') ? {
+        version: 1,
+        read_microunits_per_million: optionalPriceMicros(cacheReadPrice.value),
+        write_5m_microunits_per_million: optionalPriceMicros(cacheWrite5mPrice.value),
+        write_1h_microunits_per_million: optionalPriceMicros(cacheWrite1hPrice.value),
+      } : undefined,
     })
     if (session === sessionSequence && props.visible) {
-      MessagePlugin.success(t('modelSettings.usage.priceSaved'))
+      MessagePlugin.success(t('modelSettings.observability.priceSaved'))
       if (modelId === priceModelId.value) await loadPrices()
     }
   } catch (error: any) {
-    if (session === sessionSequence && props.visible) MessagePlugin.error(error?.message || t('modelSettings.usage.priceSaveFailed'))
+    if (session === sessionSequence && props.visible) MessagePlugin.error(error?.message || t('modelSettings.observability.priceSaveFailed'))
   } finally {
     savingPrice.value = false
   }
@@ -272,9 +296,23 @@ function validRange(from: string, to: string, optionalEnd = false): boolean {
   const start = new Date(from).getTime()
   return Number.isFinite(start) && ((optionalEnd && !to) || (Number.isFinite(new Date(to).getTime()) && new Date(to).getTime() > start))
 }
+function optionalPriceMicros(value: number | string): number | undefined {
+  return value === '' ? undefined : Math.round(Number(value) * 1_000_000)
+}
 function validPrice(value: number | string): boolean {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && Number.isSafeInteger(Math.round(value * 1_000_000))
 }
+
+const callStatuses = [
+  {key: 'started_calls', label: 'started'}, {key: 'success_calls', label: 'success'},
+  {key: 'error_calls', label: 'error'}, {key: 'canceled_calls', label: 'canceled'},
+] as const
+
+const cachePriceFields = [
+  {key: 'read_microunits_per_million', label: 'cacheReadPrice'},
+  {key: 'write_5m_microunits_per_million', label: 'cacheWrite5mPrice'},
+  {key: 'write_1h_microunits_per_million', label: 'cacheWrite1hPrice'},
+] as const
 
 const modelFor = (id: string) => props.models.find(model => model.id === id)
 const modelLabel = (model: ModelConfig) => model.display_name || model.name
@@ -287,7 +325,7 @@ const percent = (value: number | null) => value == null ? '—' : `${(value * 10
 const micros = (value: number) => (value / 1_000_000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')
 const formatCosts = (costs: ModelCostTotal[]) => costs?.length
   ? costs.map(item => `${item.currency} ${micros(item.cost_microunits)}`).join(' · ')
-  : t('modelSettings.usage.noPricedCost')
+  : t('modelSettings.observability.noPricedCost')
 </script>
 
 <style scoped lang="less">
@@ -323,7 +361,16 @@ const formatCosts = (costs: ModelCostTotal[]) => costs?.length
 .pricing-form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
 .pricing-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
 .price-history { margin-top: 12px; border-top: 1px solid var(--td-component-stroke); }
-.price-version { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; font-size: 12px; border-bottom: 1px solid var(--td-component-stroke); }
+.price-version { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 9px 0; font-size: 12px; border-bottom: 1px solid var(--td-component-stroke); }
+.call-status { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 16px 0 0; padding: 0; font-size: 12px; }
+.call-status > div { display: flex; gap: 7px; }
+.call-status dt { color: var(--td-text-color-secondary); }
+.call-status dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
+.cache-pricing-fields { margin: 22px 0 0; padding: 16px; border: 1px solid var(--td-component-stroke); border-radius: 10px; }
+.cache-pricing-fields legend { padding: 0 6px; font-size: 13px; font-weight: 600; }
+.cache-price-history { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex-basis: 100%; gap: 10px; margin: 0; color: var(--td-text-color-secondary); }
+.cache-price-history dd { margin: 4px 0 0; font-variant-numeric: tabular-nums; color: var(--td-text-color-primary); }
+@media (max-width: 540px) { .usage-card { padding: 16px; } .cache-price-history { grid-template-columns: 1fr; } }
 .usage-empty, .usage-loading { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 120px; color: var(--td-text-color-secondary); font-size: 13px; }
 .usage-empty { flex-direction: column; }
 .icon-spinning { animation: icon-spin 1s linear infinite; }

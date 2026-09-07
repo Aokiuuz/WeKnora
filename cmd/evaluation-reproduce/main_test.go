@@ -10,6 +10,7 @@ import (
 )
 
 func TestRunPassesAndWritesBothArtifacts(t *testing.T) {
+	t.Setenv("GITHUB_SHA", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	outputDir := t.TempDir()
 	var stdout, stderr bytes.Buffer
 	code := run(context.Background(), []string{
@@ -24,6 +25,7 @@ func TestRunPassesAndWritesBothArtifacts(t *testing.T) {
 }
 
 func TestRunDegradationFixtureReturnsNonZeroWithDiagnostic(t *testing.T) {
+	t.Setenv("GITHUB_SHA", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	var stdout, stderr bytes.Buffer
 	code := run(context.Background(), []string{
 		"--dataset", "../../dataset/golden/v1/dataset.json",

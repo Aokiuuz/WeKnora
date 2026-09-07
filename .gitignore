@@ -26,6 +26,8 @@ node_modules/
 /build/
 /artifacts/evaluation-regression/
 /artifacts/evaluation-performance/
+/artifacts/synthetic-evaluation/
+/artifacts/evaluation-rag-http/
 *.log
 
 # 临时文件

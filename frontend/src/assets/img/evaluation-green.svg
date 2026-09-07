@@ -1,5 +1,2 @@
-<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="2.25" y="2.25" width="15.5" height="15.5" rx="4" fill="#E9F8F3" stroke="#07A872" stroke-width="1.5"/>
-  <path d="M5.5 13.5L8.2 10.6L10.5 12.2L14.5 7.2" stroke="#07A872" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="14.5" cy="7.2" r="1.2" fill="#07A872"/>
-</svg>
+<!-- Generated from @lucide/vue (ISC). Run node scripts/generate-lucide-assets.mjs. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#07c05f" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" data-icon-library="lucide" class="lucide lucide-clipboard-check-icon lucide-clipboard-check"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="m9 14 2 2 4-4"></path></svg>

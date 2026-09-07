@@ -2,9 +2,11 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -118,9 +120,48 @@ func (r *modelObservabilityRepository) CompleteModelCall(
 		return errors.New("complete model call: unsupported terminal status")
 	}
 	endedAt := completion.EndedAt.UTC()
+	var snapshot any = gorm.Expr("model_snapshot")
+	if len(completion.ModelSnapshot) > 0 {
+		if err := validateEvaluationTaskJSONObject(completion.ModelSnapshot, false); err != nil {
+			return fmt.Errorf("complete model call: model_snapshot: %w", err)
+		}
+		var initial types.ModelCallRecord
+		if err := r.db.WithContext(
+			ctx,
+		).Select(
+			"model_snapshot",
+		).First(
+			&initial,
+			"id = ?",
+			completion.ID,
+		).Error; err !=
+			nil {
+			return fmt.Errorf("complete model call: load frozen snapshot: %w", err)
+		}
+		var frozen, next map[string]any
+		if json.Unmarshal(
+			initial.ModelSnapshot,
+			&frozen,
+		) !=
+			nil ||
+			json.Unmarshal(
+				completion.ModelSnapshot,
+				&next,
+			) !=
+				nil {
+			return errors.New("complete model call: invalid frozen snapshot")
+		}
+		delete(frozen, "billing_usage")
+		delete(next, "billing_usage")
+		if !reflect.DeepEqual(frozen, next) {
+			return errors.New("complete model call: frozen identity or price conflict")
+		}
+		snapshot = completion.ModelSnapshot
+	}
 	result := r.db.WithContext(ctx).Model(&types.ModelCallRecord{}).
 		Where("id = ? AND status = ?", completion.ID, types.ModelCallStatusStarted).
 		Updates(map[string]any{
+			"model_snapshot":              snapshot,
 			"ended_at":                    endedAt,
 			"duration_ms":                 completion.DurationMs,
 			"status":                      completion.Status,
@@ -152,6 +193,54 @@ func (r *modelObservabilityRepository) CompleteModelCall(
 	}
 	if existing.Status == types.ModelCallStatusStarted {
 		return fmt.Errorf("complete model call %s: concurrent state conflict", completion.ID)
+	}
+	if existing.EndedAt == nil || existing.DurationMs == nil {
+		return errors.New("complete model call: incomplete terminal payload")
+	}
+	expected := types.ModelCallCompletion{
+		ID:                       existing.ID,
+		EndedAt:                  *existing.EndedAt,
+		DurationMs:               *existing.DurationMs,
+		Status:                   existing.Status,
+		ErrorCode:                existing.ErrorCode,
+		PromptTokens:             existing.PromptTokens,
+		CompletionTokens:         existing.CompletionTokens,
+		TotalTokens:              existing.TotalTokens,
+		ProviderCacheStatus:      existing.ProviderCacheStatus,
+		ProviderCacheReadTokens:  existing.ProviderCacheReadTokens,
+		ProviderCacheWriteTokens: existing.ProviderCacheWriteTokens,
+		ProviderCacheMissTokens:  existing.ProviderCacheMissTokens,
+		ApplicationCacheStatus:   existing.ApplicationCacheStatus,
+		CostMicrounits:           existing.CostMicrounits,
+		AccountingComplete:       existing.AccountingComplete,
+	}
+	// Database timestamp precision is microseconds on PostgreSQL.
+	if !expected.EndedAt.Truncate(time.Microsecond).Equal(completion.EndedAt.Truncate(time.Microsecond)) {
+		return errors.New("complete model call: terminal payload conflict")
+	}
+	if len(completion.ModelSnapshot) > 0 {
+		var have, want any
+		if json.Unmarshal(
+			existing.ModelSnapshot,
+			&have,
+		) !=
+			nil ||
+			json.Unmarshal(
+				completion.ModelSnapshot,
+				&want,
+			) !=
+				nil ||
+			!reflect.DeepEqual(
+				have,
+				want,
+			) {
+			return errors.New("complete model call: terminal snapshot conflict")
+		}
+	}
+	expected.ModelSnapshot = completion.ModelSnapshot
+	expected.EndedAt = completion.EndedAt
+	if !reflect.DeepEqual(expected, completion) {
+		return errors.New("complete model call: terminal payload conflict")
 	}
 	return nil
 }
@@ -197,6 +286,20 @@ func (r *modelObservabilityRepository) CreateModelPrice(
 	price.Currency = strings.ToUpper(strings.TrimSpace(price.Currency))
 	if !isCurrencyCode(price.Currency) || price.InputMicrounitsPerMillion < 0 || price.OutputMicrounitsPerMillion < 0 {
 		return errors.New("create model price: currency must have three letters and prices must be non-negative")
+	}
+	if price.CachePricing != nil {
+		if price.CachePricing.Version != 1 {
+			return errors.New("create model price: unsupported cache price version")
+		}
+		for _, value := range []*int64{
+			price.CachePricing.ReadMicrounitsPerMillion,
+			price.CachePricing.Write5mMicrounitsPerMillion,
+			price.CachePricing.Write1hMicrounitsPerMillion,
+		} {
+			if value != nil && *value < 0 {
+				return errors.New("create model price: cache prices must be non-negative")
+			}
+		}
 	}
 	price.ValidFrom = price.ValidFrom.UTC()
 	if price.ValidTo != nil {
@@ -314,5 +417,7 @@ func (r *modelObservabilityRepository) ListModelPrices(
 	return prices, nil
 }
 
-var _ modelobs.Store = (*modelObservabilityRepository)(nil)
-var _ modelobs.EvaluationCostStore = (*modelObservabilityRepository)(nil)
+var (
+	_ modelobs.Store               = (*modelObservabilityRepository)(nil)
+	_ modelobs.EvaluationCostStore = (*modelObservabilityRepository)(nil)
+)

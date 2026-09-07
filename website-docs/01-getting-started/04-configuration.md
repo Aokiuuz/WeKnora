@@ -155,7 +155,8 @@ flowchart LR
 | `TZ` | Asia/Shanghai | 时区 |
 | `WEKNORA_LANGUAGE` | 空 | 文档处理语言（问题/摘要生成）。优先级：本变量 > 请求的 `Accept-Language` > 内置 `zh-CN`。**它压过请求头**是刻意的：界面语言与文档处理语言是两件事，允许「英文界面 + 处理韩文文档」 |
 | `AUTO_MIGRATE` | true | 启动时自动执行数据库迁移 |
-| `AUTO_RECOVER_DIRTY` | true | 自动修复 golang-migrate 的 dirty 状态（上次迁移中断留下的）。手工排查迁移问题时应临时设为 false，否则启动会自动改写迁移版本记录，见[数据库与迁移](../06-development/02-database-schema.md) |
+| `AUTO_RECOVER_DIRTY` | false | 脏迁移状态阻断启动；设置为 true 返回不支持自动改写版本的错误，见[数据库与迁移](../06-development/02-database-schema.md) |
+| `MIGRATION_BACKUP_ID` | 空 | 现有数据库首次桥接时必填，关联已验证备份；空库初始化可省略 |
 | `WEKNORA_TRUSTED_PROXIES` | 空 | gin 信任代理 CIDR（逗号分隔） |
 | `MAX_FILE_SIZE_MB` | 50 | 上传文件大小限制（app/frontend/docreader 三处共用） |
 | `CONCURRENCY_POOL_SIZE` | 5 | 通用并发池 |
@@ -261,8 +262,8 @@ AWS S3 的 `S3_ACCESS_KEY` / `S3_SECRET_KEY` 可以**同时留空**，此时走 
 
 | 名称 | 默认值 | 说明 |
 | --- | --- | --- |
-| Sandbox 配置 | 设置页按空间维护 | 后端、凭据、模板、超时和私网访问策略不再读取 `WEKNORA_SANDBOX_*` |
-| `WEKNORA_SKILLS_DIR` | 空（镜像内 /app/skills/preloaded） | 自定义 Skills 目录 |
+| Sandbox 配置 | 设置页按空间维护 | 后端、凭据、模板、超时和私网访问策略按空间保存 |
+| `WEKNORA_SANDBOX_DOCKER_ENABLED` | false | Docker 沙箱后端回退开关。系统管理员也可在「设置 → 系统设置」打开（DB 优先，立即生效）。默认关闭，因为本机 `docker.sock` 等同宿主机 root |
 | `WEKNORA_AGENT_LLM_TIMEOUT` | 120s | Agent 单次 LLM 调用超时（Go duration 或纯数字秒） |
 | `WEKNORA_AGENT_TOOL_APPROVAL_TIMEOUT` / `_FAIL_OPEN` | 600s / fail-close | MCP 工具人工审批等待与失败策略 |
 | `WEKNORA_CHAT_ATTACHMENT_TTL_HOURS` / `_WAIT_TIMEOUT_SEC` / `_OCR_CONCURRENCY` / `_OCR_MAX_PAGES` | 24 / 60 / 8 / 8 | 聊天附件解析保留时长、等待超时与 OCR 并发/页数上限 |

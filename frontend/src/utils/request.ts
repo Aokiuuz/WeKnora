@@ -1,14 +1,48 @@
 // src/utils/request.js
 import axios, { type AxiosRequestConfig } from "axios";
-import { generateRandomString, MAX_FILE_SIZE_MB } from "./index";
+import { generateRandomString, MAX_FILE_SIZE_MB, MAX_SKILL_BUNDLE_SIZE_MB } from "./index";
 import i18n from '@/i18n'
 import { getApiBaseUrl } from './api-base';
+import { isSkillBundleUploadUrl } from './uploadLimit';
 
 const t = (key: string) => i18n.global.t(key)
 
 // API基础URL
 const BASE_URL = getApiBaseUrl();
 
+/**
+ * Response payload augmented with the HTTP status code.
+ *
+ * `$httpStatus` lets callers distinguish outcomes that share a success shape.
+ * Defined as a non-enumerable property, so it stays invisible to object spread,
+ * JSON.stringify and Object.keys and never leaks into downstream payloads.
+ *
+ * Objects, arrays and Blob payloads carry this property. Primitives, null and
+ * string-based SSE responses pass through unchanged.
+ */
+export type WithStatus<T> = T extends object ? T & {
+  /** HTTP status code of the response. Non-enumerable. See {@link WithStatus}. */
+  readonly $httpStatus: number
+} : T;
+
+const HTTP_STATUS_KEY = '$httpStatus';
+
+/**
+ * Attach the non-enumerable `$httpStatus` property to a response payload
+ * in place and return it. Primitives pass through untouched.
+ * See {@link WithStatus} for where the property is guaranteed.
+ */
+function withHttpStatus<T>(data: T, status: number): WithStatus<T> {
+  if (data !== null && typeof data === 'object') {
+    Object.defineProperty(data, HTTP_STATUS_KEY, {
+      value: status,
+      enumerable: false,
+      configurable: true,
+      writable: false,
+    });
+  }
+  return data as WithStatus<T>;
+}
 
 // 创建Axios实例
 const instance = axios.create({
@@ -135,6 +169,20 @@ export async function coordinateTokenRefresh(
   }
 }
 
+// Cancellation settles only this caller; a shared refresh can still serve other requests.
+function waitForRefresh<T>(refresh: Promise<T>, signal?: AxiosRequestConfig['signal']): Promise<T> {
+  if (!signal) return refresh;
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(new axios.CanceledError());
+    if (signal.aborted) abort();
+    else signal.addEventListener?.('abort', abort, { once: true });
+    refresh.then(
+      value => signal.aborted ? abort() : resolve(value),
+      reject,
+    ).finally(() => signal.removeEventListener?.('abort', abort));
+  });
+}
+
 const tokenRefresh = createTokenRefreshCoordinator();
 
 // Share-link endpoints (/auth/invitations/lookup, /auth/register-by-invite)
@@ -167,14 +215,21 @@ instance.interceptors.response.use(
     // 根据业务状态码处理逻辑
     const { status, data } = response;
     if (status >= 200 && status < 300) {
-      return data;
+      return withHttpStatus(data, status);
     } else {
-      return Promise.reject(data);
+      return Promise.reject(withHttpStatus(data, status));
     }
   },
   async (error: any) => {
     const originalRequest = error.config;
     
+    if (axios.isCancel(error) || error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      return Promise.reject(error);
+    }
+    if (originalRequest?.signal?.aborted) {
+      return Promise.reject(new axios.CanceledError());
+    }
+
     if (!error.response) {
       return Promise.reject({ message: t('error.networkError') });
     }
@@ -185,7 +240,7 @@ instance.interceptors.response.use(
       const msg = typeof data === 'object'
         ? (typeof data?.error === 'string' ? data.error : (data?.error?.message || data?.message))
         : data;
-      return Promise.reject({ status, message: msg || t('error.invalidCredentials') });
+      return Promise.reject(withHttpStatus({ status, message: msg || t('error.invalidCredentials') }, status));
     }
 
     // Embed 调试页/挂件：无 JWT 时直接拒绝，勿走 refresh → /login
@@ -194,15 +249,15 @@ instance.interceptors.response.use(
       const msg = typeof data === 'object'
         ? (typeof data?.error === 'string' ? data.error : (data?.error?.message || data?.message))
         : data;
-      return Promise.reject({ status, message: msg || t('error.invalidCredentials') });
+      return Promise.reject(withHttpStatus({ status, message: msg || t('error.invalidCredentials') }, status));
     }
 
     // 如果是401错误且不是刷新token的请求，尝试刷新token
-    if (error.response.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/auth/refresh')) {
+    if (error.response.status === 401 && originalRequest && !originalRequest._retry && !originalRequest.url?.includes('/auth/refresh')) {
       originalRequest._retry = true;
 
       try {
-        const token = await coordinateTokenRefresh(tokenRefresh, async () => {
+        const token = await waitForRefresh(coordinateTokenRefresh(tokenRefresh, async () => {
           const refreshToken = localStorage.getItem('weknora_refresh_token');
           if (!refreshToken) throw { message: t('error.pleaseRelogin') };
 
@@ -221,11 +276,13 @@ instance.interceptors.response.use(
           }
 
           throw new Error(response.message || t('error.tokenRefreshFailed'));
-        });
+        }), originalRequest.signal);
 
+        originalRequest.headers ??= {};
         originalRequest.headers['Authorization'] = 'Bearer ' + token;
         return instance(originalRequest);
       } catch (refreshError) {
+        if (axios.isCancel(refreshError)) return Promise.reject(refreshError);
         // 刷新失败或缺少 refresh token 时，清除凭据并拒绝所有等待请求。
         localStorage.removeItem('weknora_token');
         localStorage.removeItem('weknora_refresh_token');
@@ -239,12 +296,16 @@ instance.interceptors.response.use(
     }
     
     // 处理 Nginx 413 Request Entity Too Large
-    if (error.response.status === 413) {
-      return Promise.reject({ 
-        status: 413, 
-        message: i18n.global.t('error.fileSizeExceeded', { size: MAX_FILE_SIZE_MB }),
+    const ERR_ENTITY_TOO_LARGE = 413;
+    if (error.response.status === ERR_ENTITY_TOO_LARGE) {
+      const skillUpload = isSkillBundleUploadUrl(error.config?.url)
+      return Promise.reject(withHttpStatus({
+        status: ERR_ENTITY_TOO_LARGE,
+        message: skillUpload
+          ? i18n.global.t('settings.sandbox.skillBundleTooLarge', { size: MAX_SKILL_BUNDLE_SIZE_MB })
+          : i18n.global.t('error.fileSizeExceeded', { size: MAX_FILE_SIZE_MB }),
         success: false
-      });
+      }, ERR_ENTITY_TOO_LARGE));
     }
 
     const { status, data } = error.response;
@@ -263,16 +324,16 @@ instance.interceptors.response.use(
     } else if (typeof data === 'string') {
       errorMessage = data;
     }
-    return Promise.reject({ 
-      status, 
+    return Promise.reject(withHttpStatus({
+      status,
       message: errorMessage,
       ...(typeof data === 'object' ? data : {}) 
-    });
+    }, status));
   }
 );
 
-export function get<T = any>(url: string, config?: any): Promise<T> {
-  return instance.get<T>(url, config) as unknown as Promise<T>;
+export function get<T = any>(url: string, config?: any): Promise<WithStatus<T>> {
+  return instance.get<T>(url, config) as unknown as Promise<WithStatus<T>>;
 }
 
 export type DownloadRequestConfig = Pick<AxiosRequestConfig, 'headers' | 'signal' | 'timeout'>;
@@ -290,7 +351,7 @@ export function postUpload(
   data = {},
   onUploadProgress?: (progressEvent: any) => void,
   config: any = {},
-): Promise<any> {
+): Promise<WithStatus<any>> {
   return instance.post(url, data, {
     ...config,
     headers: {
@@ -303,6 +364,7 @@ export function postUpload(
 }
 
 export function postChat<T = any>(url: string, data = {}): Promise<T> {
+  // SSE stream: body is a string, so no `$httpStatus` is attached (see WithStatus).
   return instance.post(url, data, {
     headers: {
       "Content-Type": "text/event-stream;charset=utf-8",
@@ -311,18 +373,18 @@ export function postChat<T = any>(url: string, data = {}): Promise<T> {
   }) as unknown as Promise<T>;
 }
 
-export function post<T = any>(url: string, data = {}, config?: any): Promise<T> {
-  return instance.post<T>(url, data, config) as unknown as Promise<T>;
+export function post<T = any>(url: string, data = {}, config?: any): Promise<WithStatus<T>> {
+  return instance.post<T>(url, data, config) as unknown as Promise<WithStatus<T>>;
 }
 
-export function put<T = any>(url: string, data = {}, config?: any): Promise<T> {
-  return instance.put<T>(url, data, config) as unknown as Promise<T>;
+export function put<T = any>(url: string, data = {}, config?: any): Promise<WithStatus<T>> {
+  return instance.put<T>(url, data, config) as unknown as Promise<WithStatus<T>>;
 }
 
-export function patch<T = any>(url: string, data = {}, config?: any): Promise<T> {
-  return instance.patch<T>(url, data, config) as unknown as Promise<T>;
+export function patch<T = any>(url: string, data = {}, config?: any): Promise<WithStatus<T>> {
+  return instance.patch<T>(url, data, config) as unknown as Promise<WithStatus<T>>;
 }
 
-export function del<T = any>(url: string, data?: any): Promise<T> {
-  return instance.delete<T>(url, { data }) as unknown as Promise<T>;
+export function del<T = any>(url: string, data?: any): Promise<WithStatus<T>> {
+  return instance.delete<T>(url, { data }) as unknown as Promise<WithStatus<T>>;
 }

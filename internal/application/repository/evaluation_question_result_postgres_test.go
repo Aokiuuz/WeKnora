@@ -16,7 +16,7 @@ import (
 )
 
 // TestEvaluationQuestionResultPostgresContract verifies the per-question
-// publication against the real PostgreSQL 000090+000095+000096 migrations in
+// publication against the real PostgreSQL 000001+000006+000007 migrations in
 // an isolated schema with transactional rollback.
 func TestEvaluationQuestionResultPostgresContract(t *testing.T) {
 	dsn := os.Getenv("TEST_POSTGRES_DSN")
@@ -35,13 +35,13 @@ func TestEvaluationQuestionResultPostgresContract(t *testing.T) {
 	require.NoError(t, tx.Exec("SET LOCAL search_path = "+schema+", pg_catalog").Error)
 
 	for _, name := range []string{
-		"000090_evaluation_tasks.up.sql",
-		"000091_evaluation_task_cancellation.up.sql",
-		"000095_evaluation_experiment_snapshot.up.sql",
-		"000096_evaluation_question_results.up.sql",
-		"000098_evaluation_runtime_metrics.up.sql",
+		"000001_evaluation_tasks.up.sql",
+		"000002_evaluation_task_cancellation.up.sql",
+		"000006_evaluation_experiment_snapshot.up.sql",
+		"000007_evaluation_question_results.up.sql",
+		"000009_evaluation_runtime_metrics.up.sql",
 	} {
-		migrationSQL, err := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "versioned", name))
+		migrationSQL, err := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "topic3", "postgres", name))
 		require.NoError(t, err)
 		require.NoError(t, tx.Exec(string(migrationSQL)).Error)
 	}

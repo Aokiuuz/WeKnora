@@ -13,6 +13,8 @@ import (
 // write paths maintain a non-secret behavior revision when effective custom
 // headers change.
 type EvaluationModelBehaviorConfig struct {
+	ContextWindow       int                 `json:"context_window"`
+	MaxOutputTokens     int                 `json:"max_output_tokens"`
 	BaseURL             string              `json:"base_url"`
 	InterfaceType       string              `json:"interface_type"`
 	Provider            string              `json:"provider"`
@@ -76,14 +78,20 @@ func EvaluationModelBehaviorConfigFrom(model *Model) *EvaluationModelBehaviorCon
 		ExtraConfig:         extra,
 		SupportsVision:      parameters.SupportsVision,
 		MaxConcurrency:      parameters.MaxConcurrency,
+		ContextWindow:       parameters.ContextWindow, MaxOutputTokens: parameters.MaxOutputTokens,
 	}
 }
 
 // EvaluationModelConfigSHA256 computes the canonical fingerprint of one
 // model's sanitized behavior configuration.
 func EvaluationModelConfigSHA256(model *Model) string {
+	return EvaluationModelConfigSHA256ForVersion(model, 2)
+}
+
+// EvaluationModelConfigSHA256ForVersion fingerprints sanitized model behavior for the specified contract version.
+func EvaluationModelConfigSHA256ForVersion(model *Model, version int) string {
 	config := EvaluationModelBehaviorConfigFrom(model)
-	encoded := canonicalEvaluationJSONBytes(map[string]any{
+	payload := map[string]any{
 		"base_url":       config.BaseURL,
 		"interface_type": config.InterfaceType,
 		"provider":       config.Provider,
@@ -96,7 +104,20 @@ func EvaluationModelConfigSHA256(model *Model) string {
 		"extra_config":    evaluationStringMapToAny(config.ExtraConfig),
 		"supports_vision": config.SupportsVision,
 		"max_concurrency": config.MaxConcurrency,
-	})
+	}
+	if version >= 2 {
+		if model != nil {
+			payload["model_name"] = model.Name
+			payload["model_type"] = string(model.Type)
+			payload["model_source"] = string(model.Source)
+		}
+		payload["context_window"] = config.ContextWindow
+		payload["max_output_tokens"] = config.MaxOutputTokens
+		payload["behavior_version"] = 2
+		payload["prompt_cache_policy"] = "explicit-v1"
+		payload["output_budget_policy"] = "model-ceiling-v1"
+	}
+	encoded := canonicalEvaluationJSONBytes(payload)
 	return "sha256:" + hashEvaluationCanonicalJSON(encoded)
 }
 
@@ -106,6 +127,7 @@ func EvaluationModelSnapshotFrom(model *Model) *EvaluationModelSnapshot {
 		return nil
 	}
 	return &EvaluationModelSnapshot{
+		ConfigVersion: 2,
 		ID:            model.ID,
 		UpstreamName:  model.Name,
 		Type:          string(model.Type),

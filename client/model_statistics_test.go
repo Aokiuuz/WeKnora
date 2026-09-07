@@ -59,22 +59,34 @@ func TestPutModelPriceUsesImmutablePriceEndpoint(t *testing.T) {
 		if request.Currency != "USD" || request.InputMicrounitsPerMillion != 1_000_000 {
 			t.Fatalf("request = %#v", request)
 		}
+		if request.CachePricing == nil || request.CachePricing.Version != 1 ||
+			request.CachePricing.ReadMicrounitsPerMillion == nil || *request.CachePricing.ReadMicrounitsPerMillion != 0 ||
+			request.CachePricing.Write5mMicrounitsPerMillion != nil {
+			t.Fatalf("cache pricing lost zero/unknown distinction: %#v", request.CachePricing)
+		}
 		_, _ = w.Write([]byte(`{
 			"success": true,
 			"data": {
 				"id":"price-1","model_id":"model-1","currency":"USD",
 				"valid_from":"2026-09-01T00:00:00Z","created_at":"2026-09-01T00:00:00Z",
-				"input_microunits_per_million":1000000,"output_microunits_per_million":2000000
+				"input_microunits_per_million":1000000,"output_microunits_per_million":2000000,
+				"cache_pricing":{"version":1,"read_microunits_per_million":0,"write_5m_microunits_per_million":null,"write_1h_microunits_per_million":null}
 			}
 		}`))
 	}))
 	defer server.Close()
 
+	zero := int64(0)
 	price, err := NewClient(server.URL).PutModelPrice(context.Background(), "model-1", PutModelPriceRequest{
-		ValidFrom: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), Currency: "USD",
+		CachePricing: &ModelCachePricing{Version: 1, ReadMicrounitsPerMillion: &zero},
+		ValidFrom:    time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), Currency: "USD",
 		InputMicrounitsPerMillion: 1_000_000, OutputMicrounitsPerMillion: 2_000_000,
 	})
 	if err != nil || price.ID != "price-1" {
 		t.Fatalf("price = %#v, err = %v", price, err)
+	}
+	if price.CachePricing == nil || price.CachePricing.ReadMicrounitsPerMillion == nil ||
+		*price.CachePricing.ReadMicrounitsPerMillion != 0 || price.CachePricing.Write1hMicrounitsPerMillion != nil {
+		t.Fatalf("decoded cache pricing lost zero/unknown distinction: %#v", price.CachePricing)
 	}
 }

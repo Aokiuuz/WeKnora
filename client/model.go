@@ -50,6 +50,7 @@ const (
 	ModelSourceSiliconFlow ModelSource = "siliconflow"  // SiliconFlow model
 	ModelSourceJina        ModelSource = "jina"         // Jina AI model
 	ModelSourceOpenRouter  ModelSource = "openrouter"   // OpenRouter model
+	ModelSourceLiteLLM     ModelSource = "litellm"      // LiteLLM proxy model
 	ModelSourceRequesty    ModelSource = "requesty"     // Requesty model
 	ModelSourceNvidia      ModelSource = "nvidia"       // NVIDIA model
 	ModelSourceNovita      ModelSource = "novita"       // Novita AI model
@@ -66,7 +67,8 @@ func AllModelSources() []ModelSource {
 		ModelSourceLocal, ModelSourceRemote, ModelSourceAliyun, ModelSourceZhipu,
 		ModelSourceVolcengine, ModelSourceDeepseek, ModelSourceHunyuan, ModelSourceMinimax,
 		ModelSourceOpenAI, ModelSourceGemini, ModelSourceMimo, ModelSourceSiliconFlow,
-		ModelSourceJina, ModelSourceOpenRouter, ModelSourceRequesty, ModelSourceNvidia, ModelSourceNovita,
+		ModelSourceJina, ModelSourceOpenRouter, ModelSourceLiteLLM, ModelSourceRequesty,
+		ModelSourceNvidia, ModelSourceNovita,
 		ModelSourceAzureOpenAI,
 	}
 }
@@ -303,23 +305,33 @@ type ModelUsageReport struct {
 }
 
 type ModelPriceVersion struct {
-	ID                         string     `json:"id"`
-	TenantID                   uint64     `json:"tenant_id"`
-	ModelID                    string     `json:"model_id"`
-	ValidFrom                  time.Time  `json:"valid_from"`
-	ValidTo                    *time.Time `json:"valid_to,omitempty"`
-	InputMicrounitsPerMillion  int64      `json:"input_microunits_per_million"`
-	OutputMicrounitsPerMillion int64      `json:"output_microunits_per_million"`
-	Currency                   string     `json:"currency"`
-	CreatedAt                  time.Time  `json:"created_at"`
+	CachePricing               *ModelCachePricing `json:"cache_pricing,omitempty"`
+	ID                         string             `json:"id"`
+	TenantID                   uint64             `json:"tenant_id"`
+	ModelID                    string             `json:"model_id"`
+	ValidFrom                  time.Time          `json:"valid_from"`
+	ValidTo                    *time.Time         `json:"valid_to,omitempty"`
+	InputMicrounitsPerMillion  int64              `json:"input_microunits_per_million"`
+	OutputMicrounitsPerMillion int64              `json:"output_microunits_per_million"`
+	Currency                   string             `json:"currency"`
+	CreatedAt                  time.Time          `json:"created_at"`
 }
 
 type PutModelPriceRequest struct {
-	ValidFrom                  time.Time  `json:"valid_from"`
-	ValidTo                    *time.Time `json:"valid_to,omitempty"`
-	InputMicrounitsPerMillion  int64      `json:"input_microunits_per_million"`
-	OutputMicrounitsPerMillion int64      `json:"output_microunits_per_million"`
-	Currency                   string     `json:"currency"`
+	CachePricing               *ModelCachePricing `json:"cache_pricing,omitempty"`
+	ValidFrom                  time.Time          `json:"valid_from"`
+	ValidTo                    *time.Time         `json:"valid_to,omitempty"`
+	InputMicrounitsPerMillion  int64              `json:"input_microunits_per_million"`
+	OutputMicrounitsPerMillion int64              `json:"output_microunits_per_million"`
+	Currency                   string             `json:"currency"`
+}
+
+// ModelCachePricing distinguishes unknown cache rates from an explicit zero rate.
+type ModelCachePricing struct {
+	Version                     int    `json:"version"`
+	ReadMicrounitsPerMillion    *int64 `json:"read_microunits_per_million"`
+	Write5mMicrounitsPerMillion *int64 `json:"write_5m_microunits_per_million"`
+	Write1hMicrounitsPerMillion *int64 `json:"write_1h_microunits_per_million"`
 }
 
 func (c *Client) ListModelUsage(ctx context.Context, options ModelUsageOptions) (*ModelUsageReport, error) {

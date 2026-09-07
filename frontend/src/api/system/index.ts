@@ -24,6 +24,19 @@ export async function deletePlatformAPIKey(keyId: number): Promise<{ success: bo
   return await del(`/api/v1/system/admin/api-keys/${keyId}`) as unknown as { success: boolean }
 }
 
+export interface DBMigrationChainState {
+  version: number
+  dirty: boolean
+  expected_version: number
+}
+
+export interface DBMigrationStatus {
+  official: DBMigrationChainState
+  topic3: DBMigrationChainState
+  ready: boolean
+  phase: string
+}
+
 export interface SystemInfo {
   version: string
   edition?: string
@@ -35,6 +48,7 @@ export interface SystemInfo {
   graph_database_engine?: string
   minio_enabled?: boolean
   db_version?: string
+  db_migration_status?: DBMigrationStatus
   /** Human-readable error message when the startup migration failed.
    *  When non-empty, the system info view should surface a troubleshooting
    *  banner (see docs/migration-troubleshooting.md). */
@@ -398,12 +412,18 @@ export interface CreateSystemUserResponse {
    * be fetched again.
    */
   generated_password?: string
+  /**
+   * True on the 200 retry when the identity already existed. The shared
+   * axios interceptor drops HTTP status, so callers must read this flag
+   * instead of the status code.
+   */
+  idempotent?: boolean
 }
 
 /**
  * Provision a new local user account (SystemAdmin only).
  * Backend returns the unwrapped CreateSystemUserResponse body.
- * Responses 201 on success.
+ * 201 on create, 200 with `idempotent: true` when the identity existed.
  */
 export async function createSystemUser(req: CreateSystemUserRequest): Promise<CreateSystemUserResponse> {
   const response = await post('/api/v1/system/admin/users/create', req)
@@ -766,6 +786,7 @@ export interface SandboxConfig {
   volume_mount?: SandboxVolumeMountConfig
   skill_image?: SandboxSkillImage
   skill_rollout?: 'next_turn' | 'new_session'
+  network?: SandboxNetworkPolicy
   cube?: SandboxCubeConfig
   e2b?: SandboxE2BConfig
   docker?: SandboxDockerConfig
@@ -783,6 +804,51 @@ export interface SandboxDockerConfig {
   runtime?: string
   idle_ttl_seconds?: number
   http_timeout_sec?: number
+}
+
+/** One injected credential header on a Cube L7 rule. */
+export interface SandboxCubeHeaderInject {
+  header: string
+  /** Masked as '***' in responses; send the placeholder back to keep it. */
+  secret?: string
+  /** Defaults to '${SECRET}' server-side. */
+  format?: string
+}
+
+/** One CubeEgress L7 rule. Match fields are AND-ed; methods are OR-ed. */
+export interface SandboxCubeEgressRule {
+  name: string
+  scheme?: string
+  sni?: string
+  host?: string
+  methods?: string[]
+  path?: string
+  /** Absent means allow. A deny rule still needs host or sni. */
+  deny?: boolean
+  audit?: string
+  inject?: SandboxCubeHeaderInject[]
+}
+
+/** One E2B per-host request transform. host must also be in allow_out. */
+export interface SandboxE2BHostRule {
+  host: string
+  /** Values are masked as '***' in responses. */
+  headers?: Record<string, string>
+}
+
+/**
+ * Network policy for every sandbox created from this config. Absent fields
+ * mean egress allowed. Inbound is always credential-required:
+ * allow_public_inbound is accepted then ignored/cleared.
+ */
+export interface SandboxNetworkPolicy {
+  deny_egress_by_default?: boolean
+  /** Ignored. Inbound is always credential-required. */
+  allow_public_inbound?: boolean
+  allow_out?: string[]
+  deny_out?: string[]
+  cube_rules?: SandboxCubeEgressRule[]
+  e2b_host_rules?: SandboxE2BHostRule[]
 }
 
 /** `ok: null` means the probe was not executed in this run. */
@@ -1082,6 +1148,18 @@ export function reinstallConfigSkill(
     `/api/v1/sandbox-configs/${configId}/skills/${skillId}/reinstall`,
     {},
   ) as unknown as Promise<{ data: { skill_id: string } }>
+}
+
+// Aborts an in-flight install so retry/uninstall become available.
+// After a process restart the row may still say installing with nothing running.
+export function stopConfigSkill(
+  configId: string,
+  skillId: string,
+): Promise<{ data: ConfigSkill }> {
+  return post(
+    `/api/v1/sandbox-configs/${configId}/skills/${skillId}/stop`,
+    {},
+  ) as unknown as Promise<{ data: ConfigSkill }>
 }
 
 /**

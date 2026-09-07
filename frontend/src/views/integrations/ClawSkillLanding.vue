@@ -12,7 +12,7 @@
         @click="openClawHub"
       >
         <template #icon>
-          <span class="ext-cta-emoji" role="img" :aria-label="$t('common.clawhubSkill')">🦞</span>
+          <t-icon class="ext-cta-emoji" name="extension" :aria-label="$t('common.clawhubSkill')" />
         </template>
       </IntegrationExternalCta>
     </template>

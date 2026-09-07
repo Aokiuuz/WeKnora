@@ -1,4 +1,4 @@
-.PHONY: help build run test evaluation-reproduce evaluation-benchmark clean docker-build-app docker-build-docreader docker-build-frontend docker-build-all docker-run migrate-up migrate-down docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-docreader build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend docs install-swagger build-lite run-lite package-lite anydoc-lib build-anydoc
+.PHONY: help build run test evaluation-reproduce evaluation-benchmark clean docker-build-app docker-build-docreader docker-build-frontend docker-build-all docker-run migrate-up migrate-inspect migrate-plan migrate-build migrate-version migrate-create docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-docreader build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend docs install-swagger build-lite run-lite package-lite anydoc-lib build-anydoc
 
 # Show help
 help:
@@ -35,7 +35,8 @@ help:
 	@echo ""
 	@echo "数据库:"
 	@echo "  migrate-up        执行数据库迁移"
-	@echo "  migrate-down      回滚数据库迁移"
+	@echo "  migrate-inspect   只读检查来源与双链状态"
+	@echo "  migrate-plan      输出待执行迁移"
 	@echo ""
 	@echo "开发工具:"
 	@echo "  fmt               格式化代码"
@@ -206,11 +207,17 @@ docker-restart:
 	docker-compose up
 
 # Database migrations
+migrate-inspect:
+	./scripts/migrate.sh inspect
+
+migrate-plan:
+	./scripts/migrate.sh plan
+
+migrate-build:
+	go build -tags sqlite_fts5 -o weknora-migrate ./cmd/migrate-runner
+
 migrate-up:
 	./scripts/migrate.sh up
-
-migrate-down:
-	./scripts/migrate.sh down
 
 migrate-version:
 	./scripts/migrate.sh version
@@ -223,22 +230,6 @@ migrate-create:
 	fi
 	./scripts/migrate.sh create $(name)
 
-migrate-force:
-	@if [ -z "$(version)" ]; then \
-		echo "Error: version is required"; \
-		echo "Usage: make migrate-force version=4"; \
-		exit 1; \
-	fi
-	./scripts/migrate.sh force $(version)
-
-migrate-goto:
-	@if [ -z "$(version)" ]; then \
-		echo "Error: version is required"; \
-		echo "Usage: make migrate-goto version=3"; \
-		exit 1; \
-	fi
-	./scripts/migrate.sh goto $(version)
-
 # Generate API documentation (Swagger)
 docs:
 	@echo "生成 Swagger API 文档..."
@@ -248,7 +239,7 @@ docs:
 
 # Install swagger tool
 install-swagger:
-	go install github.com/swaggo/swag/cmd/swag@latest
+	go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
 # Format code
 fmt:
@@ -363,5 +354,4 @@ dev-app:
 
 dev-frontend:
 	./scripts/dev.sh frontend
-
 

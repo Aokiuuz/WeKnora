@@ -39,6 +39,13 @@ type ChatOptions struct {
 	ToolChoice          string          `json:"tool_choice,omitempty"`         // "auto", "required", "none", or specific tool
 	ParallelToolCalls   *bool           `json:"parallel_tool_calls,omitempty"` // 是否允许并行工具调用（默认 nil 表示由模型决定）
 	Format              json.RawMessage `json:"format,omitempty"`              // 响应格式定义
+	// PromptCacheKey is the provider routing key (OpenAI prompt_cache_key).
+	// Empty falls back to the session ID on the call context.
+	PromptCacheKey string `json:"-"`
+	// CacheRetention controls provider prompt-cache TTL. none disables cache
+	// markers; empty/short is the default 5-minute cache; long requests 1h/24h
+	// where the provider accepts it.
+	CacheRetention CacheRetention `json:"-"`
 }
 
 // MessageContentPart represents a part of multi-content message
@@ -54,6 +61,17 @@ type ImageURL struct {
 	Detail string `json:"detail,omitempty"` // "auto", "low", "high"
 }
 
+// MessageKind marks messages the engine synthesized rather than received from
+// the user or the model. Compaction needs to tell its own summary apart from a
+// real user turn: a summary that looks like ordinary history gets fed back into
+// the next summarization pass and degrades into a summary of a summary.
+type MessageKind string
+
+// MessageKindCompactionSummary marks the message that replaces compacted
+// history. It carries the `user` role because that is where providers expect
+// conversation history, so the role alone cannot identify it.
+const MessageKindCompactionSummary MessageKind = "compaction_summary"
+
 // Message 表示聊天消息
 type Message struct {
 	Role         string               `json:"role"`                    // 角色：system, user, assistant, tool
@@ -68,6 +86,10 @@ type Message struct {
 	// 把 assistant 的 reasoning_content 原样回传，否则会以 400 拒绝请求；其他不要求的供应商
 	// 会忽略未知字段，无副作用。
 	ReasoningContent string `json:"reasoning_content,omitempty"`
+	// Kind is engine-internal bookkeeping. `json:"-"` keeps it off the wire:
+	// providers reject unknown message fields on some endpoints, and this one
+	// means nothing to them anyway.
+	Kind MessageKind `json:"-"`
 }
 
 // ToolCall represents a tool call in a message
@@ -100,12 +122,14 @@ type Chat interface {
 }
 
 type ChatConfig struct {
-	Source    types.ModelSource
-	BaseURL   string
-	ModelName string
-	APIKey    string
-	ModelID   string
-	Provider  string
+	ContextWindow   int
+	MaxOutputTokens int
+	Source          types.ModelSource
+	BaseURL         string
+	ModelName       string
+	APIKey          string
+	ModelID         string
+	Provider        string
 	// MaxConcurrency caps concurrent background calls to this model; 0 falls
 	// back to the process-wide default (see limiter.GateN).
 	MaxConcurrency int
@@ -132,15 +156,22 @@ func ConfigFromModel(m *types.Model, appID, appSecret string) *ChatConfig {
 		Source:         m.Source,
 		Provider:       m.Parameters.Provider,
 		MaxConcurrency: m.Parameters.MaxConcurrency,
-		ExtraConfig:    m.Parameters.ExtraConfig,
-		CustomHeaders:  m.Parameters.CustomHeaders,
-		AppID:          appID,
-		AppSecret:      appSecret,
+		ContextWindow:  m.Parameters.ContextWindow, MaxOutputTokens: m.Parameters.MaxOutputTokens,
+		ExtraConfig:   m.Parameters.ExtraConfig,
+		CustomHeaders: m.Parameters.CustomHeaders,
+		AppID:         appID,
+		AppSecret:     appSecret,
 	}
 }
 
 // NewChat 创建聊天实例
 func NewChat(config *ChatConfig, ollamaService *ollama.OllamaService) (Chat, error) {
+	if config == nil {
+		return nil, fmt.Errorf("chat configuration is required")
+	}
+	if err := validateBudget(config); err != nil {
+		return nil, err
+	}
 	var c Chat
 	var err error
 	switch strings.ToLower(string(config.Source)) {
@@ -155,7 +186,11 @@ func NewChat(config *ChatConfig, ollamaService *ollama.OllamaService) (Chat, err
 	c, err = wrapChatLangfuse(c, err)
 	// Outermost: hold the per-model concurrency slot only around the real
 	// provider round-trip, so the wait is excluded from debug/langfuse timing.
-	return wrapChatConcurrency(c, config.MaxConcurrency, err)
+	c, err = wrapChatConcurrency(c, config.MaxConcurrency, err)
+	if err != nil {
+		return nil, err
+	}
+	return &budgetChat{inner: c, contextWindow: config.ContextWindow, maxOutput: config.MaxOutputTokens}, nil
 }
 
 // NewRemoteChat 根据 provider 创建远程聊天实例。

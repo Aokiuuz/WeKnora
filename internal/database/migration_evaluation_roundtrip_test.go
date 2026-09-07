@@ -1,16 +1,18 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	sqlite3migrate "github.com/golang-migrate/migrate/v4/database/sqlite3"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -28,17 +30,19 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 
 	sqlDB, err := sql.Open("sqlite3", dbPath)
 	require.NoError(t, err)
-	driver, err := sqlite3migrate.WithInstance(sqlDB, &sqlite3migrate.Config{})
+	driver, err := sqlite3migrate.WithInstance(sqlDB, &sqlite3migrate.Config{MigrationsTable: Topic3MigrationTable})
 	require.NoError(t, err)
-	migrator, err := migrate.NewWithDatabaseInstance("file://migrations/sqlite", "sqlite3", driver)
+	migrator, err := migrate.NewWithDatabaseInstance("file://migrations/topic3/sqlite", "sqlite3", driver)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_, _ = migrator.Close()
 	})
 
+	// Exercise skill-schema and cache-pricing rollback, then the 1–14 topic chain.
+	require.NoError(t, migrator.Steps(-2))
 	version, dirty, err := migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(26), version)
+	require.Equal(t, uint(14), version)
 	require.False(t, dirty)
 	inspectionDB := openSQLiteDB(t, dbPath)
 	assertSQLiteEvaluationTaskSchema(t, inspectionDB)
@@ -60,7 +64,7 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(25), version)
+	require.Equal(t, uint(13), version)
 	require.False(t, dirty)
 	assertSQLiteEmbeddingCacheSchema(t, inspectionDB, true)
 	var cacheRows int
@@ -70,42 +74,42 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(26), version)
+	require.Equal(t, uint(14), version)
 	require.False(t, dirty)
 	assertSQLiteEmbeddingCacheSchema(t, inspectionDB, false)
 
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(25), version)
+	require.Equal(t, uint(13), version)
 	require.False(t, dirty)
 	assertSQLiteEmbeddingCacheSchema(t, inspectionDB, true)
 
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(24), version)
+	require.Equal(t, uint(12), version)
 	require.False(t, dirty)
 	require.False(t, sqliteTableExists(t, inspectionDB, "evaluation_human_ratings"))
 
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(23), version)
+	require.Equal(t, uint(11), version)
 	require.False(t, dirty)
 	require.False(t, sqliteTableExists(t, inspectionDB, "embedding_cache_lookup_records"))
 
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(22), version)
+	require.Equal(t, uint(10), version)
 	require.False(t, dirty)
 	require.False(t, sqliteTableExists(t, inspectionDB, "embedding_cache_entries"))
 
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(21), version)
+	require.Equal(t, uint(9), version)
 	require.False(t, dirty)
 	require.False(t, sqliteTableExists(t, inspectionDB, "model_call_records"))
 	require.False(t, sqliteTableExists(t, inspectionDB, "model_price_versions"))
@@ -113,7 +117,7 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(20), version)
+	require.Equal(t, uint(8), version)
 	require.False(t, dirty)
 	require.False(t, sqliteColumnExists(t, inspectionDB, "evaluation_tasks", "runtime_metrics"))
 	require.False(t, sqliteColumnExists(t, inspectionDB, "evaluation_question_results", "usage_reported"))
@@ -121,14 +125,14 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(19), version)
+	require.Equal(t, uint(7), version)
 	require.False(t, dirty)
 	require.False(t, sqliteTableExists(t, inspectionDB, "evaluation_task_labels"))
 
 	require.NoError(t, migrator.Steps(-3))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(16), version)
+	require.Equal(t, uint(4), version)
 	require.False(t, dirty)
 	assertSQLiteM2EvaluationTaskSchema(t, inspectionDB)
 	require.False(t, sqliteTableExists(t, inspectionDB, "evaluation_datasets"))
@@ -136,22 +140,22 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 
 	require.NoError(t, migrator.Steps(-4))
 	version, dirty, err = migrator.Version()
-	require.NoError(t, err)
-	require.Equal(t, uint(12), version)
+	require.ErrorIs(t, err, migrate.ErrNilVersion)
+	require.Equal(t, uint(0), version)
 	require.False(t, dirty)
 	require.False(t, sqliteTableExists(t, inspectionDB, "evaluation_tasks"))
 
 	require.NoError(t, migrator.Steps(4))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(16), version)
+	require.Equal(t, uint(4), version)
 	require.False(t, dirty)
 	assertSQLiteM2EvaluationTaskSchema(t, inspectionDB)
 
 	require.NoError(t, migrator.Steps(3))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(19), version)
+	require.Equal(t, uint(7), version)
 	require.False(t, dirty)
 	assertSQLiteEvaluationTaskSchema(t, inspectionDB)
 	assertSQLiteEvaluationQuestionResultsSchema(t, inspectionDB)
@@ -159,49 +163,49 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(20), version)
+	require.Equal(t, uint(8), version)
 	require.False(t, dirty)
 	assertSQLiteEvaluationTaskLabelsSchema(t, inspectionDB)
 
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(21), version)
+	require.Equal(t, uint(9), version)
 	require.False(t, dirty)
 	assertSQLiteEvaluationRuntimeMetricsSchema(t, inspectionDB)
 
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(22), version)
+	require.Equal(t, uint(10), version)
 	require.False(t, dirty)
 	assertSQLiteModelObservabilitySchema(t, inspectionDB)
 
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(23), version)
+	require.Equal(t, uint(11), version)
 	require.False(t, dirty)
 	assertSQLiteEmbeddingCacheSchema(t, inspectionDB, true)
 
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(24), version)
+	require.Equal(t, uint(12), version)
 	require.False(t, dirty)
 	assertSQLiteModelStatisticsSchema(t, inspectionDB)
 
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(25), version)
+	require.Equal(t, uint(13), version)
 	require.False(t, dirty)
 	assertSQLiteHumanRatingsSchema(t, inspectionDB)
 
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(26), version)
+	require.Equal(t, uint(14), version)
 	require.False(t, dirty)
 	assertSQLiteEmbeddingCacheSchema(t, inspectionDB, false)
 }
@@ -209,8 +213,14 @@ func TestSQLiteEvaluationMigrationsRoundTrip(t *testing.T) {
 func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	baseDSN := os.Getenv("TEST_POSTGRES_MIGRATION_DSN")
 	if baseDSN == "" {
+		if os.Getenv("REQUIRE_POSTGRES_TESTS") == "1" {
+			t.Fatal("TEST_POSTGRES_MIGRATION_DSN is not configured")
+		}
 		t.Skip("TEST_POSTGRES_MIGRATION_DSN is not configured")
 	}
+	var err error
+	baseDSN, err = createIsolatedMigrationDatabase(context.Background(), baseDSN, "roundtrip")
+	require.NoError(t, err)
 	repoRoot := sqliteRepoRoot(t)
 	chdirAndRestore(t, repoRoot)
 
@@ -220,23 +230,26 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = adminSQLDB.Close() })
 
-	schema := fmt.Sprintf("m4_migration_roundtrip_%d", time.Now().UnixNano())
-	require.NoError(t, adminDB.Exec("CREATE SCHEMA "+schema).Error)
-	t.Cleanup(func() {
-		_ = adminDB.Exec("DROP SCHEMA IF EXISTS " + schema + " CASCADE").Error
-	})
+	schema := "public"
 
 	migrationDSN := postgresMigrationDSN(t, baseDSN, schema)
 	require.NoError(t, RunMigrations(migrationDSN))
 
-	migrator, err := migrate.New("file://migrations/versioned", migrationDSN)
+	topicURL, err := url.Parse(migrationDSN)
+	require.NoError(t, err)
+	topicQuery := topicURL.Query()
+	topicQuery.Set("x-migrations-table", Topic3MigrationTable)
+	topicURL.RawQuery = topicQuery.Encode()
+	migrator, err := migrate.New("file://migrations/topic3/postgres", topicURL.String())
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_, _ = migrator.Close()
 	})
+	// Exercise skill-schema and cache-pricing rollback, then the 1–14 topic chain.
+	require.NoError(t, migrator.Steps(-2))
 	version, dirty, err := migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(103), version)
+	require.Equal(t, uint(14), version)
 	require.False(t, dirty)
 	assertPostgresEvaluationSchema(t, adminDB, schema)
 	assertPostgresM3EvaluationSchema(t, adminDB, schema)
@@ -257,7 +270,7 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(102), version)
+	require.Equal(t, uint(13), version)
 	require.False(t, dirty)
 	assertPostgresM5EmbeddingCacheSchema(t, adminDB, schema, true)
 	var cacheRows int64
@@ -267,21 +280,21 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(103), version)
+	require.Equal(t, uint(14), version)
 	require.False(t, dirty)
 	assertPostgresM5EmbeddingCacheSchema(t, adminDB, schema, false)
 
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(102), version)
+	require.Equal(t, uint(13), version)
 	require.False(t, dirty)
 	assertPostgresM5EmbeddingCacheSchema(t, adminDB, schema, true)
 
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(101), version)
+	require.Equal(t, uint(12), version)
 	require.False(t, dirty)
 	var humanRatingsTableExists bool
 	require.NoError(t, adminDB.Raw(
@@ -293,7 +306,7 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(100), version)
+	require.Equal(t, uint(11), version)
 	require.False(t, dirty)
 	var statisticsTableExists bool
 	require.NoError(t, adminDB.Raw(
@@ -305,7 +318,7 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(99), version)
+	require.Equal(t, uint(10), version)
 	require.False(t, dirty)
 	var cacheTableExists bool
 	require.NoError(t, adminDB.Raw(
@@ -317,7 +330,7 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(98), version)
+	require.Equal(t, uint(9), version)
 	require.False(t, dirty)
 	var ledgerTableExists bool
 	require.NoError(t, adminDB.Raw(
@@ -329,7 +342,7 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(97), version)
+	require.Equal(t, uint(8), version)
 	require.False(t, dirty)
 	var runtimeColumnExists bool
 	require.NoError(t, adminDB.Raw(
@@ -342,7 +355,7 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.NoError(t, migrator.Steps(-1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(96), version)
+	require.Equal(t, uint(7), version)
 	require.False(t, dirty)
 	var labelsExist bool
 	require.NoError(t, adminDB.Raw(
@@ -355,7 +368,7 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.NoError(t, migrator.Steps(-3))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(93), version)
+	require.Equal(t, uint(4), version)
 	require.False(t, dirty)
 	assertPostgresEvaluationSchema(t, adminDB, schema)
 	for _, table := range []string{"evaluation_datasets", "evaluation_question_results"} {
@@ -369,8 +382,8 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 
 	require.NoError(t, migrator.Steps(-4))
 	version, dirty, err = migrator.Version()
-	require.NoError(t, err)
-	require.Equal(t, uint(89), version)
+	require.ErrorIs(t, err, migrate.ErrNilVersion)
+	require.Equal(t, uint(0), version)
 	require.False(t, dirty)
 	var evaluationTableExists bool
 	require.NoError(t, adminDB.Raw(
@@ -383,63 +396,63 @@ func TestPostgresMigrationsCreateAndRoundTripEvaluationSchema(t *testing.T) {
 	require.NoError(t, migrator.Steps(4))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(93), version)
+	require.Equal(t, uint(4), version)
 	require.False(t, dirty)
 	assertPostgresEvaluationSchema(t, adminDB, schema)
 
 	require.NoError(t, migrator.Steps(3))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(96), version)
+	require.Equal(t, uint(7), version)
 	require.False(t, dirty)
 	assertPostgresM3EvaluationSchema(t, adminDB, schema)
 
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(97), version)
+	require.Equal(t, uint(8), version)
 	require.False(t, dirty)
 	assertPostgresM4EvaluationSchema(t, adminDB, schema)
 
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(98), version)
+	require.Equal(t, uint(9), version)
 	require.False(t, dirty)
 	assertPostgresM5RuntimeSchema(t, adminDB, schema)
 
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(99), version)
+	require.Equal(t, uint(10), version)
 	require.False(t, dirty)
 	assertPostgresM5LedgerSchema(t, adminDB, schema)
 
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(100), version)
+	require.Equal(t, uint(11), version)
 	require.False(t, dirty)
 	assertPostgresM5EmbeddingCacheSchema(t, adminDB, schema, true)
 
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(101), version)
+	require.Equal(t, uint(12), version)
 	require.False(t, dirty)
 	assertPostgresM5ModelStatisticsSchema(t, adminDB, schema)
 
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(102), version)
+	require.Equal(t, uint(13), version)
 	require.False(t, dirty)
 	assertPostgresM5HumanRatingsSchema(t, adminDB, schema)
 
 	require.NoError(t, migrator.Steps(1))
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	require.Equal(t, uint(103), version)
+	require.Equal(t, uint(14), version)
 	require.False(t, dirty)
 	assertPostgresM5EmbeddingCacheSchema(t, adminDB, schema, false)
 }

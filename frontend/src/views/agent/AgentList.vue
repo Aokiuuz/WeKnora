@@ -13,21 +13,7 @@
                 data-guide="agent-list-create" style="--wails-draggable: no-drag" @click="handleCreateAgent">
                 <template #icon>
                   <span class="btn-icon-wrapper">
-                    <svg class="sparkles-icon" width="19" height="19" viewBox="0 0 20 20" fill="none"
-                      xmlns="http://www.w3.org/2000/svg">
-                      <path
-                        d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
-                        fill="currentColor" stroke="currentColor" stroke-width="0.8" stroke-linecap="round"
-                        stroke-linejoin="round" />
-                      <path
-                        d="M15.5 4L15.8 5.2C15.85 5.45 16.05 5.65 16.3 5.7L17.5 6L16.3 6.3C16.05 6.35 15.85 6.55 15.8 6.8L15.5 8L15.2 6.8C15.15 6.55 14.95 6.35 14.7 6.3L13.5 6L14.7 5.7C14.95 5.65 15.15 5.45 15.2 5.2L15.5 4Z"
-                        fill="currentColor" stroke="currentColor" stroke-width="0.6" stroke-linecap="round"
-                        stroke-linejoin="round" />
-                      <path
-                        d="M4.5 13L4.8 14.2C4.85 14.45 5.05 14.65 5.3 14.7L6.5 15L5.3 15.3C5.05 15.35 4.85 15.55 4.8 15.8L4.5 17L4.2 15.8C4.15 15.55 3.95 15.35 3.7 15.3L2.5 15L3.7 14.7C3.95 14.65 4.15 14.45 4.2 14.2L4.5 13Z"
-                        fill="currentColor" stroke="currentColor" stroke-width="0.6" stroke-linecap="round"
-                        stroke-linejoin="round" />
-                    </svg>
+                    <t-icon name="sparkles" size="19px" class="sparkles-icon" width="19" height="19" />
                   </span>
                 </template>
               </t-button>
@@ -161,20 +147,8 @@
             }" @click="handleCardClick(agent)">
               <!-- 装饰星星 -->
               <div class="card-decoration">
-                <svg class="star-icon" width="24" height="24" viewBox="0 0 20 20" fill="none"
-                  xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
-                    stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"
-                    fill="currentColor" fill-opacity="0.15" />
-                </svg>
-                <svg class="star-icon small" width="14" height="14" viewBox="0 0 20 20" fill="none"
-                  xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
-                    stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"
-                    fill="currentColor" fill-opacity="0.15" />
-                </svg>
+                <t-icon name="sparkles" size="24px" class="star-icon" width="24" height="24" />
+                <t-icon name="sparkles" size="14px" class="star-icon small" width="14" height="14" />
               </div>
               <!-- 收藏按钮：浮在卡片右上角；.card-header padding-right 已为
                    "更多"按钮腾出空间，避免重叠。 -->
@@ -190,7 +164,7 @@
                     <t-icon :name="agent.config?.agent_mode === 'smart-reasoning' ? 'control-platform' : 'chat'"
                       size="18px" />
                   </div>
-                  <div v-else-if="agent.avatar" class="builtin-avatar agent-emoji">{{ agent.avatar }}</div>
+                  <AgentAvatar v-else-if="agent.avatar" :name="agent.name" size="small" />
                   <AgentAvatar v-else :name="agent.name" size="small" />
                   <span class="card-title" :title="agent.name">{{ agent.name }}</span>
                 </div>
@@ -263,12 +237,7 @@
                     <t-tooltip v-if="agent.config?.web_search_enabled" :content="$t('agent.features.webSearch')"
                       placement="top">
                       <div class="feature-badge web-search">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2" fill="none" />
-                          <ellipse cx="8" cy="8" rx="2.5" ry="6" stroke="currentColor" stroke-width="1.2" fill="none" />
-                          <line x1="2" y1="6" x2="14" y2="6" stroke="currentColor" stroke-width="1.2" />
-                          <line x1="2" y1="10" x2="14" y2="10" stroke="currentColor" stroke-width="1.2" />
-                        </svg>
+                        <t-icon name="internet" size="16px" width="16" height="16" />
                       </div>
                     </t-tooltip>
                     <t-tooltip v-if="agent.config?.knowledge_bases?.length || agent.config?.kb_selection_mode === 'all'"
@@ -362,20 +331,8 @@
             }" @click="handleCardClick(agent)">
               <!-- 装饰星星 -->
               <div class="card-decoration">
-                <svg class="star-icon" width="24" height="24" viewBox="0 0 20 20" fill="none"
-                  xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
-                    stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"
-                    fill="currentColor" fill-opacity="0.15" />
-                </svg>
-                <svg class="star-icon small" width="14" height="14" viewBox="0 0 20 20" fill="none"
-                  xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
-                    stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"
-                    fill="currentColor" fill-opacity="0.15" />
-                </svg>
+                <t-icon name="sparkles" size="24px" class="star-icon" width="24" height="24" />
+                <t-icon name="sparkles" size="14px" class="star-icon small" width="14" height="14" />
               </div>
 
               <button type="button" class="agent-favorite-star"
@@ -392,7 +349,7 @@
                     <t-icon :name="agent.config?.agent_mode === 'smart-reasoning' ? 'control-platform' : 'chat'"
                       size="18px" />
                   </div>
-                  <div v-else-if="agent.avatar" class="builtin-avatar agent-emoji">{{ agent.avatar }}</div>
+                  <AgentAvatar v-else-if="agent.avatar" :name="agent.name" size="small" />
                   <AgentAvatar v-else :name="agent.name" size="small" />
                   <span class="card-title" :title="agent.name">{{ agent.name }}</span>
                 </div>
@@ -454,12 +411,7 @@
                     <t-tooltip v-if="agent.config?.web_search_enabled" :content="$t('agent.features.webSearch')"
                       placement="top">
                       <div class="feature-badge web-search">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2" fill="none" />
-                          <ellipse cx="8" cy="8" rx="2.5" ry="6" stroke="currentColor" stroke-width="1.2" fill="none" />
-                          <line x1="2" y1="6" x2="14" y2="6" stroke="currentColor" stroke-width="1.2" />
-                          <line x1="2" y1="10" x2="14" y2="10" stroke="currentColor" stroke-width="1.2" />
-                        </svg>
+                        <t-icon name="internet" size="16px" width="16" height="16" />
                       </div>
                     </t-tooltip>
                     <t-tooltip v-if="agent.config?.knowledge_bases?.length || agent.config?.kb_selection_mode === 'all'"
@@ -548,24 +500,12 @@
               'agent-mode-agent': shared.agent?.config?.agent_mode === 'smart-reasoning'
             }" @click="handleSpaceAgentCardClick(shared)">
               <div class="card-decoration">
-                <svg class="star-icon" width="24" height="24" viewBox="0 0 20 20" fill="none"
-                  xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
-                    stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"
-                    fill="currentColor" fill-opacity="0.15" />
-                </svg>
-                <svg class="star-icon small" width="14" height="14" viewBox="0 0 20 20" fill="none"
-                  xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
-                    stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"
-                    fill="currentColor" fill-opacity="0.15" />
-                </svg>
+                <t-icon name="sparkles" size="24px" class="star-icon" width="24" height="24" />
+                <t-icon name="sparkles" size="14px" class="star-icon small" width="14" height="14" />
               </div>
               <div class="card-header">
                 <div class="card-header-left">
-                  <div v-if="shared.agent?.avatar" class="builtin-avatar agent-emoji">{{ shared.agent.avatar }}</div>
+                  <AgentAvatar v-if="shared.agent?.avatar" :name="shared.agent.name" size="small" />
                   <AgentAvatar v-else :name="shared.agent?.name" size="small" />
                   <span class="card-title" :title="shared.agent?.name">{{ shared.agent?.name }}</span>
                 </div>
@@ -607,13 +547,7 @@
                     </t-tooltip>
                     <t-tooltip v-if="shared.agent?.config?.web_search_enabled" :content="$t('agent.features.webSearch')"
                       placement="top">
-                      <div class="feature-badge web-search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"
-                          xmlns="http://www.w3.org/2000/svg">
-                          <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2" fill="none" />
-                          <ellipse cx="8" cy="8" rx="2.5" ry="6" stroke="currentColor" stroke-width="1.2" fill="none" />
-                          <line x1="2" y1="6" x2="14" y2="6" stroke="currentColor" stroke-width="1.2" />
-                          <line x1="2" y1="10" x2="14" y2="10" stroke="currentColor" stroke-width="1.2" />
-                        </svg></div>
+                      <div class="feature-badge web-search"><t-icon name="internet" size="16px" width="16" height="16" /></div>
                     </t-tooltip>
                     <t-tooltip
                       v-if="shared.agent?.config?.knowledge_bases?.length || shared.agent?.config?.kb_selection_mode === 'all'"
@@ -645,21 +579,7 @@
             data-guide="agent-list-create" @click="handleCreateAgent">
             <template #icon>
               <span class="btn-icon-wrapper">
-                <svg class="sparkles-icon" width="18" height="18" viewBox="0 0 20 20" fill="none"
-                  xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
-                    fill="currentColor" stroke="currentColor" stroke-width="0.8" stroke-linecap="round"
-                    stroke-linejoin="round" />
-                  <path
-                    d="M15.5 4L15.8 5.2C15.85 5.45 16.05 5.65 16.3 5.7L17.5 6L16.3 6.3C16.05 6.35 15.85 6.55 15.8 6.8L15.5 8L15.2 6.8C15.15 6.55 14.95 6.35 14.7 6.3L13.5 6L14.7 5.7C14.95 5.65 15.15 5.45 15.2 5.2L15.5 4Z"
-                    fill="currentColor" stroke="currentColor" stroke-width="0.6" stroke-linecap="round"
-                    stroke-linejoin="round" />
-                  <path
-                    d="M4.5 13L4.8 14.2C4.85 14.45 5.05 14.65 5.3 14.7L6.5 15L5.3 15.3C5.05 15.35 4.85 15.55 4.8 15.8L4.5 17L4.2 15.8C4.15 15.55 3.95 15.35 3.7 15.3L2.5 15L3.7 14.7C3.95 14.65 4.15 14.45 4.2 14.2L4.5 13Z"
-                    fill="currentColor" stroke="currentColor" stroke-width="0.6" stroke-linecap="round"
-                    stroke-linejoin="round" />
-                </svg>
+                <t-icon name="sparkles" size="18px" class="sparkles-icon" width="18" height="18" />
               </span>
             </template>
             <span>{{ $t('agent.createAgent') }}</span>
@@ -686,21 +606,7 @@
             @click="handleCreateAgent">
             <template #icon>
               <span class="btn-icon-wrapper">
-                <svg class="sparkles-icon" width="18" height="18" viewBox="0 0 20 20" fill="none"
-                  xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
-                    fill="currentColor" stroke="currentColor" stroke-width="0.8" stroke-linecap="round"
-                    stroke-linejoin="round" />
-                  <path
-                    d="M15.5 4L15.8 5.2C15.85 5.45 16.05 5.65 16.3 5.7L17.5 6L16.3 6.3C16.05 6.35 15.85 6.55 15.8 6.8L15.5 8L15.2 6.8C15.15 6.55 14.95 6.35 14.7 6.3L13.5 6L14.7 5.7C14.95 5.65 15.15 5.45 15.2 5.2L15.5 4Z"
-                    fill="currentColor" stroke="currentColor" stroke-width="0.6" stroke-linecap="round"
-                    stroke-linejoin="round" />
-                  <path
-                    d="M4.5 13L4.8 14.2C4.85 14.45 5.05 14.65 5.3 14.7L6.5 15L5.3 15.3C5.05 15.35 4.85 15.55 4.8 15.8L4.5 17L4.2 15.8C4.15 15.55 3.95 15.35 3.7 15.3L2.5 15L3.7 14.7C3.95 14.65 4.15 14.45 4.2 14.2L4.5 13Z"
-                    fill="currentColor" stroke="currentColor" stroke-width="0.6" stroke-linecap="round"
-                    stroke-linejoin="round" />
-                </svg>
+                <t-icon name="sparkles" size="18px" class="sparkles-icon" width="18" height="18" />
               </span>
             </template>
             <span>{{ $t('agent.createAgent') }}</span>
@@ -812,7 +718,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MessagePlugin, Icon as TIcon } from 'tdesign-vue-next'
 import { deleteAgent, copyAgent, type CustomAgent } from '@/api/agent'
@@ -828,7 +734,7 @@ import type { SharedAgentInfo, OrganizationSharedAgentItem } from '@/api/organiz
 import AgentEditorModal from './AgentEditorModal.vue'
 import ContextualGuide from '@/components/ContextualGuide.vue'
 import TenantModelsGuide from '@/components/TenantModelsGuide.vue'
-import { markContextualGuideDone } from '@/config/contextualGuides'
+import { focusAgentEditorSection, markContextualGuideDone } from '@/config/contextualGuides'
 import { useTenantModelReadiness } from '@/composables/useTenantModelReadiness'
 import { useUIStore } from '@/stores/ui'
 import AgentAvatar from '@/components/AgentAvatar.vue'
@@ -1108,7 +1014,7 @@ const applyAgentListData = (res: { data: CustomAgent[]; disabled_own_agent_ids: 
     showMore: false,
     disabled_by_me: disabledOwnIds.includes(agent.id)
   }))
-  checkAndOpenEditModal()
+  void checkAndOpenEditModal()
 }
 
 const fetchList = (force = false) => {
@@ -1118,7 +1024,7 @@ const fetchList = (force = false) => {
     orgStore.fetchOrganizations({ force }),
     orgStore.fetchSharedAgents({ force }),
   ]).finally(() => { loading.value = false }).then(() => {
-    checkAndOpenEditModal()
+    void checkAndOpenEditModal()
     // 各空间智能体数量已由 GET /organizations 的 resource_counts 带回，存于 orgStore.resourceCounts
     const counts = orgStore.resourceCounts?.agents?.by_organization
     if (counts) spaceAgentCountByOrg.value = { ...counts }
@@ -1138,7 +1044,10 @@ const resolveAgentForEdit = (editId: string, sourceTenantId?: string): CustomAge
   return null
 }
 
-const checkAndOpenEditModal = () => {
+let editOpenGeneration = 0
+
+const checkAndOpenEditModal = async () => {
+  const generation = ++editOpenGeneration
   const editId = route.query.edit as string
   const section = route.query.section as string
   const sourceTenantId = route.query.sourceTenantId as string | undefined
@@ -1152,13 +1061,36 @@ const checkAndOpenEditModal = () => {
   }
   if (editId) {
     const agent = resolveAgentForEdit(editId, sourceTenantId)
-    if (agent) {
+    // A route change can remove a creator filter before the corresponding
+    // all-agent fetch completes. Keep the deep-link query intact so the list
+    // refresh callback can resolve and open the target instead of losing it.
+    if (!agent) return
+
+    const requestedSection = section || 'basic'
+    const requestedHighlight = (route.query.highlight as string) || ''
+    if (
+      editorVisible.value
+      && editingAgent.value?.id === agent.id
+      && !requestedHighlight
+    ) {
+      // Global Settings may be covering this exact editor. Preserve any
+      // unsaved draft and focus the requested configuration section in place.
+      editorInitialSection.value = requestedSection
+      focusAgentEditorSection(requestedSection)
+    } else {
+      // A global Settings dialog can be opened on top of an existing agent
+      // editor. Flush visible=false before loading the deep-linked target so
+      // AgentEditorModal's visibility watcher rebuilds its form data.
+      editorVisible.value = false
+      await nextTick()
+      if (generation !== editOpenGeneration) return
       editingAgent.value = agent
       editorMode.value = 'edit'
-      editorInitialSection.value = section || 'basic'
-      editorInitialHighlightField.value = (route.query.highlight as string) || ''
+      editorInitialSection.value = requestedSection
+      editorInitialHighlightField.value = requestedHighlight
       editorVisible.value = true
     }
+    if (generation !== editOpenGeneration) return
     // Drop the transient edit/section params but preserve other filter
     // state (scope / creator / q) so refreshing doesn't reset the view.
     const { edit: _e, section: _s, highlight: _h, sourceTenantId: _st, ...rest } = route.query
@@ -1174,7 +1106,7 @@ watch(
   () => route.query.edit,
   (v) => {
     if (v && (agents.value.length > 0 || sharedAgents.value.length > 0)) {
-      checkAndOpenEditModal()
+      void checkAndOpenEditModal()
     }
   },
 )

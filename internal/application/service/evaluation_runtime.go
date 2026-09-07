@@ -191,7 +191,7 @@ func evaluationQuestionUsage(response *types.ChatResponse) (prompt, completion, 
 		return 0, 0, 0, false
 	}
 	usage := response.Usage
-	reported = usage.PromptTokens > 0 || usage.CompletionTokens > 0 || usage.TotalTokens > 0
+	reported = usage.UsageReported || usage.PromptTokens > 0 || usage.CompletionTokens > 0 || usage.TotalTokens > 0
 	return usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens, reported
 }
 

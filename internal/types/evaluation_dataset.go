@@ -79,7 +79,7 @@ type EvaluationDatasetRelevance struct {
 	DatasetVersionID string `json:"dataset_version_id" gorm:"type:varchar(64);primaryKey"`
 	QID              string `json:"qid" gorm:"column:qid;type:varchar(128);primaryKey"`
 	PID              string `json:"pid" gorm:"column:pid;type:varchar(128);primaryKey"`
-	Grade            int    `json:"grade" gorm:"not null;default:1"`
+	Grade            int    `json:"grade" gorm:"not null"`
 }
 
 // TableName binds EvaluationDatasetRelevance to the relevance table.

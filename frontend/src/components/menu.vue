@@ -20,12 +20,7 @@
                     </div>
                 </t-tooltip>
                 <div class="sidebar-toggle" @click="uiStore.toggleSidebar" :title="t('menu.collapseSidebar')">
-                    <svg viewBox="0 0 20 20" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="1.5" y="1.5" width="17" height="17" rx="3" stroke="currentColor" stroke-width="1.2" />
-                        <line x1="7.5" y1="1.5" x2="7.5" y2="18.5" stroke="currentColor" stroke-width="1.2" />
-                        <line x1="4" y1="7.5" x2="4" y2="12.5" stroke="currentColor" stroke-width="1.2"
-                            stroke-linecap="round" />
-                    </svg>
+                    <t-icon name="panel-left" size="18px" width="18" height="18" />
                 </div>
             </div>
         </div>
@@ -34,16 +29,7 @@
             <div class="menu_item sidebar-toggle-item" @click="uiStore.toggleSidebar">
                 <div class="menu_item-box">
                     <div class="menu_icon">
-                        <svg class="icon" viewBox="0 0 20 20" width="20" height="20" fill="none"
-                            xmlns="http://www.w3.org/2000/svg">
-                            <rect x="1.5" y="1.5" width="17" height="17" rx="3" stroke="currentColor"
-                                stroke-width="1.2" />
-                            <line x1="7.5" y1="1.5" x2="7.5" y2="18.5" stroke="currentColor" stroke-width="1.2" />
-                            <line x1="5" y1="10" x2="3" y2="8" stroke="currentColor" stroke-width="1.2"
-                                stroke-linecap="round" />
-                            <line x1="5" y1="10" x2="3" y2="12" stroke="currentColor" stroke-width="1.2"
-                                stroke-linecap="round" />
-                        </svg>
+                        <t-icon name="panel-left" size="20px" class="icon" width="20" height="20" />
                     </div>
                 </div>
             </div>
@@ -147,6 +133,7 @@
                                 <div class="session-list-row session-list-row--flat">
                                     <div class="session-list-row__body">
                                         <SessionSidebarRow :item="subitem" :batch-mode="batchMode"
+                                            :running="Boolean(sessionActivityEntries[subitem.id])"
                                             :active-path="currentSecondpath" :selected-ids="batchSelectedIds"
                                             :menu-options="buildSessionMenuOptions(subitem)"
                                             @navigate="gotopage(subitem.path)"
@@ -246,6 +233,7 @@ import {
 } from './sessionSidebarSourceFilter';
 import { logout as logoutApi } from '@/api/auth';
 import { useMenuStore } from '@/stores/menu';
+import { useSessionActivityStore } from '@/stores/sessionActivity';
 import { useAuthStore } from '@/stores/auth';
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities';
 import { useOrganizationStore } from '@/stores/organization';
@@ -286,6 +274,9 @@ const platformLogo = (p: string): string => (p ? PLATFORM_LOGO[p] || '' : '');
 
 const { t } = useI18n();
 const usemenuStore = useMenuStore();
+const sessionActivity = useSessionActivityStore();
+const { entries: sessionActivityEntries } = storeToRefs(sessionActivity);
+let sessionActivityTimer: ReturnType<typeof setInterval> | undefined;
 const authStore = useAuthStore();
 const deploymentCapabilities = useDeploymentCapabilitiesStore();
 const orgStore = useOrganizationStore();
@@ -954,6 +945,7 @@ const loadSessionOriginMeta = async () => {
 const handleSessionMutation = (event: Event) => {
     const detail = (event as CustomEvent<SessionMutationDetail>).detail;
     if (!detail?.sessionId) return;
+    if (detail.removed || detail.messagesCleared) sessionActivity.update(detail.sessionId, false);
     if (detail.patch) {
         updateSessionInBuckets(detail.sessionId, {
             ...detail.patch,
@@ -970,6 +962,7 @@ const handleSessionMutation = (event: Event) => {
 };
 
 onMounted(async () => {
+    sessionActivityTimer = setInterval(() => { void sessionActivity.refresh(); }, 5000);
     const routeName = typeof route.name === 'string' ? route.name : (route.name ? String(route.name) : '')
     currentpath.value = routeName;
     if (route.params.chatid) {
@@ -1002,6 +995,8 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+    clearInterval(sessionActivityTimer);
+    sessionActivity.clear();
     window.removeEventListener(SESSION_MUTATION_EVENT, handleSessionMutation);
 });
 
@@ -1669,6 +1664,11 @@ const onDragHandleMouseDown = (e: MouseEvent) => {
             flex: 1 1 auto;
             min-width: 0;
             overflow: hidden;
+        }
+
+        .session-running-indicator {
+            flex: 0 0 16px;
+            flex-shrink: 0;
         }
 
         .submenu_title-text {

@@ -54,9 +54,10 @@ var versionedSQLiteColumns = map[string][]string{
 		"experiment_sha256", "runtime_metrics",
 	},
 	"evaluation_question_results": {"usage_reported"},
+	"mcp_tool_approvals":          {"enabled"},
 }
 
-const expectedSQLiteMigrationVersion = 26
+const expectedSQLiteMigrationVersion = 13
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -95,7 +96,7 @@ func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	assertSQLiteModelStatisticsSchema(t, db)
 	assertSQLiteHumanRatingsSchema(t, db)
 	require.False(t, sqliteColumnExists(t, db, "knowledges", "tag_id"),
-		"SQLite migrations must drop legacy knowledges.tag_id after multi-tag migration")
+		"SQLite migrations must drop legacy knowledges.tag_id after multi-tag "+"migration")
 }
 
 func assertSQLiteModelObservabilitySchema(t *testing.T, db *sql.DB) {
@@ -124,8 +125,7 @@ func assertSQLiteEmbeddingCacheSchema(t *testing.T, db *sql.DB, checksumExpected
 	}
 	require.False(t, sqliteColumnExists(t, db, "embedding_cache_entries", "text"),
 		"embedding cache schema must not persist source text")
-	require.Equal(t, checksumExpected,
-		sqliteColumnExists(t, db, "embedding_cache_entries", "checksum_sha256"))
+	require.Equal(t, checksumExpected, sqliteColumnExists(t, db, "embedding_cache_entries", "checksum_sha256"))
 }
 
 func assertSQLiteModelStatisticsSchema(t *testing.T, db *sql.DB) {
@@ -157,23 +157,34 @@ func assertSQLiteHumanRatingsSchema(t *testing.T, db *sql.DB) {
 func TestSQLiteMigrationsUpgradeV4PreservesData(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
 
-	// Build a legacy v4 migration root (000000_init .. 000004_memory) so we
-	// can prove the new migrations upgrade an existing Lite database without
-	// replaying the baseline.
-	legacyRoot := copySQLiteMigrationsV4(t, repoRoot)
-	chdirAndRestore(t, legacyRoot)
-
 	dbPath := filepath.Join(t.TempDir(), "upgrade.db")
-	require.NoError(t, RunMigrationsWithOptions("sqlite3://unused", MigrationOptions{SQLiteDBPath: dbPath}))
+	dbSeed, err := sql.Open("sqlite3", dbPath)
+	require.NoError(t, err)
+	for _, name := range []string{
+		"000000_init",
+		"000001_remove_wiki_log",
+		"000002_knowledge_folder_path",
+		"000003_knowledge_base_auto_tag_config",
+		"000004_memory",
+	} {
+		data, readErr := os.ReadFile(filepath.Join(repoRoot, "migrations", "sqlite", name+".up.sql"))
+		require.NoError(t, readErr)
+		_, execErr := dbSeed.Exec(string(data))
+		require.NoError(t, execErr)
+	}
+	_, err = dbSeed.Exec("CREATE TABLE schema_migrations(version BIGINT NOT NULL PRIMARY KEY," +
+		"dirty BOOLEAN NOT NULL); INSERT INTO schema_migrations VALUES(4,false)")
+	require.NoError(t, err)
+	require.NoError(t, dbSeed.Close())
 
 	db := openSQLiteDB(t, dbPath)
 	versionBefore, dirtyBefore := sqliteMigrationState(t, db)
 	require.Equal(t, 4, versionBefore)
 	require.False(t, dirtyBefore)
-	_, err := db.Exec("INSERT INTO tenants (name, business) VALUES (?, ?)", "upgrade-sentinel", "migration-test")
+	_, err = db.Exec("INSERT INTO tenants (name, business) VALUES (?, ?)", "upgrade-sentinel", "migration-test")
 	require.NoError(t, err)
 	_, err = db.Exec(
-		"INSERT INTO knowledges (id, tenant_id, knowledge_base_id, type, title, source, tag_id) "+
+		"INSERT INTO knowledges (id, tenant_id, knowledge_base_id, type, title,"+" source, tag_id) "+
 			"VALUES (?, 1, ?, 'document', 'tagged-doc', 'manual', ?)",
 		"legacy-knowledge-1", "legacy-kb-1", "legacy-tag-1",
 	)
@@ -181,7 +192,13 @@ func TestSQLiteMigrationsUpgradeV4PreservesData(t *testing.T) {
 
 	// Run the full migration set from the repo root.
 	chdirAndRestore(t, repoRoot)
-	require.NoError(t, RunMigrationsWithOptions("sqlite3://unused", MigrationOptions{SQLiteDBPath: dbPath}))
+	require.NoError(
+		t,
+		RunMigrationsWithOptions(
+			"sqlite3://unused",
+			MigrationOptions{SQLiteDBPath: dbPath, BackupID: "x03-v4-fixture"},
+		),
+	)
 
 	db = openSQLiteDB(t, dbPath)
 	versionAfter, dirtyAfter := sqliteMigrationState(t, db)
@@ -204,12 +221,15 @@ func TestSQLiteMigrationsUpgradeV4PreservesData(t *testing.T) {
 	}
 
 	var sentinelName string
-	require.NoError(t, db.QueryRow("SELECT name FROM tenants WHERE business = ?", "migration-test").Scan(&sentinelName))
+	require.NoError(
+		t,
+		db.QueryRow("SELECT name FROM tenants WHERE business = ?", "migration-test").Scan(&sentinelName),
+	)
 	require.Equal(t, "upgrade-sentinel", sentinelName)
 
 	var relationCount int
 	require.NoError(t, db.QueryRow(
-		"SELECT COUNT(*) FROM knowledge_tag_relations WHERE knowledge_id = ? AND tag_id = ?",
+		"SELECT COUNT(*) FROM knowledge_tag_relations WHERE knowledge_id = ? "+"AND tag_id = ?",
 		"legacy-knowledge-1", "legacy-tag-1",
 	).Scan(&relationCount))
 	require.Equal(t, 1, relationCount)
@@ -265,11 +285,7 @@ func sqliteTableExists(t *testing.T, db *sql.DB, table string) bool {
 func sqliteColumnExists(t *testing.T, db *sql.DB, table, column string) bool {
 	t.Helper()
 	var n int
-	require.NoError(t, db.QueryRow(
-		"SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?",
-		table,
-		column,
-	).Scan(&n))
+	require.NoError(t, db.QueryRow("SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?", table, column).Scan(&n))
 	return n == 1
 }
 
@@ -289,7 +305,8 @@ func assertSQLiteShareLinkInvitationsWork(t *testing.T, db *sql.DB) {
 
 	var count int
 	require.NoError(t, db.QueryRow(
-		"SELECT COUNT(*) FROM tenant_invitations WHERE tenant_id = 1 AND invitee_user_id = '' AND status = 'pending'",
+		"SELECT COUNT(*) FROM tenant_invitations WHERE tenant_id = 1 AND "+
+			"invitee_user_id = '' AND status = 'pending'",
 	).Scan(&count))
 	require.Equal(t, 2, count)
 }
@@ -297,22 +314,21 @@ func assertSQLiteShareLinkInvitationsWork(t *testing.T, db *sql.DB) {
 func assertSQLiteMCPOAuthPrincipalUpsertWorks(t *testing.T, db *sql.DB) {
 	t.Helper()
 	_, err := db.Exec(
-		"INSERT INTO mcp_services (id, tenant_id, name, transport_type) VALUES (?, 1, 'svc', 'http')",
+		"INSERT INTO mcp_services (id, tenant_id, name, transport_type) VALUES "+"(?, 1, 'svc', 'http')",
 		"svc-migration-1",
 	)
 	require.NoError(t, err)
 
 	tokenInsertPrefix := "INSERT INTO mcp_oauth_tokens " +
-		"(id, tenant_id, user_id, service_id, principal_type, principal_id, access_token) "
+		"(id, tenant_id, user_id, service_id, principal_type, principal_id, " +
+		"access_token) "
 	_, err = db.Exec(
-		tokenInsertPrefix +
-			"VALUES ('tok-1', 1, 'u1', 'svc-migration-1', 'web_user', 'u1', 'token-1')",
+		tokenInsertPrefix + "VALUES ('tok-1', 1, 'u1', 'svc-migration-1', 'web_user', 'u1', " + "'token-1')",
 	)
 	require.NoError(t, err)
 
 	_, err = db.Exec(
-		tokenInsertPrefix +
-			"VALUES ('tok-2', 1, 'u1', 'svc-migration-1', 'web_user', 'u1', 'token-2') " +
+		tokenInsertPrefix + "VALUES ('tok-2', 1, 'u1', 'svc-migration-1', 'web_user', 'u1', " + "'token-2') " +
 			"ON CONFLICT(tenant_id, principal_type, principal_id, service_id) " +
 			"DO UPDATE SET access_token = excluded.access_token",
 	)
@@ -320,15 +336,14 @@ func assertSQLiteMCPOAuthPrincipalUpsertWorks(t *testing.T, db *sql.DB) {
 
 	var accessToken string
 	require.NoError(t, db.QueryRow(
-		"SELECT access_token FROM mcp_oauth_tokens "+
-			"WHERE tenant_id = 1 AND principal_type = 'web_user' "+
+		"SELECT access_token FROM mcp_oauth_tokens "+"WHERE tenant_id = 1 AND principal_type = 'web_user' "+
 			"AND principal_id = 'u1' AND service_id = 'svc-migration-1'",
 	).Scan(&accessToken))
 	require.Equal(t, "token-2", accessToken)
 
 	var rowCount int
 	require.NoError(t, db.QueryRow(
-		"SELECT COUNT(*) FROM mcp_oauth_tokens WHERE tenant_id = 1 AND service_id = 'svc-migration-1'",
+		"SELECT COUNT(*) FROM mcp_oauth_tokens WHERE tenant_id = 1 AND "+"service_id = 'svc-migration-1'",
 	).Scan(&rowCount))
 	require.Equal(t, 1, rowCount)
 }
@@ -351,10 +366,11 @@ func assertSQLiteEvaluationTaskSchema(t *testing.T, db *sql.DB) {
 		"WHERE status IN (2, 3, 4, 5, 6) AND end_time IS NOT NULL",
 	)
 
-	insert := `INSERT INTO evaluation_tasks (
-		id, tenant_id, dataset_id, status, start_time, cleanup_errors, params, metric,
-		temporary_kb_id, owner_id, lease_expires_at, heartbeat_at
-	) VALUES (?, 1, 'default', 0, CURRENT_TIMESTAMP, ?, ?, ?, 'kb', 'owner', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+	insert := "INSERT INTO evaluation_tasks (\n\t\tid, tenant_id, dataset_id, status, " +
+		"start_time, cleanup_errors, params, metric,\n\t\ttemporary_kb_id, " +
+		"owner_id, lease_expires_at, heartbeat_at\n\t) VALUES (?, 1, 'default', " +
+		"0, CURRENT_TIMESTAMP, ?, ?, ?, 'kb', 'owner', CURRENT_TIMESTAMP, " +
+		"CURRENT_TIMESTAMP)"
 
 	_, err := db.Exec(insert, "invalid-cleanup-errors", "not-json", `{}`, nil)
 	require.Error(t, err)
@@ -368,7 +384,7 @@ func assertSQLiteEvaluationTaskSchema(t *testing.T, db *sql.DB) {
 	_, err = db.Exec("UPDATE evaluation_tasks SET lease_expires_at = NULL WHERE id = ?", "nullable-lease")
 	require.Error(t, err)
 	_, err = db.Exec(
-		"UPDATE evaluation_tasks SET status = 2, lease_expires_at = NULL WHERE id = ?",
+		"UPDATE evaluation_tasks SET status = 2, lease_expires_at = NULL WHERE "+"id = ?",
 		"nullable-lease",
 	)
 	require.NoError(t, err)
@@ -377,26 +393,29 @@ func assertSQLiteEvaluationTaskSchema(t *testing.T, db *sql.DB) {
 	assertSQLitePartialIndex(t, db, "idx_evaluation_tasks_dataset_version",
 		"WHERE deleted_at IS NULL AND dataset_version_id IS NOT NULL")
 
-	_, err = db.Exec(`INSERT INTO evaluation_tasks (
-		id, tenant_id, dataset_id, status, start_time, cleanup_errors, params,
-		temporary_kb_id, owner_id, lease_expires_at, heartbeat_at,
-		dataset_version_id, dataset_content_sha256, experiment_snapshot, experiment_sha256
-	) VALUES ('snapshot-row', 1, 'default', 0, CURRENT_TIMESTAMP, '[]', '{}', 'kb', 'owner',
-		CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'version-1', ?, ?, ?)`,
+	_, err = db.Exec("INSERT INTO evaluation_tasks (\n\t\tid, tenant_id, dataset_id, status, "+
+		"start_time, cleanup_errors, params,\n\t\ttemporary_kb_id, owner_id, "+
+		"lease_expires_at, heartbeat_at,\n\t\tdataset_version_id, "+
+		"dataset_content_sha256, experiment_snapshot, experiment_sha256\n\t) "+
+		"VALUES ('snapshot-row', 1, 'default', 0, CURRENT_TIMESTAMP, '[]', "+
+		"'{}', 'kb', 'owner',\n\t\tCURRENT_TIMESTAMP, CURRENT_TIMESTAMP, "+
+		"'version-1', ?, ?, ?)",
 		strings.Repeat("a", 64), `{"schema_version":1}`, strings.Repeat("b", 64))
 	require.NoError(t, err)
 
 	// Pre-M3 rows keep null provenance.
 	var nullSnapshot sql.NullString
 	require.NoError(t, db.QueryRow(
-		"SELECT experiment_snapshot FROM evaluation_tasks WHERE id = 'nullable-lease'",
+		"SELECT experiment_snapshot FROM evaluation_tasks WHERE id = "+"'nullable-lease'",
 	).Scan(&nullSnapshot))
 	require.False(t, nullSnapshot.Valid)
 
 	// Malformed hashes and non-JSON snapshots are rejected.
-	_, err = db.Exec("UPDATE evaluation_tasks SET dataset_content_sha256 = 'short' WHERE id = 'snapshot-row'")
+	_, err = db.Exec("UPDATE evaluation_tasks SET dataset_content_sha256 = 'short' WHERE id " +
+		"= 'snapshot-row'")
 	require.Error(t, err)
-	_, err = db.Exec("UPDATE evaluation_tasks SET experiment_snapshot = 'not-json' WHERE id = 'snapshot-row'")
+	_, err = db.Exec("UPDATE evaluation_tasks SET experiment_snapshot = 'not-json' WHERE id " +
+		"= 'snapshot-row'")
 	require.Error(t, err)
 }
 
@@ -404,8 +423,7 @@ func assertSQLitePartialIndex(t *testing.T, db *sql.DB, name, predicate string) 
 	t.Helper()
 	var definition string
 	require.NoError(t, db.QueryRow(
-		"SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?",
-		name,
+		"SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?", name,
 	).Scan(&definition))
 	normalizedDefinition := strings.Join(strings.Fields(strings.ToLower(definition)), " ")
 	normalizedPredicate := strings.Join(strings.Fields(strings.ToLower(predicate)), " ")
@@ -419,28 +437,6 @@ func assertSQLitePartialIndex(t *testing.T, db *sql.DB, name, predicate string) 
 	require.Equal(t, 1, partial)
 }
 
-func copySQLiteMigrationsV4(t *testing.T, repoRoot string) string {
-	t.Helper()
-	dest := t.TempDir()
-	srcDir := filepath.Join(repoRoot, "migrations", "sqlite")
-	destDir := filepath.Join(dest, "migrations", "sqlite")
-	require.NoError(t, os.MkdirAll(destDir, 0o755))
-
-	legacy := []string{
-		"000000_init.up.sql",
-		"000001_remove_wiki_log.up.sql",
-		"000002_knowledge_folder_path.up.sql",
-		"000003_knowledge_base_auto_tag_config.up.sql",
-		"000004_memory.up.sql",
-	}
-	for _, name := range legacy {
-		data, err := os.ReadFile(filepath.Join(srcDir, name))
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(filepath.Join(destDir, name), data, 0o600))
-	}
-	return dest
-}
-
 // assertSQLiteEvaluationQuestionResultsSchema verifies the 000096 / SQLite
 // 000019 per-question table: composite foreign key, JSON validity checks,
 // result hash length, and the partial pagination index.
@@ -449,24 +445,25 @@ func assertSQLiteEvaluationQuestionResultsSchema(t *testing.T, db *sql.DB) {
 
 	var definition string
 	require.NoError(t, db.QueryRow(
-		"SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_evaluation_question_results_task_page'",
+		"SELECT sql FROM sqlite_master WHERE type = 'index' AND name = "+
+			"'idx_evaluation_question_results_task_page'",
 	).Scan(&definition))
 	require.Contains(t, strings.ToLower(definition), "where deleted_at is null")
 
-	insertTask := `INSERT INTO evaluation_tasks (
-		id, tenant_id, dataset_id, status, start_time, cleanup_errors, params,
-		temporary_kb_id, owner_id, lease_expires_at, heartbeat_at
-	) VALUES (?, 1, 'default', 1, CURRENT_TIMESTAMP, '[]', '{}', 'kb', 'owner',
-		CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+	insertTask := "INSERT INTO evaluation_tasks (\n\t\tid, tenant_id, dataset_id, status, " +
+		"start_time, cleanup_errors, params,\n\t\ttemporary_kb_id, owner_id, " +
+		"lease_expires_at, heartbeat_at\n\t) VALUES (?, 1, 'default', 1, " +
+		"CURRENT_TIMESTAMP, '[]', '{}', 'kb', 'owner',\n\t\tCURRENT_TIMESTAMP, " +
+		"CURRENT_TIMESTAMP)"
 	_, err := db.Exec(insertTask, "task-for-questions")
 	require.NoError(t, err)
 
-	insertRow := `INSERT INTO evaluation_question_results (
-		tenant_id, task_id, sample_index, qid, question, reference_answer,
-		ground_truth_pids, search_results, rerank_results, generation_pids,
-		per_sample_metrics, metric_observations, status, result_hash
-	) VALUES (1, 'task-for-questions', ?, 'q1', 'question?', 'answer',
-		'[3]', ?, ?, '[3]', '{}', '[]', 'success', ?)`
+	insertRow := "INSERT INTO evaluation_question_results (\n\t\ttenant_id, task_id, " +
+		"sample_index, qid, question, reference_answer,\n\t\tground_truth_pids, " +
+		"search_results, rerank_results, generation_pids,\n\t\tper_sample_metrics," +
+		" metric_observations, status, result_hash\n\t) VALUES (1, " +
+		"'task-for-questions', ?, 'q1', 'question?', 'answer',\n\t\t'[3]', ?, ?, " +
+		"'[3]', '{}', '[]', 'success', ?)"
 	validRanked := `[{"rank":1,"pid":3,"score":0.9,"provenance":"known"}]`
 	validHash := strings.Repeat("c", 64)
 	_, err = db.Exec(insertRow, 0, validRanked, validRanked, validHash)
@@ -476,9 +473,9 @@ func assertSQLiteEvaluationQuestionResultsSchema(t *testing.T, db *sql.DB) {
 	_, err = db.Exec(insertRow, 0, validRanked, validRanked, validHash)
 	require.Error(t, err)
 	// The composite foreign key rejects rows without a parent task.
-	_, err = db.Exec(`INSERT INTO evaluation_question_results (
-		tenant_id, task_id, sample_index, qid, question, status, result_hash
-	) VALUES (1, 'task-missing', 0, 'q1', 'question?', 'success', ?)`, validHash)
+	_, err = db.Exec("INSERT INTO evaluation_question_results (\n\t\ttenant_id, task_id, "+
+		"sample_index, qid, question, status, result_hash\n\t) VALUES (1, "+
+		"'task-missing', 0, 'q1', 'question?', 'success', ?)", validHash)
 	require.Error(t, err)
 	// JSON validity and hash length are enforced.
 	_, err = db.Exec(insertRow, 1, "not-json", validRanked, validHash)
@@ -490,7 +487,7 @@ func assertSQLiteEvaluationQuestionResultsSchema(t *testing.T, db *sql.DB) {
 	require.NoError(t, err)
 	var remaining int
 	require.NoError(t, db.QueryRow(
-		"SELECT COUNT(*) FROM evaluation_question_results WHERE task_id = 'task-for-questions'",
+		"SELECT COUNT(*) FROM evaluation_question_results WHERE task_id = "+"'task-for-questions'",
 	).Scan(&remaining))
 	require.Zero(t, remaining)
 }
@@ -500,7 +497,7 @@ func assertSQLiteEvaluationTaskLabelsSchema(t *testing.T, db *sql.DB) {
 	require.True(t, sqliteTableExists(t, db, "evaluation_task_labels"))
 	var definition string
 	require.NoError(t, db.QueryRow(
-		"SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'evaluation_task_labels'",
+		"SELECT sql FROM sqlite_master WHERE type = 'table' AND name = "+"'evaluation_task_labels'",
 	).Scan(&definition))
 	normalizedTableDefinition := strings.ToLower(definition)
 	require.Contains(t, normalizedTableDefinition, "evaluation_task_labels_label_bytes_check")

@@ -10,7 +10,7 @@ import (
 
 const (
 	// EvaluationExportSchemaVersion identifies the audit export schema.
-	EvaluationExportSchemaVersion = 2
+	EvaluationExportSchemaVersion = 3
 	// EvaluationExportFormatJSON selects JavaScript Object Notation output.
 	EvaluationExportFormatJSON = "json"
 	// EvaluationExportFormatCSV selects comma-separated values output.
@@ -117,5 +117,6 @@ type EvaluationExportDocument struct {
 	Labels           []string                      `json:"labels"`
 	Experiment       *EvaluationExperimentSnapshot `json:"experiment"`
 	AggregateMetrics json.RawMessage               `json:"aggregate_metrics"`
+	RuntimeMetrics   json.RawMessage               `json:"runtime_metrics"`
 	Questions        []EvaluationExportQuestion    `json:"questions"`
 }

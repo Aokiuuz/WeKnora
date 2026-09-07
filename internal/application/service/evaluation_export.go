@@ -44,11 +44,12 @@ func (w *evaluationExportLimitWriter) Write(payload []byte) (int, error) {
 }
 
 type evaluationExportContext struct {
-	ExportedAt time.Time
-	Task       types.EvaluationExportTask
-	Labels     []string
-	Experiment *types.EvaluationExperimentSnapshot
-	Metrics    json.RawMessage
+	ExportedAt     time.Time
+	Task           types.EvaluationExportTask
+	Labels         []string
+	Experiment     *types.EvaluationExperimentSnapshot
+	Metrics        json.RawMessage
+	RuntimeMetrics json.RawMessage
 }
 
 // PrepareEvaluationExport builds a bounded audit artifact before an HTTP response starts.
@@ -106,11 +107,12 @@ func (e *EvaluationService) prepareEvaluationExport(
 		return nil, err
 	}
 	exportContext := evaluationExportContext{
-		ExportedAt: time.Now().UTC(),
-		Task:       evaluationExportTaskFromEntity(entity, provenanceComplete),
-		Labels:     labels,
-		Experiment: experiment,
-		Metrics:    normalizedEvaluationExportJSON(entity.Metric),
+		ExportedAt:     time.Now().UTC(),
+		Task:           evaluationExportTaskFromEntity(entity, provenanceComplete),
+		Labels:         labels,
+		Experiment:     experiment,
+		Metrics:        normalizedEvaluationExportJSON(entity.Metric),
+		RuntimeMetrics: normalizedEvaluationExportJSON(entity.RuntimeMetrics),
 	}
 
 	file, err := os.CreateTemp(bounds.TempDir, "weknora-evaluation-export-*")
@@ -250,6 +252,7 @@ func (e *EvaluationService) writeEvaluationJSONExport(
 		{name: "labels", value: exportContext.Labels},
 		{name: "experiment", value: exportContext.Experiment},
 		{name: "aggregate_metrics", value: exportContext.Metrics},
+		{name: "runtime_metrics", value: exportContext.RuntimeMetrics},
 	}
 	for index, field := range fields {
 		if err := writeField(field.name, field.value, index == 0); err != nil {
@@ -296,7 +299,7 @@ var evaluationExportCSVHeader = []string{
 	"search_results_json", "rerank_results_json", "generation_pids_json", "generated_text_json",
 	"per_sample_metrics_json", "metric_observations_json", "question_error_code", "question_status",
 	"result_hash", "retrieval_ms", "rerank_ms", "generation_ms", "total_ms", "prompt_tokens", "completion_tokens",
-	"total_tokens", "usage_reported",
+	"total_tokens", "usage_reported", "runtime_metrics_json",
 }
 
 func (e *EvaluationService) writeEvaluationCSVExport(
@@ -340,6 +343,7 @@ func (e *EvaluationService) writeEvaluationCSVExport(
 		"cleanup_errors_json": exportContext.Task.CleanupErrors,
 		"labels_json":         exportContext.Labels, "experiment_json": exportContext.Experiment,
 		"aggregate_metrics_json": exportContext.Metrics,
+		"runtime_metrics_json":   exportContext.RuntimeMetrics,
 	} {
 		runValues[name], err = evaluationExportJSONLiteral(value)
 		if err != nil {

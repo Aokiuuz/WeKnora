@@ -583,9 +583,7 @@
           <div class="faq-import-modal">
             <!-- 关闭按钮 -->
             <button class="close-btn" @click="importVisible = false" :aria-label="$t('general.close')">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-              </svg>
+              <t-icon name="close" size="20px" width="20" height="20" />
             </button>
 
             <div class="faq-import-container">
@@ -687,9 +685,7 @@
             <!-- 关闭按钮 -->
             <button class="batch-tag-close-btn" @click="batchTagDialogVisible = false"
               :aria-label="$t('general.close')">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-              </svg>
+              <t-icon name="close" size="20px" width="20" height="20" />
             </button>
 
             <div class="batch-tag-container">

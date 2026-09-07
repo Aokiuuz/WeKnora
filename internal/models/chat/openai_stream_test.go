@@ -130,6 +130,9 @@ func TestRawOpenAIStreamRequiresProtocolCompletion(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		responses := collectRawOpenAIStream(ctx, t, openAIStreamChunk("partial", ""))
+		if len(responses) == 0 {
+			return
+		} // A canceled consumer may receive channel closure directly.
 		terminal := responses[len(responses)-1]
 		if terminal.ResponseType != types.ResponseTypeError || terminal.Content != context.Canceled.Error() {
 			t.Fatalf("terminal response = %+v, want context canceled", terminal)

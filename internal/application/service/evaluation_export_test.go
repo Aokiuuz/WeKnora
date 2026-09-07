@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -142,6 +143,48 @@ func TestPrepareEvaluationExportRejectsInvalidQuestionJSON(t *testing.T) {
 	)
 	require.Error(t, err)
 	require.Empty(t, directoryEntries(t, tempDir))
+}
+
+func TestPrepareEvaluationExportPreservesRuntimeAccounting(t *testing.T) {
+	for _, format := range []string{"json", "csv"} {
+		for _, runtime := range []string{
+			`null`,
+			`{"schema_version":1,"durations":{"total_ms":125},"cost":{"call_count":2,` +
+				`"accounting_complete_calls":1,"unpriced_calls":1,"usage_unreported_calls":1,` +
+				`"started_calls":0,"totals":[{"currency":"CNY","cost_microunits":0}]}}`,
+		} {
+			t.Run(format+"/"+runtime, func(t *testing.T) {
+				svc, taskRepo, _ := evaluationExportServiceFixture(t, types.EvaluationStatueSuccess)
+				entity, err := taskRepo.GetTask(comparisonServiceContext(), 7, "task-a")
+				require.NoError(t, err)
+				entity.RuntimeMetrics = types.JSON(runtime)
+				taskRepo.register(entity)
+				prepared, err := svc.prepareEvaluationExport(
+					comparisonServiceContext(), "task-a", format,
+					evaluationExportBounds{PageSize: 1, MaxQuestions: 10, MaxBytes: 1 << 20, TempDir: t.TempDir()},
+				)
+				require.NoError(t, err)
+				t.Cleanup(func() { _ = os.Remove(prepared.Path) })
+				payload, err := os.ReadFile(prepared.Path)
+				require.NoError(t, err)
+				var exported string
+				if format == "json" {
+					var document map[string]json.RawMessage
+					require.NoError(t, json.Unmarshal(payload, &document))
+					exported = string(document["runtime_metrics"])
+				} else {
+					records, err := csv.NewReader(bytes.NewReader(payload)).ReadAll()
+					require.NoError(t, err)
+					for column, name := range records[0] {
+						if name == "runtime_metrics_json" {
+							exported = records[1][column]
+						}
+					}
+				}
+				require.JSONEq(t, runtime, exported)
+			})
+		}
+	}
 }
 
 func TestPrepareEvaluationCSVExportUsesJSONLiteralsForUserText(t *testing.T) {

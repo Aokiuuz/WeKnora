@@ -67,6 +67,7 @@ func (ModelCallRecord) TableName() string { return "model_call_records" }
 
 // ModelCallCompletion is the immutable finish payload for a started row.
 type ModelCallCompletion struct {
+	ModelSnapshot            JSON
 	ID                       string
 	EndedAt                  time.Time
 	DurationMs               int64
@@ -86,15 +87,16 @@ type ModelCallCompletion struct {
 
 // ModelPriceVersion is one immutable effective-dated price version.
 type ModelPriceVersion struct {
-	ID                         string     `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID                   uint64     `json:"tenant_id" gorm:"not null;index"`
-	ModelID                    string     `json:"model_id" gorm:"type:varchar(64);not null;index"`
-	ValidFrom                  time.Time  `json:"valid_from" gorm:"not null;index"`
-	ValidTo                    *time.Time `json:"valid_to,omitempty" gorm:"index"`
-	InputMicrounitsPerMillion  int64      `json:"input_microunits_per_million" gorm:"not null"`
-	OutputMicrounitsPerMillion int64      `json:"output_microunits_per_million" gorm:"not null"`
-	Currency                   string     `json:"currency" gorm:"type:char(3);not null"`
-	CreatedAt                  time.Time  `json:"created_at" gorm:"not null"`
+	CachePricing               *ModelCachePricing `json:"cache_pricing,omitempty" gorm:"serializer:json;type:jsonb"`
+	ID                         string             `json:"id" gorm:"type:varchar(36);primaryKey"`
+	TenantID                   uint64             `json:"tenant_id" gorm:"not null;index"`
+	ModelID                    string             `json:"model_id" gorm:"type:varchar(64);not null;index"`
+	ValidFrom                  time.Time          `json:"valid_from" gorm:"not null;index"`
+	ValidTo                    *time.Time         `json:"valid_to,omitempty" gorm:"index"`
+	InputMicrounitsPerMillion  int64              `json:"input_microunits_per_million" gorm:"not null"`
+	OutputMicrounitsPerMillion int64              `json:"output_microunits_per_million" gorm:"not null"`
+	Currency                   string             `json:"currency" gorm:"type:char(3);not null"`
+	CreatedAt                  time.Time          `json:"created_at" gorm:"not null"`
 }
 
 // TableName returns the immutable model price version table name.
@@ -102,9 +104,22 @@ func (ModelPriceVersion) TableName() string { return "model_price_versions" }
 
 // ModelCallModelSnapshot is the credential-free identity stored in the ledger.
 type ModelCallModelSnapshot struct {
-	ID       string      `json:"id"`
-	Name     string      `json:"name"`
-	Type     ModelType   `json:"type"`
-	Source   ModelSource `json:"source"`
-	Provider string      `json:"provider,omitempty"`
+	BillingUsage    *TokenUsage        `json:"billing_usage,omitempty"`
+	ID              string             `json:"id"`
+	Name            string             `json:"name"`
+	Type            ModelType          `json:"type"`
+	Source          ModelSource        `json:"source"`
+	Provider        string             `json:"provider,omitempty"`
+	ConfigSHA256    string             `json:"config_sha256,omitempty"`
+	CallPurpose     string             `json:"call_purpose,omitempty"`
+	RequestMetadata map[string]any     `json:"request_metadata,omitempty"`
+	CachePricing    *ModelCachePricing `json:"cache_pricing,omitempty"`
+}
+
+// ModelCachePricing defines mutually exclusive cache billing buckets. Nil prices are unknown; zero is free.
+type ModelCachePricing struct {
+	Version                     int    `json:"version"`
+	ReadMicrounitsPerMillion    *int64 `json:"read_microunits_per_million,omitempty"`
+	Write5mMicrounitsPerMillion *int64 `json:"write_5m_microunits_per_million,omitempty"`
+	Write1hMicrounitsPerMillion *int64 `json:"write_1h_microunits_per_million,omitempty"`
 }

@@ -228,7 +228,7 @@ func VerifyEvaluationModelFingerprint(
 		return fmt.Errorf("evaluation %s model identity drifted: frozen %s, current %s",
 			role, frozen.ID, current.ID)
 	}
-	if got := types.EvaluationModelConfigSHA256(current); got != frozen.ConfigSHA256 {
+	if got := types.EvaluationModelConfigSHA256ForVersion(current, frozen.ConfigVersion); got != frozen.ConfigSHA256 {
 		return fmt.Errorf("evaluation %s model %s configuration drifted: frozen %s, current %s",
 			role, frozen.ID, frozen.ConfigSHA256, got)
 	}

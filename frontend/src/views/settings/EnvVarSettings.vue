@@ -269,11 +269,7 @@
         <div v-if="sandboxCards.length" class="env-sandbox-list">
           <article v-for="group in sandboxCards" :key="group.sandbox_config_id" class="env-sandbox-card">
             <div class="env-skill-card__title">
-              <svg class="env-group__icon" width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                <rect x="2.5" y="3" width="13" height="12" rx="2" stroke="currentColor" stroke-width="1.2" fill="none" />
-                <path d="M2.5 6.5h13" stroke="currentColor" stroke-width="1.2" />
-                <path d="M5.5 10h4M5.5 12.5h2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-              </svg>
+              <t-icon name="terminal" size="16px" class="env-group__icon" width="16" height="16" aria-hidden="true" />
               <h4>{{ configLabel(group) }}</h4>
             </div>
             <p v-if="group.description" class="env-group__desc" :title="group.description">

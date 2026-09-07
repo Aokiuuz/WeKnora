@@ -80,6 +80,8 @@ curl -X POST "$BASE/api/v1/evaluation" \
 
 标签更新请求为 `{"labels":["baseline","embedding-a"]}`。比较请求为 `{"task_ids":["task-a","task-b"],"baseline_task_id":"task-a"}`，其中任务数为 2 至 10，且任务必须具有可比较的成功结果。导出接口要求 `format=json` 或 `format=csv`，并对导出条数和文件大小应用服务配置上限。
 
+导出格式版本为 3。JSON 导出的 `runtime_metrics` 与 CSV 运行记录的 `runtime_metrics_json` 保存任务持久化的运行时快照，包括阶段耗时、样本计数、用量与 `cost` 费用覆盖。费用按币种列出，同时保留未定价、用量未上报及尚未结束的调用数。空快照保留为 `null`，显式零费用保留为 0；导出使用保存的价格和费用事实。
+
 逐题接口按 `sample_index` 升序分页，`page_size` 默认 100，最大 500。响应中的每条记录包含问题、参考答案、检索与重排序结果、生成文本、逐样本指标、指标观测、阶段耗时、Token 用量、状态和结果哈希。
 
 人工评分请求字段如下：

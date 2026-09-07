@@ -77,14 +77,17 @@ cp -R "cmd/desktop/build/bin/${APP_BUNDLE}" "dist/"
 # 将配置文件和初始数据库迁移脚本塞进 .app 内部资源里
 RESOURCES_DIR="${DIST_DIR}/Contents/Resources"
 mkdir -p "${RESOURCES_DIR}/config"
-mkdir -p "${RESOURCES_DIR}/migrations/sqlite"
+go build -tags "sqlite_fts5" -o "${RESOURCES_DIR}/weknora-migrate" ./cmd/migrate-runner
 
 if [ -f .env.lite.example ]; then
     cp .env.lite.example "${RESOURCES_DIR}/.env"
 fi
-if [ -d migrations/sqlite ]; then
-    cp -r migrations/sqlite/* "${RESOURCES_DIR}/migrations/sqlite/"
-fi
+mkdir -p "${RESOURCES_DIR}/migrations"
+for migration_chain in versioned sqlite topic3/postgres topic3/sqlite; do
+    test -d "migrations/$migration_chain"
+    mkdir -p "${RESOURCES_DIR}/migrations/$migration_chain"
+    cp -r "migrations/$migration_chain/." "${RESOURCES_DIR}/migrations/$migration_chain/"
+done
 if [ -d config ]; then
     cp -r config/* "${RESOURCES_DIR}/config/"
 fi

@@ -19,9 +19,16 @@ const (
 
 // TokenUsage holds token consumption statistics returned by the model API.
 type TokenUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	UsageReportedCalls   int  `json:"usage_reported_calls,omitempty"`
+	UsageUnreportedCalls int  `json:"usage_unreported_calls,omitempty"`
+	CacheReportedCalls   int  `json:"cache_reported_calls,omitempty"`
+	CacheUnreportedCalls int  `json:"cache_unreported_calls,omitempty"`
+	UsageReported        bool `json:"usage_reported"`
+	CacheWrite5mTokens   *int `json:"cache_write_5m_tokens,omitempty"`
+	CacheWrite1hTokens   *int `json:"cache_write_1h_tokens,omitempty"`
+	PromptTokens         int  `json:"prompt_tokens"`
+	CompletionTokens     int  `json:"completion_tokens"`
+	TotalTokens          int  `json:"total_tokens"`
 	// CachedTokens is the legacy alias for CacheReadTokens. It remains on the
 	// wire for compatibility with existing API consumers.
 	CachedTokens     int               `json:"cached_tokens,omitempty"`
@@ -83,6 +90,27 @@ func (u *TokenUsage) Accumulate(other TokenUsage) {
 	if u == nil {
 		return
 	}
+	reported, unreported := other.UsageReportedCalls, other.UsageUnreportedCalls
+	if reported+unreported == 0 {
+		if other.UsageReported || other.PromptTokens > 0 || other.CompletionTokens > 0 || other.TotalTokens > 0 {
+			reported = 1
+		} else {
+			unreported = 1
+		}
+	}
+	u.UsageReportedCalls += reported
+	u.UsageUnreportedCalls += unreported
+	cacheReported, cacheUnreported := other.CacheReportedCalls, other.CacheUnreportedCalls
+	if cacheReported+cacheUnreported == 0 {
+		if other.CacheReported {
+			cacheReported = 1
+		} else {
+			cacheUnreported = 1
+		}
+	}
+	u.CacheReportedCalls += cacheReported
+	u.CacheUnreportedCalls += cacheUnreported
+	u.UsageReported = u.UsageUnreportedCalls == 0 && u.UsageReportedCalls > 0
 	u.PromptTokens += other.PromptTokens
 	u.CompletionTokens += other.CompletionTokens
 	u.TotalTokens += other.TotalTokens
@@ -117,6 +145,16 @@ func mergeUnreportedCacheStatus(accumulated, incoming PromptCacheStatus) PromptC
 		return PromptCacheStatusUnsupported
 	}
 	return PromptCacheStatusUnreported
+}
+
+// PromptCacheHitRate returns cache-read tokens as a percentage of the
+// provider's prompt total. Zero when the prompt is empty. A ReAct turn that
+// reuses the system prefix therefore reads as a high hit rather than a miss.
+func (u TokenUsage) PromptCacheHitRate() float64 {
+	if u.PromptTokens <= 0 {
+		return 0
+	}
+	return float64(u.CacheReadTokens) / float64(u.PromptTokens) * 100
 }
 
 // Value persists the usage as a jsonb column (assistant messages carry the
@@ -240,6 +278,11 @@ const (
 	// MemoryRecalled: the long-term memories injected into this answer, so
 	// the UI can show and let the user delete what influenced it.
 	ResponseTypeMemoryRecalled ResponseType = "memory_recalled"
+	// ResponseTypeContextCompacted is older conversation summarized away to
+	// fit the context window. Surfaced because it changes what the agent
+	// remembers — an answer that forgets an earlier instruction is otherwise
+	// indistinguishable from the model ignoring it.
+	ResponseTypeContextCompacted ResponseType = "context_compacted"
 	// ResponseTypeInstallPrompt is the instruction a skill install handed to
 	// the installer agent. Only the skill install transcript emits this, and
 	// it emits it first, so replaying the log alone shows what was asked for
@@ -249,6 +292,12 @@ const (
 )
 
 // StreamResponse stream response
+// FinishReasonIncomplete marks a stream that broke before the provider sent a
+// finish reason (read error, timeout, stall). Whatever content and tool calls
+// were collected are a partial response: callers must not treat them as a
+// completed turn.
+const FinishReasonIncomplete = "incomplete"
+
 type StreamResponse struct {
 	ID                  string                 `json:"id"`
 	ResponseType        ResponseType           `json:"response_type"`

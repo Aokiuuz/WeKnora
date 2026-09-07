@@ -74,7 +74,7 @@
             <span class="section-kicker">{{ t('evaluation.runs') }}</span>
             <strong>{{ tasks.length }}</strong>
           </div>
-          <button class="icon-button" type="button" :title="t('evaluation.refresh')" @click="applyFilters">
+          <button class="icon-button" type="button" :title="t('evaluation.refresh')" :aria-label="t('evaluation.refresh')" @click="applyFilters">
             <RefreshCw :size="16" aria-hidden="true" />
           </button>
         </div>
@@ -336,11 +336,11 @@
             </div>
           </section>
 
-          <nav class="detail-tabs">
-            <button :class="{ active: activeTab === 'overview' }" @click="activeTab = 'overview'">
+          <nav class="detail-tabs" :aria-label="t('evaluation.runDetails')">
+            <button :class="{ active: activeTab === 'overview' }" :aria-current="activeTab === 'overview' ? 'page' : undefined" @click="activeTab = 'overview'">
               {{ t('evaluation.overview') }}
             </button>
-            <button :class="{ active: activeTab === 'questions' }" @click="activeTab = 'questions'">
+            <button :class="{ active: activeTab === 'questions' }" :aria-current="activeTab === 'questions' ? 'page' : undefined" @click="activeTab = 'questions'">
               {{ t('evaluation.questions') }} <span>{{ questions.length }}</span>
             </button>
           </nav>
@@ -360,7 +360,7 @@
             <section class="result-card result-card--cost">
               <h3><Coins :size="16" aria-hidden="true" />{{ t('evaluation.summary.cost') }}</h3>
               <strong class="result-value">{{ summaryCost(detail.runtime_metrics?.cost) }}</strong>
-              <p v-if="detail.runtime_metrics?.cost" class="result-note">{{ t('modelSettings.usage.accountedCalls', { complete: detail.runtime_metrics.cost.accounting_complete_calls, total: detail.runtime_metrics.cost.call_count }) }}</p>
+              <p v-if="detail.runtime_metrics?.cost" class="result-note">{{ t('modelSettings.observability.accountedCalls', { complete: detail.runtime_metrics.cost.accounting_complete_calls, total: detail.runtime_metrics.cost.call_count }) }}</p>
               <p v-else class="result-note">{{ t('evaluation.summary.unavailable') }}</p>
               <p class="result-note">{{ t('evaluation.summary.costHint') }}</p>
             </section>
@@ -1212,7 +1212,7 @@ onBeforeUnmount(() => {
   .label-editor__control input { width: 100%; min-width: 0; }
   .inspection-heading { flex-wrap: wrap; gap: 12px; }
 }
-.button:focus-visible, .icon-button:focus-visible { outline: 2px solid var(--eval-green); outline-offset: 3px; }
+.button:focus-visible, .icon-button:focus-visible, .detail-tabs button:focus-visible { outline: 2px solid var(--eval-green); outline-offset: 3px; }
 @media (hover: hover) { .button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(16, 46, 36, .08); } }
 .icon-spinning { animation: icon-spin 1s linear infinite; }
 @keyframes icon-spin { to { transform: rotate(360deg); } }

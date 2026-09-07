@@ -42,20 +42,20 @@ func TestEvaluationTaskRepositoryPostgresCancellationMigrationAndTruth(t *testin
 	})
 	require.NoError(t, db.Exec("SET search_path = "+schema+", pg_catalog").Error)
 
-	migrationDir := filepath.Join("..", "..", "..", "migrations", "versioned")
-	up90, err := os.ReadFile(filepath.Join(migrationDir, "000090_evaluation_tasks.up.sql"))
+	migrationDir := filepath.Join("..", "..", "..", "migrations", "topic3", "postgres")
+	up90, err := os.ReadFile(filepath.Join(migrationDir, "000001_evaluation_tasks.up.sql"))
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(string(up90)).Error)
-	up91, err := os.ReadFile(filepath.Join(migrationDir, "000091_evaluation_task_cancellation.up.sql"))
+	up91, err := os.ReadFile(filepath.Join(migrationDir, "000002_evaluation_task_cancellation.up.sql"))
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(string(up91)).Error)
-	up95, err := os.ReadFile(filepath.Join(migrationDir, "000095_evaluation_experiment_snapshot.up.sql"))
+	up95, err := os.ReadFile(filepath.Join(migrationDir, "000006_evaluation_experiment_snapshot.up.sql"))
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(string(up95)).Error)
-	up96, err := os.ReadFile(filepath.Join(migrationDir, "000096_evaluation_question_results.up.sql"))
+	up96, err := os.ReadFile(filepath.Join(migrationDir, "000007_evaluation_question_results.up.sql"))
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(string(up96)).Error)
-	up98, err := os.ReadFile(filepath.Join(migrationDir, "000098_evaluation_runtime_metrics.up.sql"))
+	up98, err := os.ReadFile(filepath.Join(migrationDir, "000009_evaluation_runtime_metrics.up.sql"))
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(string(up98)).Error)
 
@@ -65,7 +65,7 @@ func TestEvaluationTaskRepositoryPostgresCancellationMigrationAndTruth(t *testin
 			"WHERE table_schema = ? AND table_name = 'evaluation_tasks' AND column_name = 'cancel_requested_at')",
 		schema,
 	).Scan(&cancelColumn).Error)
-	assert.True(t, cancelColumn, "000091 must add cancel_requested_at")
+	assert.True(t, cancelColumn, "000002 must add cancel_requested_at")
 
 	repo := NewEvaluationTaskRepository(db)
 	ctx := context.Background()
@@ -116,7 +116,7 @@ func TestEvaluationTaskRepositoryPostgresCancellationMigrationAndTruth(t *testin
 	assert.Equal(t, types.EvaluationStatueCanceled, terminal.Status)
 
 	// The down migration removes the column again.
-	down91, err := os.ReadFile(filepath.Join(migrationDir, "000091_evaluation_task_cancellation.down.sql"))
+	down91, err := os.ReadFile(filepath.Join(migrationDir, "000002_evaluation_task_cancellation.down.sql"))
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(string(down91)).Error)
 	require.NoError(t, db.Raw(
@@ -124,5 +124,5 @@ func TestEvaluationTaskRepositoryPostgresCancellationMigrationAndTruth(t *testin
 			"WHERE table_schema = ? AND table_name = 'evaluation_tasks' AND column_name = 'cancel_requested_at')",
 		schema,
 	).Scan(&cancelColumn).Error)
-	assert.False(t, cancelColumn, "000091 down must drop cancel_requested_at")
+	assert.False(t, cancelColumn, "000002 down must drop cancel_requested_at")
 }

@@ -464,9 +464,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewStorageBackendHandler))
 	must(container.Provide(handler.NewCustomAgentHandler))
 	must(container.Provide(handler.NewUserResourceFavoriteHandler))
-	must(container.Provide(service.NewSkillService))
 	must(container.Provide(func(s *service.TenantSkillService) *handler.SkillHandler {
-		return handler.NewSkillHandler(s)
+		return handler.NewSkillHandler(s, s)
 	}))
 	must(container.Provide(handler.NewOrganizationHandler))
 	must(container.Provide(handler.NewMemoryHandler))
@@ -769,28 +768,21 @@ func initDatabase(cfg *config.Config) (*gorm.DB, error) {
 		}
 	}
 
-	// Run database migrations automatically (optional, can be disabled via env var)
-	// To disable auto-migration, set AUTO_MIGRATE=false
-	// To enable auto-recovery from dirty state, set AUTO_RECOVER_DIRTY=true
+	// Both migration chains must satisfy their verified structure profiles before
+	// any application initialization can write configuration or start background work.
+	migrationOpts := database.MigrationOptions{
+		AutoRecoverDirty: os.Getenv("AUTO_RECOVER_DIRTY") == "true",
+		SQLiteDBPath:     sqliteDBPath,
+		BackupID:         os.Getenv("MIGRATION_BACKUP_ID"),
+	}
+	if err := database.PrepareDatabaseSchema(context.Background(), migrateDSN, migrationOpts,
+		os.Getenv("AUTO_MIGRATE") != "false"); err != nil {
+		if sqlDB, closeErr := db.DB(); closeErr == nil {
+			_ = sqlDB.Close()
+		}
+		return nil, fmt.Errorf("database schema is not ready: %w", err)
+	}
 	if os.Getenv("AUTO_MIGRATE") != "false" {
-		logger.Infof(context.Background(), "Running database migrations...")
-
-		autoRecover := os.Getenv("AUTO_RECOVER_DIRTY") != "false"
-		migrationOpts := database.MigrationOptions{
-			AutoRecoverDirty: autoRecover,
-			SQLiteDBPath:     sqliteDBPath,
-		}
-
-		// Run base migrations (all versioned migrations including embeddings)
-		// The embeddings migration will be conditionally executed based on skip_embedding parameter in DSN
-		if err := database.RunMigrationsWithOptions(migrateDSN, migrationOpts); err != nil {
-			// Log warning but don't fail startup - migrations might be handled externally
-			logger.Warnf(context.Background(), "Database migration failed: %v", err)
-			logger.Warnf(
-				context.Background(),
-				"Continuing with application startup. Please run migrations manually if needed.",
-			)
-		}
 
 		// Post-migration: resolve __pending_env__ storage provider markers for historical KBs.
 		// The SQL migration marks KBs that have documents but no provider with "__pending_env__";

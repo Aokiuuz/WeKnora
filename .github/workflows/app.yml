@@ -52,6 +52,7 @@ permissions:
 
 env:
   GO_VERSION: "1.26"
+  CGO_ENABLED: "1"
   GOPROXY: https://proxy.golang.org,direct
   # Keep tests independent of a developer machine's custom log template.
   LOG_FORMAT: ""
@@ -108,34 +109,35 @@ jobs:
         shell: bash
         run: |
           mapfile -t pkgs < <(go list ./... | grep -v '/docreader/')
-          go vet "${pkgs[@]}"
-          go test "${pkgs[@]}"
+          go vet -tags sqlite_fts5 "${pkgs[@]}"
+          go test -tags sqlite_fts5 "${pkgs[@]}"
 
       - name: Build server
-        run: go build ./cmd/server
+        run: go build -tags sqlite_fts5 ./cmd/server
 
   postgres-contracts:
     name: PostgreSQL evaluation contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     services:
       postgres:
-        image: postgres:17-alpine
+        image: paradedb/paradedb:v0.22.2-pg17
         env:
           POSTGRES_USER: evaluation
           POSTGRES_PASSWORD: evaluation-test-only
-          POSTGRES_DB: evaluation_test
+          POSTGRES_DB: weknora_x03_ci
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U evaluation -d evaluation_test"
+          --health-cmd "pg_isready -U evaluation -d weknora_x03_ci"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
       CGO_ENABLED: "1"
-      TEST_POSTGRES_DSN: postgres://evaluation:evaluation-test-only@localhost:5432/evaluation_test?sslmode=disable
-      TEST_POSTGRES_MIGRATION_DSN: postgres://evaluation:evaluation-test-only@localhost:5432/evaluation_test?sslmode=disable
+      REQUIRE_POSTGRES_TESTS: "1"
+      TEST_POSTGRES_DSN: postgres://evaluation:evaluation-test-only@localhost:5432/weknora_x03_ci?sslmode=disable
+      TEST_POSTGRES_MIGRATION_DSN: postgres://evaluation:evaluation-test-only@localhost:5432/weknora_x03_ci?sslmode=disable
     steps:
       - uses: actions/checkout@v6
 
@@ -150,7 +152,7 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/database-contracts
           go test -json -count=1 -timeout=10m ./internal/application/repository -run Postgres > artifacts/database-contracts/repository.jsonl
-          go test -json -count=1 -timeout=10m ./internal/database -run 'Test(PostgresMigrationsCreateAndRoundTripEvaluationSchema|SQLiteEvaluationMigrationsRoundTrip)$' > artifacts/database-contracts/migrations.jsonl
+          go test -tags sqlite_fts5 -json -count=1 -timeout=15m ./internal/database ./cmd/migrate-runner > artifacts/database-contracts/migrations.jsonl
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -160,9 +162,24 @@ jobs:
                     for line in path.read_text().splitlines() if line.strip()]
           required = {
               'TestEvaluationTaskRepositoryPostgresContract',
+              'TestEvaluationDatasetRepositoryPostgresContract',
               'TestModelPriceOverlapIsSerializedAcrossPostgresConnections',
               'TestPostgresMigrationsCreateAndRoundTripEvaluationSchema',
               'TestSQLiteEvaluationMigrationsRoundTrip',
+              'TestMigrationBridgeSourceMatrix',
+              'TestMigrationBridgeRejectsUnknownAndPartial',
+              'TestMigrationBridgeResumeCommittedPhases',
+              'TestMigrationBridgeReadOnlyAndStartupGate',
+              'TestMigrationBridgeRequiresBackupIdentity',
+              'TestMigrationBridgeCrossProcessLock',
+              'TestMigrationBridgeAppendOnlyUpgrade',
+              'TestMigrationBridgeSQLRollbackAndRecovery',
+              'TestMigrationBridgeDatabaseWideLock',
+              'TestSQLiteRuntimeRetrieverRestartAndSkillSchema',
+              'TestSQLiteUnversionedRuntimeIsRejected',
+              'TestPostgresIndexJSONSemanticComparison',
+              'TestMigrationCommandExplicitTargetAndSecrets',
+              'TestMigrationCommandSQLiteLifecycle',
           }
           passed = {event.get('Test') for event in events if event['Action'] == 'pass'}
           rejected = [event for event in events if event['Action'] in {'skip', 'fail'}]
