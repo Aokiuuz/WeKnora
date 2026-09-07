@@ -18,6 +18,8 @@ import (
 type EvaluationExperimentInput struct {
 	Dataset               *types.EvaluationDatasetSnapshot
 	SourceKnowledgeBaseID string
+	Chunking              []byte
+	Indexing              []byte
 	EmbeddingModel        *types.Model
 	ChatModel             *types.Model
 	RerankModel           *types.Model
@@ -130,8 +132,8 @@ func BuildEvaluationExperimentSnapshot(
 				FrequencyPenalty:    input.Params.SummaryConfig.FrequencyPenalty,
 				PresencePenalty:     input.Params.SummaryConfig.PresencePenalty,
 			},
-			Chunking: nil,
-			Indexing: nil,
+			Chunking: append([]byte(nil), input.Chunking...),
+			Indexing: append([]byte(nil), input.Indexing...),
 		},
 		MetricPlan: metricPlan,
 		Code: types.EvaluationCodeSnapshot{

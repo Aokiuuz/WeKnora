@@ -195,6 +195,9 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(func(db *gorm.DB) modelobs.Store {
 		return repository.NewModelObservabilityRepository(db)
 	}))
+	must(container.Provide(func(db *gorm.DB) modelobs.EvaluationCostStore {
+		return repository.NewModelObservabilityRepository(db)
+	}))
 	must(container.Provide(modelobs.NewRecorder))
 	must(container.Provide(func(db *gorm.DB) modelcache.Store {
 		return repository.NewEmbeddingCacheRepository(db)

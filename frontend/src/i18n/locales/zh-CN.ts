@@ -2092,7 +2092,20 @@ export default {
       loadFailed: '模型用量加载失败',
       priceLoadFailed: '价格版本加载失败',
       priceSaved: '价格版本已添加',
-      priceSaveFailed: '价格版本添加失败'
+      priceSaveFailed: '价格版本添加失败',
+      allModels: "全部模型",
+      customRange: "自定义",
+      from: "开始时间",
+      to: "结束时间",
+      timezoneHint: "时间按当前设备的本地时区显示和输入。",
+      invalidRange: "请选择有效的开始和结束时间，结束时间须晚于开始时间。",
+      recordedCost: "已记录成本",
+      accountedCalls: "已完整计费 {complete} / {total} 次调用",
+      validFrom: "生效时间",
+      openEnded: "持续有效",
+      invalidPriceDates: "请输入有效的生效时间；结束时间须晚于生效时间。",
+      invalidCurrency: "币种须为三个英文字母，例如 USD。",
+      invalidPrice: "价格须为非负有限数值，且微单位金额在安全整数范围内。"
     },
     typeShort: {
       chat: '对话',
@@ -6627,6 +6640,20 @@ export default {
     noSessions: '暂无对话'
   },
   evaluation: {
+    filterTitle: '筛选实验',
+    summary: {
+      retrieval: "检索质量",
+      generation: "回答质量",
+      unavailable: "暂无有效观测",
+      retrievalHint: "指标数值来自本次评测的聚合结果。",
+      generationHint: "指标按各自的方法衡量回答，请结合逐题结果与人工评分判断。",
+      cost: "已记录模型成本",
+      costHint: "金额按币种分别展示；完整计费次数用于判断成本覆盖情况。",
+      duration: "任务总耗时",
+      execution: "评测执行",
+      durationHint: "任务总耗时包含数据准备、索引和执行等阶段。",
+      runtime: "运行统计"
+    },
     eyebrow: '实验审计工作区',
     title: '评测工作台',
     subtitle: '筛选冻结实验运行，检查问题证据，对比可兼容指标，并导出审计文件。',

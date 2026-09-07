@@ -53,6 +53,7 @@ type EvaluationService struct {
 	datasetRegistry          interfaces.EvaluationDatasetRegistryService
 	questionResultRepository interfaces.EvaluationQuestionResultRepository
 	metricRegistry           *metricregistry.Registry
+	evaluationCostStore      modelobs.EvaluationCostStore
 	ownerID                  string
 	heartbeatInterval        time.Duration
 	heartbeatTimeout         time.Duration
@@ -110,6 +111,7 @@ func NewEvaluationServiceWithRegistry(
 	datasetRegistry interfaces.EvaluationDatasetRegistryService,
 	questionResultRepository interfaces.EvaluationQuestionResultRepository,
 	registry *metricregistry.Registry,
+	evaluationCostStore modelobs.EvaluationCostStore,
 ) interfaces.EvaluationService {
 	return newEvaluationService(
 		config,
@@ -122,6 +124,7 @@ func NewEvaluationServiceWithRegistry(
 		datasetRegistry,
 		questionResultRepository,
 		registry,
+		evaluationCostStore,
 	)
 }
 
@@ -136,7 +139,12 @@ func newEvaluationService(
 	datasetRegistry interfaces.EvaluationDatasetRegistryService,
 	questionResultRepository interfaces.EvaluationQuestionResultRepository,
 	registry *metricregistry.Registry,
+	evaluationCostStore ...modelobs.EvaluationCostStore,
 ) interfaces.EvaluationService {
+	var costStore modelobs.EvaluationCostStore
+	if len(evaluationCostStore) > 0 {
+		costStore = evaluationCostStore[0]
+	}
 	return &EvaluationService{
 		config:                   config,
 		dataset:                  dataset,
@@ -148,6 +156,7 @@ func newEvaluationService(
 		datasetRegistry:          datasetRegistry,
 		questionResultRepository: questionResultRepository,
 		metricRegistry:           registry,
+		evaluationCostStore:      costStore,
 		ownerID:                  uuid.NewString(),
 	}
 }
@@ -350,18 +359,33 @@ func (e *EvaluationService) runEvaluation(
 		}
 		return encodeErr
 	}
-	runtimeMetricsJSON, encodeErr := encodeEvaluationRuntimeMetrics(runtimeCollector.snapshot(endTime))
+	runtimeMetrics := runtimeCollector.snapshot(endTime)
+	publicationCtx, publicationCancel := context.WithTimeout(
+		logger.CloneContext(runCtx),
+		evaluationCleanupTimeout,
+	)
+	defer publicationCancel()
+	if e.evaluationCostStore != nil {
+		cost, costErr := e.evaluationCostStore.EvaluationCost(
+			publicationCtx,
+			runState.tenantID,
+			runState.taskID,
+		)
+		if costErr != nil {
+			if terminalErr != nil {
+				return errors.Join(terminalErr, costErr)
+			}
+			return costErr
+		}
+		runtimeMetrics.Cost = cost
+	}
+	runtimeMetricsJSON, encodeErr := encodeEvaluationRuntimeMetrics(runtimeMetrics)
 	if encodeErr != nil {
 		if terminalErr != nil {
 			return errors.Join(terminalErr, encodeErr)
 		}
 		return encodeErr
 	}
-	publicationCtx, publicationCancel := context.WithTimeout(
-		logger.CloneContext(runCtx),
-		evaluationCleanupTimeout,
-	)
-	defer publicationCancel()
 	terminalCommand := types.EvaluationTaskTerminalCommand{
 		TenantID:        runState.tenantID,
 		TaskID:          runState.taskID,
@@ -536,31 +560,26 @@ func (e *EvaluationService) EvaluationWithOptions(
 	// Handle knowledge base creation if not provided
 	if knowledgeBaseID == "" {
 		logger.Info(ctx, "No knowledge base ID provided, creating new knowledge base")
-		// Create new knowledge base with default evaluation settings
-		// 获取默认的嵌入模型和LLM模型（确定性选择：默认标记优先，ID 升序兜底）
+		// Create a temporary knowledge base with the deterministic default embedding model.
 		models, err := e.modelService.ListModels(ctx)
 		if err != nil {
 			logger.Errorf(ctx, "Failed to list models: %v", err)
 			return nil, err
 		}
 
-		var embeddingModelID, llmModelID string
+		var embeddingModelID string
 		if embedding := SelectEvaluationDefaultModel(models, types.ModelTypeEmbedding); embedding != nil {
 			embeddingModelID = embedding.ID
 		}
-		if llm := SelectEvaluationDefaultModel(models, types.ModelTypeKnowledgeQA); llm != nil {
-			llmModelID = llm.ID
-		}
 
-		if embeddingModelID == "" || llmModelID == "" {
-			return nil, fmt.Errorf("no default models found for evaluation")
+		if embeddingModelID == "" {
+			return nil, fmt.Errorf("no default embedding model found for evaluation")
 		}
 
 		kb, err := e.knowledgeBaseService.CreateKnowledgeBase(ctx, &types.KnowledgeBase{
 			Name:             "evaluation",
 			Description:      "evaluation",
 			EmbeddingModelID: embeddingModelID,
-			SummaryModelID:   llmModelID,
 		})
 		if err != nil {
 			logger.Errorf(ctx, "Failed to create knowledge base: %v", err)
@@ -581,7 +600,6 @@ func (e *EvaluationService) EvaluationWithOptions(
 			Name:             "evaluation",
 			Description:      "evaluation",
 			EmbeddingModelID: kb.EmbeddingModelID,
-			SummaryModelID:   kb.SummaryModelID,
 		})
 		if err != nil {
 			logger.Errorf(ctx, "Failed to create knowledge base: %v", err)

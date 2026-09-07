@@ -113,3 +113,68 @@ jobs:
 
       - name: Build server
         run: go build ./cmd/server
+
+  postgres-contracts:
+    name: PostgreSQL evaluation contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: evaluation
+          POSTGRES_PASSWORD: evaluation-test-only
+          POSTGRES_DB: evaluation_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U evaluation -d evaluation_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CGO_ENABLED: "1"
+      TEST_POSTGRES_DSN: postgres://evaluation:evaluation-test-only@localhost:5432/evaluation_test?sslmode=disable
+      TEST_POSTGRES_MIGRATION_DSN: postgres://evaluation:evaluation-test-only@localhost:5432/evaluation_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run database contracts and reject skipped tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/database-contracts
+          go test -json -count=1 -timeout=10m ./internal/application/repository -run Postgres > artifacts/database-contracts/repository.jsonl
+          go test -json -count=1 -timeout=10m ./internal/database -run 'Test(PostgresMigrationsCreateAndRoundTripEvaluationSchema|SQLiteEvaluationMigrationsRoundTrip)$' > artifacts/database-contracts/migrations.jsonl
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          events = [json.loads(line)
+                    for path in Path('artifacts/database-contracts').glob('*.jsonl')
+                    for line in path.read_text().splitlines() if line.strip()]
+          required = {
+              'TestEvaluationTaskRepositoryPostgresContract',
+              'TestModelPriceOverlapIsSerializedAcrossPostgresConnections',
+              'TestPostgresMigrationsCreateAndRoundTripEvaluationSchema',
+              'TestSQLiteEvaluationMigrationsRoundTrip',
+          }
+          passed = {event.get('Test') for event in events if event['Action'] == 'pass'}
+          rejected = [event for event in events if event['Action'] in {'skip', 'fail'}]
+          if rejected or required - passed:
+              raise SystemExit(f'Database contract gate failed: skipped/failed={rejected}, missing={sorted(required - passed)}')
+          print(f'Database contracts passed: {len(passed - {None})} tests, zero skips')
+          PY
+
+      - name: Upload database contract evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-contracts-${{ github.run_id }}
+          path: artifacts/database-contracts/
+          if-no-files-found: warn

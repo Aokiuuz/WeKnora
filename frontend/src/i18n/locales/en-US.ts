@@ -28,6 +28,20 @@ export default {
     noSessions: 'No conversations yet'
   },
   evaluation: {
+    filterTitle: 'Filter experiments',
+    summary: {
+      retrieval: "Retrieval quality",
+      generation: "Answer quality",
+      unavailable: "No valid observation",
+      retrievalHint: "Values come from this run’s aggregate metrics.",
+      generationHint: "Each metric measures a specific aspect. Review question results and human ratings together.",
+      cost: "Recorded model cost",
+      costHint: "Currencies are shown separately. Accounted calls indicate cost coverage.",
+      duration: "Total task duration",
+      execution: "Evaluation execution",
+      durationHint: "Total duration includes data preparation, indexing and execution stages.",
+      runtime: "Runtime statistics"
+    },
     eyebrow: 'Experiment audit workspace',
     title: 'Evaluation workbench',
     subtitle: 'Filter frozen runs, inspect question evidence, compare compatible metrics, and export audit artifacts.',
@@ -4646,7 +4660,20 @@ export default {
       loadFailed: 'Failed to load model usage',
       priceLoadFailed: 'Failed to load price versions',
       priceSaved: 'Price version added',
-      priceSaveFailed: 'Failed to add price version'
+      priceSaveFailed: 'Failed to add price version',
+      allModels: "All models",
+      customRange: "Custom",
+      from: "From",
+      to: "To",
+      timezoneHint: "Times are displayed and entered in your device’s local time zone.",
+      invalidRange: "Choose valid start and end times. The end must be after the start.",
+      recordedCost: "Recorded cost",
+      accountedCalls: "Fully accounted calls: {complete} / {total}",
+      validFrom: "Effective from",
+      openEnded: "Open-ended",
+      invalidPriceDates: "Enter a valid effective time. The end must be after the start.",
+      invalidCurrency: "Use a three-letter currency code, such as USD.",
+      invalidPrice: "Prices must be finite, non-negative numbers within the safe integer range in microunits."
     },
     source: {
       remote: 'Remote',

@@ -26,6 +26,11 @@ type Store interface {
 	ListModelPrices(context.Context, uint64, string) ([]*types.ModelPriceVersion, error)
 }
 
+// EvaluationCostStore aggregates the persisted model calls belonging to one evaluation task.
+type EvaluationCostStore interface {
+	EvaluationCost(context.Context, uint64, string) (*types.EvaluationRuntimeCost, error)
+}
+
 // Recorder creates provider-call wrappers backed by one ledger store.
 type Recorder struct{ store Store }
 

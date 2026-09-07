@@ -28,8 +28,7 @@ func TestBuildCoversMatrixAndCacheProof(t *testing.T) {
 	}
 	require.Equal(t, "verified", report.CacheValidation.Embedding.Status)
 	require.Zero(t, report.CacheValidation.Embedding.SecondProviderInputItems)
-	require.Equal(t, "unavailable", report.CacheValidation.Wiki.Status)
-	require.Equal(t, "verified", report.CacheValidation.Wiki.DeterministicAccounting.Status)
+	require.Equal(t, "not_measured", report.CacheValidation.Wiki.Status)
 }
 
 func TestJSONSchemaAndMarkdownDerivation(t *testing.T) {

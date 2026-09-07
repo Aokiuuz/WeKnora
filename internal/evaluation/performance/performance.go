@@ -156,21 +156,10 @@ type EmbeddingCacheValidation struct {
 	ProviderCallReduction    float64 `json:"provider_call_reduction"`
 }
 
-// WikiCacheValidation separates live availability from deterministic accounting proof.
+// WikiCacheValidation records whether live provider cache telemetry was measured.
 type WikiCacheValidation struct {
-	Status                  string                       `json:"status"`
-	Reason                  string                       `json:"reason"`
-	DeterministicAccounting DeterministicCacheAccounting `json:"deterministic_accounting"`
-}
-
-// DeterministicCacheAccounting proves request-count reconciliation without a live provider.
-type DeterministicCacheAccounting struct {
-	Status   string  `json:"status"`
-	Requests int64   `json:"requests"`
-	Hits     int64   `json:"hits"`
-	Misses   int64   `json:"misses"`
-	Bypasses int64   `json:"bypasses"`
-	HitRatio float64 `json:"hit_ratio"`
+	Status string `json:"status"`
+	Reason string `json:"reason"`
 }
 
 type measurement struct {
@@ -551,17 +540,9 @@ func verifyEmbeddingSecondCorpus(
 }
 
 func verifyWikiAccounting() WikiCacheValidation {
-	requests, hits, misses, bypasses := int64(20), int64(12), int64(6), int64(2)
-	status := "verified"
-	if hits+misses+bypasses != requests {
-		status = "failed"
-	}
 	return WikiCacheValidation{
-		Status: "unavailable", Reason: "the keyless benchmark has no live Wiki provider cache telemetry",
-		DeterministicAccounting: DeterministicCacheAccounting{
-			Status: status, Requests: requests, Hits: hits, Misses: misses, Bypasses: bypasses,
-			HitRatio: float64(hits) / float64(requests),
-		},
+		Status: "not_measured",
+		Reason: "the keyless benchmark does not call a live Wiki model provider",
 	}
 }
 
@@ -814,14 +795,8 @@ func Markdown(report *Report) []byte {
 	)
 	fmt.Fprintf(
 		&output,
-		"Live Wiki provider cache telemetry is `%s`: %s. The deterministic accounting adapter "+
-			"reconciled %d requests as %d hits, %d misses, and %d bypasses with status `%s`.\n",
+		"Live Wiki provider cache telemetry is `%s`: %s.\n",
 		report.CacheValidation.Wiki.Status, report.CacheValidation.Wiki.Reason,
-		report.CacheValidation.Wiki.DeterministicAccounting.Requests,
-		report.CacheValidation.Wiki.DeterministicAccounting.Hits,
-		report.CacheValidation.Wiki.DeterministicAccounting.Misses,
-		report.CacheValidation.Wiki.DeterministicAccounting.Bypasses,
-		report.CacheValidation.Wiki.DeterministicAccounting.Status,
 	)
 	return []byte(output.String())
 }

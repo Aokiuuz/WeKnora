@@ -82,7 +82,33 @@ export interface EvaluationDetail {
   params?: Record<string, unknown>
   metric?: Record<string, unknown>
   experiment?: Record<string, unknown> | null
+  runtime_metrics?: EvaluationRuntimeMetrics | null
   provenance_complete: boolean
+}
+
+export interface EvaluationRuntimeMetrics {
+  schema_version: number
+  started_at: string
+  ended_at?: string
+  durations: {
+    dataset_load_ms?: number
+    indexing_ms?: number
+    execution_ms?: number
+    persistence_ms?: number
+    cleanup_ms?: number
+    total_ms?: number
+  }
+  samples: { total: number; started: number; success: number; failed: number; canceled: number; interrupted: number; not_started: number }
+  failure: { numerator: number; denominator: number }
+  tokens: { prompt_tokens: number; completion_tokens: number; total_tokens: number; reported_samples: number; unreported_samples: number }
+  cost?: {
+    call_count: number
+    accounting_complete_calls: number
+    unpriced_calls: number
+    usage_unreported_calls: number
+    started_calls: number
+    totals: Array<{ currency: string; cost_microunits: number }>
+  }
 }
 
 export interface EvaluationRankedResult {

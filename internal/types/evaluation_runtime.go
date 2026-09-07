@@ -11,6 +11,17 @@ type EvaluationRuntimeMetrics struct {
 	Samples       EvaluationRuntimeSamples   `json:"samples"`
 	Failure       EvaluationRuntimeFailure   `json:"failure"`
 	Tokens        EvaluationRuntimeTokens    `json:"tokens"`
+	Cost          *EvaluationRuntimeCost     `json:"cost,omitempty"`
+}
+
+// EvaluationRuntimeCost summarizes the model-call ledger for one evaluation task.
+type EvaluationRuntimeCost struct {
+	CallCount               int64            `json:"call_count"`
+	AccountingCompleteCalls int64            `json:"accounting_complete_calls"`
+	UnpricedCalls           int64            `json:"unpriced_calls"`
+	UsageUnreportedCalls    int64            `json:"usage_unreported_calls"`
+	StartedCalls            int64            `json:"started_calls"`
+	Totals                  []ModelCostTotal `json:"totals"`
 }
 
 // EvaluationRuntimeDurations contains monotonic elapsed durations in milliseconds.

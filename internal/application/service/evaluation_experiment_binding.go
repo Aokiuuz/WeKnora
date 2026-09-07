@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -120,9 +121,39 @@ func (e *EvaluationService) buildExperimentForTask(
 	if dbDriver == "" {
 		dbDriver = "postgres"
 	}
+	chunking, err := json.Marshal(struct {
+		Strategy           string `json:"strategy"`
+		OnePassagePerChunk bool   `json:"one_passage_per_chunk"`
+	}{
+		Strategy:           "dataset_passage",
+		OnePassagePerChunk: true,
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("build evaluation experiment: chunking snapshot: %w", err)
+	}
+	indexing, err := json.Marshal(struct {
+		VectorEnabled             bool `json:"vector_enabled"`
+		KeywordEnabled            bool `json:"keyword_enabled"`
+		WikiEnabled               bool `json:"wiki_enabled"`
+		GraphEnabled              bool `json:"graph_enabled"`
+		SummaryEnabled            bool `json:"summary_enabled"`
+		QuestionGenerationEnabled bool `json:"question_generation_enabled"`
+	}{
+		VectorEnabled:             kb.IndexingStrategy.VectorEnabled,
+		KeywordEnabled:            kb.IndexingStrategy.KeywordEnabled,
+		WikiEnabled:               kb.IndexingStrategy.WikiEnabled,
+		GraphEnabled:              kb.IndexingStrategy.GraphEnabled,
+		SummaryEnabled:            kb.SummaryModelID != "",
+		QuestionGenerationEnabled: kb.QuestionGenerationConfig != nil && kb.QuestionGenerationConfig.Enabled,
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("build evaluation experiment: indexing snapshot: %w", err)
+	}
 	return BuildEvaluationExperimentSnapshot(&EvaluationExperimentInput{
 		Dataset:               datasetSnapshot,
 		SourceKnowledgeBaseID: options.KnowledgeBaseID,
+		Chunking:              chunking,
+		Indexing:              indexing,
 		EmbeddingModel:        embeddingModel,
 		ChatModel:             chatModel,
 		RerankModel:           rerankModel,

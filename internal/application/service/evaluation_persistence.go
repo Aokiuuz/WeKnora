@@ -136,11 +136,11 @@ func evaluationEntityToDetail(entity *types.EvaluationTaskEntity) (*types.Evalua
 		return nil, fmt.Errorf("decode evaluation task: unsupported status %d", entity.Status)
 	}
 
-	params, err := decodeEvaluationParams(entity.Params)
+	task, err := EvaluationTaskEntityToAPITask(entity)
 	if err != nil {
 		return nil, err
 	}
-	cleanupErrors, err := decodeEvaluationCleanupErrors(entity.CleanupErrors)
+	params, err := decodeEvaluationParams(entity.Params)
 	if err != nil {
 		return nil, err
 	}
@@ -153,36 +153,12 @@ func evaluationEntityToDetail(entity *types.EvaluationTaskEntity) (*types.Evalua
 		return nil, err
 	}
 
-	startTime := entity.StartTime.UTC()
-	var endTime *time.Time
-	if entity.EndTime != nil {
-		normalizedEndTime := entity.EndTime.UTC()
-		endTime = &normalizedEndTime
-	}
-	var cancelRequestedAt *time.Time
-	if entity.CancelRequestedAt != nil {
-		normalizedCancelRequestedAt := entity.CancelRequestedAt.UTC()
-		cancelRequestedAt = &normalizedCancelRequestedAt
-	}
-
 	experiment, provenanceComplete, err := decodeEvaluationExperiment(entity)
 	if err != nil {
 		return nil, err
 	}
 	return &types.EvaluationDetail{
-		Task: &types.EvaluationTask{
-			ID:                entity.ID,
-			TenantID:          entity.TenantID,
-			DatasetID:         entity.DatasetID,
-			StartTime:         startTime,
-			EndTime:           endTime,
-			Status:            entity.Status,
-			ErrMsg:            entity.ErrMsg,
-			CancelRequestedAt: cancelRequestedAt,
-			CleanupErrors:     cleanupErrors,
-			Total:             entity.Total,
-			Finished:          entity.Finished,
-		},
+		Task:               task,
 		Params:             params,
 		Metric:             metric,
 		RuntimeMetrics:     runtimeMetrics,

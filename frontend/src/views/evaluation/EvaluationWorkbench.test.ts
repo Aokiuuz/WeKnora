@@ -98,6 +98,7 @@ const componentDependencies: Plugin = {
         }
       `,
       'vue-i18n': `export const useI18n = () => ({ t: key => key })`,
+      '@lucide/vue': ['ChevronDown', 'CircleAlert', 'Coins', 'Crosshair', 'Download', 'FlaskConical', 'LoaderCircle', 'MessageSquareText', 'RefreshCw', 'ScanLine', 'SlidersHorizontal', 'Timer'].map(name => `export const ${name} = {};`).join('\n'),
       '@/stores/auth': `export const useAuthStore = () => ({ hasRole: () => true })`,
       '@/api/evaluation': `
         export const EVALUATION_STATUS = {
@@ -134,7 +135,7 @@ const componentDependencies: Plugin = {
     }
 
     builder.onResolve({
-      filter: /^(?:vue|tdesign-vue-next|vue-i18n|@\/api\/evaluation|@\/stores\/auth)$/,
+      filter: /^(?:vue|tdesign-vue-next|vue-i18n|@lucide\/vue|@\/api\/evaluation|@\/stores\/auth)$/,
     }, args => ({ path: args.path, namespace: 'evaluation-workbench-test' }))
     builder.onLoad({ filter: /.*/, namespace: 'evaluation-workbench-test' }, args => ({
       contents: modules[args.path],

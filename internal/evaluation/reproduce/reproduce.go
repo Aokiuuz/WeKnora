@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/Tencent/WeKnora/internal/evaluation/metricregistry"
+	retrievalfusion "github.com/Tencent/WeKnora/internal/retrieval/fusion"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
@@ -40,19 +41,20 @@ type Dataset struct {
 		Grade int    `json:"grade"`
 	} `json:"relevance"`
 	Samples []struct {
-		QID    string `json:"qid"`
-		Search []struct {
-			KnowledgeID string  `json:"knowledge_id"`
-			ChunkIndex  int     `json:"chunk_index"`
-			Score       float64 `json:"score"`
-		} `json:"search"`
-		Rerank []struct {
-			KnowledgeID string  `json:"knowledge_id"`
-			ChunkIndex  int     `json:"chunk_index"`
-			Score       float64 `json:"score"`
-		} `json:"rerank"`
-		GeneratedText string `json:"generated_text"`
+		QID           string       `json:"qid"`
+		VectorSearch  []RankedItem `json:"vector_search"`
+		KeywordSearch []RankedItem `json:"keyword_search"`
+		Search        []RankedItem `json:"search"`
+		Rerank        []RankedItem `json:"rerank"`
+		GeneratedText string       `json:"generated_text"`
 	} `json:"samples"`
+}
+
+// RankedItem is one deterministic retriever or reranker output in the golden fixture.
+type RankedItem struct {
+	KnowledgeID string  `json:"knowledge_id"`
+	ChunkIndex  int     `json:"chunk_index"`
+	Score       float64 `json:"score"`
 }
 
 // Report is the authoritative regression artifact.
@@ -152,7 +154,7 @@ func RuntimeEnvironment() Environment {
 	return Environment{GoVersion: runtime.Version(), GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, CPUs: runtime.NumCPU()}
 }
 
-// Build executes the deterministic fixture through the resolved metric plan.
+// Build executes production RRF fusion and the resolved metric plan on the golden dataset.
 func Build(ctx context.Context, options BuildOptions) (*Report, error) {
 	datasetRaw, err := os.ReadFile(options.DatasetPath)
 	if err != nil {
@@ -214,7 +216,7 @@ func Build(ctx context.Context, options BuildOptions) (*Report, error) {
 		},
 		Commit: options.Commit,
 		Configuration: Configuration{
-			Pipeline: "deterministic_fixture", Seed: 42, Concurrency: 1,
+			Pipeline: "production_rrf_and_metric_plan", Seed: 42, Concurrency: 1,
 			SampleCount: len(dataset.Samples), Network: "disabled", ExternalKeys: "unused",
 		},
 		MetricPlan: plan.Snapshot.Clone(), Metrics: metrics, Environment: environment,
@@ -301,6 +303,14 @@ func computeSamples(
 			return nil, fmt.Errorf("golden sample references unknown question %s", sample.QID)
 		}
 		ranked := sample.Search
+		if len(sample.VectorSearch)+len(sample.KeywordSearch) > 0 {
+			ranked = rankedItemsFromIndexes(retrievalfusion.Results(
+				ctx,
+				indexesFromRankedItems(sample.VectorSearch),
+				indexesFromRankedItems(sample.KeywordSearch),
+				nil,
+			))
+		}
 		if len(sample.Rerank) > 0 {
 			ranked = sample.Rerank
 		}
@@ -327,6 +337,30 @@ func computeSamples(
 		results = append(results, computed)
 	}
 	return results, nil
+}
+
+func indexesFromRankedItems(items []RankedItem) []*types.IndexWithScore {
+	results := make([]*types.IndexWithScore, 0, len(items))
+	for _, item := range items {
+		results = append(results, &types.IndexWithScore{
+			ChunkID:     fmt.Sprintf("%s/%d", item.KnowledgeID, item.ChunkIndex),
+			KnowledgeID: item.KnowledgeID,
+			ID:          strconv.Itoa(item.ChunkIndex),
+			Score:       item.Score,
+		})
+	}
+	return results
+}
+
+func rankedItemsFromIndexes(items []*types.IndexWithScore) []RankedItem {
+	results := make([]RankedItem, 0, len(items))
+	for _, item := range items {
+		chunkIndex, _ := strconv.Atoi(item.ID)
+		results = append(results, RankedItem{
+			KnowledgeID: item.KnowledgeID, ChunkIndex: chunkIndex, Score: item.Score,
+		})
+	}
+	return results
 }
 
 func reportMetrics(plan *types.EvaluationMetricPlanSnapshot, aggregate *types.MetricResult, total int) []MetricResult {
@@ -439,8 +473,8 @@ func Markdown(report *Report) []byte {
 	fmt.Fprintf(&output, "# Evaluation regression report\n\n")
 	fmt.Fprintf(
 		&output,
-		"Dataset `%s` version %d has content SHA-256 `%s`. The deterministic fixture pipeline "+
-			"ran at commit `%s` without network access or external keys.\n\n",
+		"Dataset `%s` version %d has content SHA-256 `%s`. Production RRF fusion and the "+
+			"resolved metric plan ran at commit `%s` without network access or external keys.\n\n",
 		report.Dataset.ID, report.Dataset.Version, report.Dataset.ContentSHA256, report.Commit,
 	)
 	fmt.Fprintf(

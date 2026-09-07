@@ -1,19 +1,29 @@
 <template>
   <div class="evaluation-page">
     <header class="evaluation-header" style="--wails-draggable: drag">
-      <div>
-        <div class="eyebrow">M4 · {{ t('evaluation.eyebrow') }}</div>
+      <div class="hero-copy">
+        <div class="eyebrow"><FlaskConical :size="15" :stroke-width="1.6" aria-hidden="true" />{{ t('evaluation.eyebrow') }}</div>
         <h1>{{ t('evaluation.title') }}</h1>
         <p>{{ t('evaluation.subtitle') }}</p>
       </div>
+      <div class="hero-mark" aria-hidden="true"><ScanLine :size="158" :stroke-width="0.5" /></div>
       <div class="header-stat" aria-live="polite">
         <span>{{ t('evaluation.selected') }}</span>
         <strong>{{ selectedTaskIds.length }}</strong>
         <span>/ 10</span>
       </div>
     </header>
+    <div class="evaluation-dimensions">
+      <span><Crosshair :size="15" aria-hidden="true" /><small>01</small>{{ t('evaluation.summary.retrieval') }}</span>
+      <span><MessageSquareText :size="15" aria-hidden="true" /><small>02</small>{{ t('evaluation.summary.generation') }}</span>
+      <span><Coins :size="15" aria-hidden="true" /><small>03</small>{{ t('evaluation.summary.cost') }}</span>
+      <span><Timer :size="15" aria-hidden="true" /><small>04</small>{{ t('evaluation.summary.duration') }}</span>
+    </div>
 
-    <form class="filter-panel" @submit.prevent="applyFilters">
+    <button type="button" class="filter-toggle" :aria-expanded="filtersExpanded" aria-controls="evaluation-filters" @click="filtersExpanded = !filtersExpanded">
+      <SlidersHorizontal :size="16" aria-hidden="true" />{{ t('evaluation.filterTitle') }}<ChevronDown :size="16" :class="{ 'filter-toggle__arrow--open': filtersExpanded }" aria-hidden="true" />
+    </button>
+    <form id="evaluation-filters" class="filter-panel" :class="{ 'filter-panel--collapsed': !filtersExpanded }" @submit.prevent="applyFilters">
       <label class="filter-field">
         <span>{{ t('evaluation.statusLabel') }}</span>
         <select v-model="filters.status">
@@ -65,7 +75,7 @@
             <strong>{{ tasks.length }}</strong>
           </div>
           <button class="icon-button" type="button" :title="t('evaluation.refresh')" @click="applyFilters">
-            <t-icon name="refresh" size="16px" />
+            <RefreshCw :size="16" aria-hidden="true" />
           </button>
         </div>
 
@@ -93,15 +103,15 @@
         </div>
 
         <div v-if="listLoading && tasks.length === 0" class="state-block">
-          <t-loading size="small" />
+          <LoaderCircle :size="22" class="icon-spinning" aria-hidden="true" />
           <span>{{ t('evaluation.loading') }}</span>
         </div>
         <div v-else-if="listError" class="state-block state-block--error">
-          <t-icon name="error-circle" />
+          <CircleAlert :size="20" aria-hidden="true" />
           <span>{{ listError }}</span>
         </div>
         <div v-else-if="tasks.length === 0" class="state-block">
-          <div class="empty-orbit"><span /></div>
+          <FlaskConical :size="32" :stroke-width="1.2" aria-hidden="true" />
           <span>{{ t('evaluation.noRuns') }}</span>
         </div>
         <div v-else class="run-list">
@@ -110,7 +120,6 @@
             :key="task.id"
             class="run-row"
             :class="{ 'run-row--active': activeTaskId === task.id }"
-            @click="openTask(task)"
           >
             <label class="run-checkbox" @click.stop>
               <input
@@ -121,7 +130,7 @@
               />
               <span />
             </label>
-            <div class="run-row__body">
+            <button type="button" class="run-row__body" :aria-pressed="activeTaskId === task.id" @click="openTask(task)">
               <div class="run-row__top">
                 <code :title="task.id">{{ shortTaskId(task.id) }}</code>
                 <span class="status-pill" :class="`status-pill--${statusMeta(task.status).tone}`">
@@ -137,7 +146,7 @@
                 <span v-for="label in task.labels.slice(0, 3)" :key="label" class="label-chip">{{ label }}</span>
                 <span v-if="task.labels.length > 3" class="label-chip">+{{ task.labels.length - 3 }}</span>
               </div>
-            </div>
+            </button>
           </article>
           <button
             v-if="nextCursor"
@@ -248,11 +257,11 @@
         </div>
 
         <div v-else-if="detailLoading" class="state-block state-block--detail">
-          <t-loading />
+          <LoaderCircle :size="26" class="icon-spinning" aria-hidden="true" />
           <span>{{ t('evaluation.loadingDetail') }}</span>
         </div>
         <div v-else-if="detailError" class="state-block state-block--detail state-block--error">
-          <t-icon name="error-circle" />
+          <CircleAlert :size="20" aria-hidden="true" />
           <span>{{ detailError }}</span>
         </div>
         <div v-else-if="detail" class="detail-view">
@@ -269,7 +278,7 @@
                 :disabled="Boolean(exporting)"
                 @click="download('json')"
               >
-                <t-icon name="download" /> JSON
+                <Download :size="15" aria-hidden="true" /> JSON
               </button>
               <button
                 type="button"
@@ -277,7 +286,7 @@
                 :disabled="Boolean(exporting)"
                 @click="download('csv')"
               >
-                <t-icon name="download" /> CSV
+                <Download :size="15" aria-hidden="true" /> CSV
               </button>
               <button
                 v-if="exporting"
@@ -337,19 +346,47 @@
           </nav>
 
           <div v-if="activeTab === 'overview'" class="overview-grid">
-            <section class="json-panel">
-              <div class="data-section__heading"><h3>{{ t('evaluation.experiment') }}</h3></div>
+            <section v-for="group in (['retrieval', 'generation'] as const)" :key="group" class="result-card">
+              <h3><Crosshair v-if="group === 'retrieval'" :size="16" aria-hidden="true" /><MessageSquareText v-else :size="16" aria-hidden="true" />{{ t(`evaluation.summary.${group}`) }}</h3>
+              <dl v-if="qualitySummary[group].length" class="result-scores">
+                <div v-for="score in qualitySummary[group]" :key="score.id">
+                  <dt>{{ score.label }}</dt>
+                  <dd :class="{ 'result-missing': score.value === null }">{{ score.value === null ? t('evaluation.summary.unavailable') : score.value.toFixed(4) }}</dd>
+                </div>
+              </dl>
+              <p v-else class="result-missing">{{ t('evaluation.summary.unavailable') }}</p>
+              <p class="result-note">{{ t(`evaluation.summary.${group}Hint`) }}</p>
+            </section>
+            <section class="result-card result-card--cost">
+              <h3><Coins :size="16" aria-hidden="true" />{{ t('evaluation.summary.cost') }}</h3>
+              <strong class="result-value">{{ summaryCost(detail.runtime_metrics?.cost) }}</strong>
+              <p v-if="detail.runtime_metrics?.cost" class="result-note">{{ t('modelSettings.usage.accountedCalls', { complete: detail.runtime_metrics.cost.accounting_complete_calls, total: detail.runtime_metrics.cost.call_count }) }}</p>
+              <p v-else class="result-note">{{ t('evaluation.summary.unavailable') }}</p>
+              <p class="result-note">{{ t('evaluation.summary.costHint') }}</p>
+            </section>
+            <section class="result-card">
+              <h3><Timer :size="16" aria-hidden="true" />{{ t('evaluation.summary.duration') }}</h3>
+              <strong class="result-value">{{ summaryDuration(detail.runtime_metrics?.durations?.total_ms) }}</strong>
+              <p class="result-note">{{ t('evaluation.summary.execution') }}: {{ summaryDuration(detail.runtime_metrics?.durations?.execution_ms) }}</p>
+              <p class="result-note">{{ t('evaluation.summary.durationHint') }}</p>
+            </section>
+            <details class="json-panel">
+              <summary>{{ t('evaluation.experiment') }}</summary>
               <pre>{{ prettyJSON(detail.experiment) }}</pre>
-            </section>
-            <section class="json-panel">
-              <div class="data-section__heading"><h3>{{ t('evaluation.aggregateMetrics') }}</h3></div>
+            </details>
+            <details class="json-panel">
+              <summary>{{ t('evaluation.aggregateMetrics') }}</summary>
               <pre>{{ prettyJSON(detail.metric) }}</pre>
-            </section>
+            </details>
+            <details class="json-panel">
+              <summary>{{ t('evaluation.summary.runtime') }}</summary>
+              <pre>{{ prettyJSON(detail.runtime_metrics) }}</pre>
+            </details>
           </div>
 
           <section v-else class="question-section">
             <div v-if="questionLoading && questions.length === 0" class="state-block">
-              <t-loading size="small" />
+              <LoaderCircle :size="22" class="icon-spinning" aria-hidden="true" />
               <span>{{ t('evaluation.loadingQuestions') }}</span>
             </div>
             <div v-else-if="questions.length === 0" class="state-block">{{ t('evaluation.noQuestions') }}</div>
@@ -451,13 +488,7 @@
           </section>
         </div>
         <div v-else class="detail-empty">
-          <div class="detail-empty__visual">
-            <span class="axis axis--x" />
-            <span class="axis axis--y" />
-            <span class="point point--one" />
-            <span class="point point--two" />
-            <span class="point point--three" />
-          </div>
+          <ScanLine :size="96" :stroke-width="0.75" class="detail-empty__icon" aria-hidden="true" />
           <h2>{{ t('evaluation.detailEmpty') }}</h2>
           <p>{{ t('evaluation.detailEmptyHint') }}</p>
         </div>
@@ -470,6 +501,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
+import { ChevronDown, CircleAlert, Coins, Crosshair, Download, FlaskConical, LoaderCircle, MessageSquareText, RefreshCw, ScanLine, SlidersHorizontal, Timer } from '@lucide/vue'
 
 import {
   EVALUATION_STATUS,
@@ -492,6 +524,7 @@ import {
   type EvaluationRequestToken,
 } from '@/api/evaluation'
 import { useAuthStore } from '@/stores/auth'
+import { summarizeEvaluation, summaryCost, summaryDuration } from './evaluationSummary'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -520,6 +553,7 @@ const filters = reactive({
   startedTo: '',
   labels: '',
 })
+const filtersExpanded = ref(false)
 
 const tasks = ref<EvaluationTask[]>([])
 const nextCursor = ref('')
@@ -527,6 +561,7 @@ const listLoading = ref(false)
 const listError = ref('')
 const activeTaskId = ref('')
 const detail = ref<EvaluationDetail | null>(null)
+const qualitySummary = computed(() => summarizeEvaluation(detail.value))
 const detailLoading = ref(false)
 const detailError = ref('')
 const questions = ref<EvaluationQuestionResult[]>([])
@@ -929,7 +964,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  padding: 28px 30px 24px;
+  padding: 24px 28px;
   overflow: hidden;
   color: var(--eval-ink);
   background:
@@ -938,13 +973,28 @@ onBeforeUnmount(() => {
 }
 
 .evaluation-header {
+  position: relative;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  margin-bottom: 20px;
-  h1 { margin: 3px 0 5px; font-size: 30px; line-height: 1.1; letter-spacing: -0.035em; }
-  p { margin: 0; color: var(--eval-muted); font-size: 13px; }
+  gap: 24px;
+  flex-shrink: 0;
+  padding: 28px 32px;
+  border: 1px solid #244b3f;
+  border-radius: 18px 18px 0 0;
+  overflow: hidden;
+  color: #f2f7f4;
+  background: radial-gradient(ellipse at 68% -30%, #315e4c, transparent 65%), #102c22;
+  h1 { margin: 13px 0 12px; font-size: clamp(30px, 3.2vw, 46px); line-height: 1.15; letter-spacing: -0.05em; font-weight: 650; }
+  p { max-width: 640px; margin: 0; color: #c0d4c9; font-size: 12px; line-height: 1.65; }
+  .eyebrow { display: flex; align-items: center; gap: 8px; color: #b9dfc3; font-size: 10px; letter-spacing: .18em; }
 }
+.hero-copy, .header-stat { position: relative; z-index: 1; }
+.hero-mark { position: absolute; top: 12px; right: 21%; color: #aad6bf; opacity: .15; transform: rotate(-12deg); pointer-events: none; }
+.evaluation-dimensions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); flex-shrink: 0; margin-bottom: 18px; border: 1px solid #dbe5df; border-top: 0; border-radius: 0 0 14px 14px; background: #eef3ef; }
+.evaluation-dimensions > span { display: flex; align-items: center; justify-content: center; gap: 9px; padding: 12px 8px; color: #476254; font-size: 11px; }
+.evaluation-dimensions > span + span { border-left: 1px solid #dbe5df; }
+.evaluation-dimensions small { font: 10px monospace; color: #73867c; }
 
 .eyebrow, .section-kicker {
   color: var(--eval-green);
@@ -958,14 +1008,19 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: baseline;
   gap: 4px;
-  color: var(--eval-muted);
-  font-size: 12px;
-  strong { color: var(--eval-ink); font-size: 24px; font-variant-numeric: tabular-nums; }
+  color: #b4c9bd;
+  font-size: 11px;
+  flex-wrap: wrap;
+  min-width: 96px;
+  padding-left: 22px;
+  border-left: 1px solid #416354;
+  > span:first-child { flex-basis: 100%; }
+  strong { color: #dbefb8; font-size: 60px; font-weight: 500; letter-spacing: -.065em; line-height: 1.05; font-variant-numeric: tabular-nums; }
 }
 
 .filter-panel {
   display: grid;
-  grid-template-columns: repeat(4, minmax(130px, 1fr)) auto;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
   gap: 10px;
   padding: 14px;
   margin-bottom: 14px;
@@ -988,7 +1043,8 @@ onBeforeUnmount(() => {
   }
 }
 
-.filter-field--labels { grid-column: span 2; }
+.filter-field--labels { grid-column: span 1; }
+.filter-toggle { display: none; }
 .filter-actions { display: flex; align-items: flex-end; justify-content: flex-end; gap: 8px; }
 
 .button {
@@ -1030,7 +1086,8 @@ onBeforeUnmount(() => {
 .run-row { display: flex; gap: 11px; padding: 15px 14px; border-bottom: 1px solid #edf1ef; cursor: pointer; transition: background 0.16s ease; &:hover { background: #f5f9f7; } }
 .run-row--active { background: #edf8f3; box-shadow: inset 3px 0 0 var(--eval-green); }
 .run-checkbox { padding-top: 2px; input { position: absolute; opacity: 0; } span { display: block; width: 16px; height: 16px; border: 1px solid #b8c5bf; border-radius: 5px; background: #fff; } input:checked + span { border-color: var(--eval-green); background: var(--eval-green); box-shadow: inset 0 0 0 3px #fff; } }
-.run-row__body { min-width: 0; flex: 1; }
+.run-row__body { min-width: 0; flex: 1; padding: 0; border: 0; color: inherit; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.run-row__body:focus-visible { outline: 2px solid var(--eval-green); outline-offset: 5px; border-radius: 4px; }
 .run-row__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; code { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; } }
 .run-row__dataset { margin: 7px 0 5px; overflow: hidden; font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .run-row__meta { display: flex; justify-content: space-between; color: var(--eval-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
@@ -1065,6 +1122,21 @@ onBeforeUnmount(() => {
 
 .detail-tabs { display: flex; gap: 20px; padding: 20px 20px 0; border-bottom: 1px solid var(--eval-line); button { padding: 0 0 10px; border: 0; border-bottom: 2px solid transparent; color: var(--eval-muted); background: none; cursor: pointer; font-size: 12px; font-weight: 650; &.active { border-color: var(--eval-green); color: var(--eval-green); } span { margin-left: 4px; color: #9aa7a1; } } }
 .overview-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 12px; padding: 18px 20px 24px; }
+.result-card { min-width: 0; padding: 20px; border: 1px solid var(--eval-line); border-radius: 12px; background: #fbfdfc; animation: result-enter .5s cubic-bezier(.22, 1, .36, 1) both; }
+.result-card:nth-child(2) { animation-delay: .045s; }
+.result-card:nth-child(3) { animation-delay: .09s; }
+.result-card:nth-child(4) { animation-delay: .135s; }
+.result-card h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 20px; color: var(--eval-muted); font-size: 12px; }
+.result-card--cost { background: #edf4ea; border-color: #d6e4cf; }
+.result-scores { display: grid; gap: 9px; margin: 0; }
+.result-scores div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid #eaf0ec; }
+.result-scores dt { min-width: 0; overflow-wrap: anywhere; color: var(--eval-muted); font-size: 11px; }
+.result-scores dd { margin: 0; font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.result-value { display: block; color: #23503c; font-size: clamp(23px, 2.6vw, 34px); letter-spacing: -.045em; font-weight: 550; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.result-note, .result-missing { color: var(--eval-muted); font-size: 11px; line-height: 1.6; }
+.result-note { margin: 12px 0 0; }
+.json-panel summary { padding: 12px 14px; font-size: 12px; font-weight: 650; cursor: pointer; }
+.json-panel summary:focus-visible { outline: 2px solid var(--eval-green); outline-offset: -3px; }
 .json-panel, .data-section { min-width: 0; border: 1px solid var(--eval-line); border-radius: 12px; overflow: hidden; }
 .json-panel pre { max-height: 430px; margin: 0; padding: 14px; overflow: auto; color: #2d4139; background: #f8faf9; font-size: 10px; line-height: 1.65; }
 .data-section__heading { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--eval-line); h3 { margin: 0; font-size: 12px; } span { color: var(--eval-muted); font-size: 10px; } }
@@ -1114,9 +1186,36 @@ onBeforeUnmount(() => {
 
 @media (max-width: 820px) {
   .evaluation-page { padding: 18px; overflow: auto; }
+  .evaluation-header { padding: 24px 20px; align-items: center; }
+  .header-stat strong { font-size: 44px; }
+  .hero-mark { display: none; }
+  .evaluation-dimensions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .evaluation-dimensions > span { justify-content: flex-start; padding-left: 16px; }
+  .evaluation-dimensions > span:nth-child(3) { border-left: 0; }
+  .filter-toggle { display: flex; flex-shrink: 0; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; margin-bottom: 12px; border: 1px solid var(--eval-line); border-radius: 10px; background: #fff; color: var(--eval-ink); font: inherit; font-size: 12px; cursor: pointer; }
+  .filter-toggle > svg:last-child { margin-left: auto; transition: transform .2s ease; }
+  .filter-toggle__arrow--open { transform: rotate(180deg); }
+  .filter-panel--collapsed { display: none; }
   .filter-panel { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
   .workbench { display: flex; min-height: 900px; flex-direction: column; overflow: visible; }
   .run-browser { max-height: 420px; border-right: 0; border-bottom: 1px solid var(--eval-line); }
   .inspection-panel { min-height: 500px; }
 }
+@media (max-width: 480px) {
+  .evaluation-page { padding: 12px; }
+  .evaluation-header { padding: 22px 16px; }
+  .evaluation-header h1 { font-size: 28px; }
+  .header-stat { min-width: 62px; padding-left: 12px; }
+  .filter-panel { grid-template-columns: 1fr; }
+  .filter-field--labels { grid-column: auto; }
+  .label-editor { flex-direction: column; align-items: stretch; }
+  .label-editor__control input { width: 100%; min-width: 0; }
+  .inspection-heading { flex-wrap: wrap; gap: 12px; }
+}
+.button:focus-visible, .icon-button:focus-visible { outline: 2px solid var(--eval-green); outline-offset: 3px; }
+@media (hover: hover) { .button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(16, 46, 36, .08); } }
+.icon-spinning { animation: icon-spin 1s linear infinite; }
+@keyframes icon-spin { to { transform: rotate(360deg); } }
+@keyframes result-enter { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .result-card, .icon-spinning { animation: none; } .button, .run-row, .filter-toggle > svg { transition: none; } .button:hover:not(:disabled) { transform: none; } }
 </style>

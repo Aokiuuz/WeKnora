@@ -37,6 +37,14 @@
     },
     {
       "qid": "gq2",
+      "vector_search": [
+        {"knowledge_id": "golden-knowledge", "chunk_index": 2, "score": 0.90},
+        {"knowledge_id": "golden-knowledge", "chunk_index": 4, "score": 0.80}
+      ],
+      "keyword_search": [
+        {"knowledge_id": "golden-knowledge", "chunk_index": 4, "score": 12.00},
+        {"knowledge_id": "golden-knowledge", "chunk_index": 2, "score": 8.00}
+      ],
       "search": [
         {"knowledge_id": "golden-knowledge", "chunk_index": 2, "score": 0.90},
         {"knowledge_id": "golden-knowledge", "chunk_index": 4, "score": 0.80}

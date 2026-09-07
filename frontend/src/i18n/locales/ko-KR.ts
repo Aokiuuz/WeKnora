@@ -2090,7 +2090,20 @@ export default {
       loadFailed: '모델 사용량을 불러오지 못했습니다',
       priceLoadFailed: '요금 버전을 불러오지 못했습니다',
       priceSaved: '요금 버전이 추가되었습니다',
-      priceSaveFailed: '요금 버전을 추가하지 못했습니다'
+      priceSaveFailed: '요금 버전을 추가하지 못했습니다',
+      allModels: "모든 모델",
+      customRange: "직접 설정",
+      from: "시작 시간",
+      to: "종료 시간",
+      timezoneHint: "시간은 기기의 현지 시간대로 표시되고 입력됩니다.",
+      invalidRange: "유효한 시작 및 종료 시간을 선택하세요. 종료는 시작보다 늦어야 합니다.",
+      recordedCost: "기록된 비용",
+      accountedCalls: "계산이 완료된 호출: {complete} / {total}",
+      validFrom: "적용 시작",
+      openEnded: "종료 없음",
+      invalidPriceDates: "유효한 적용 시작 시간을 입력하세요. 종료는 시작보다 늦어야 합니다.",
+      invalidCurrency: "USD와 같은 영문 3자리 통화 코드를 입력하세요.",
+      invalidPrice: "가격은 0 이상의 유한한 수여야 하며 마이크로 단위 값은 안전한 정수 범위 내에 있어야 합니다."
     },
     typeShort: {
       chat: '대화',
@@ -6625,6 +6638,20 @@ export default {
     noSessions: '대화가 없습니다'
   },
   evaluation: {
+    filterTitle: '실험 필터',
+    summary: {
+      retrieval: "검색 품질",
+      generation: "답변 품질",
+      unavailable: "유효한 관측 없음",
+      retrievalHint: "값은 이 실행의 집계 지표에서 가져옵니다.",
+      generationHint: "각 지표는 서로 다른 측면을 측정합니다. 문항별 결과와 사람의 평가를 함께 검토하세요.",
+      cost: "기록된 모델 비용",
+      costHint: "통화별로 표시합니다. 계산이 완료된 호출 수로 비용 집계 범위를 확인하세요.",
+      duration: "전체 작업 시간",
+      execution: "평가 실행",
+      durationHint: "전체 시간에는 데이터 준비, 인덱싱 및 실행 단계가 포함됩니다.",
+      runtime: "실행 통계"
+    },
     eyebrow: '실험 감사 작업 공간',
     title: '평가 워크벤치',
     subtitle: '고정된 실험 실행을 필터링하고 질문 근거와 지표를 비교한 뒤 감사 자료를 내보냅니다.',

@@ -29,8 +29,60 @@ var modelPriceScopeLocks = struct {
 }{values: make(map[string]*modelPriceScopeLock)}
 
 // NewModelObservabilityRepository creates the model call ledger and pricing store.
-func NewModelObservabilityRepository(db *gorm.DB) modelobs.Store {
+func NewModelObservabilityRepository(db *gorm.DB) *modelObservabilityRepository {
 	return &modelObservabilityRepository{db: db}
+}
+
+type evaluationCostCountRow struct {
+	CallCount               int64
+	AccountingCompleteCalls int64
+	UnpricedCalls           int64
+	UsageUnreportedCalls    int64
+	StartedCalls            int64
+}
+
+type evaluationCostTotalRow struct {
+	Currency       string
+	CostMicrounits int64
+}
+
+// EvaluationCost returns task-scoped cost completeness and currency totals.
+func (r *modelObservabilityRepository) EvaluationCost(
+	ctx context.Context,
+	tenantID uint64,
+	taskID string,
+) (*types.EvaluationRuntimeCost, error) {
+	base := r.db.WithContext(ctx).Table("model_call_records").
+		Where("tenant_id = ? AND evaluation_task_id = ? AND deleted_at IS NULL", tenantID, taskID)
+
+	var counts evaluationCostCountRow
+	if err := base.Select(`
+		COUNT(*) AS call_count,
+		COALESCE(SUM(CASE WHEN accounting_complete THEN 1 ELSE 0 END), 0) AS accounting_complete_calls,
+		COALESCE(SUM(CASE WHEN status <> 'started' AND total_tokens IS NOT NULL AND cost_microunits IS NULL THEN 1 ELSE 0 END), 0) AS unpriced_calls,
+		COALESCE(SUM(CASE WHEN status <> 'started' AND total_tokens IS NULL THEN 1 ELSE 0 END), 0) AS usage_unreported_calls,
+		COALESCE(SUM(CASE WHEN status = 'started' THEN 1 ELSE 0 END), 0) AS started_calls`).
+		Scan(&counts).Error; err != nil {
+		return nil, fmt.Errorf("query evaluation cost counts: %w", err)
+	}
+
+	var rows []evaluationCostTotalRow
+	if err := base.Select("currency, SUM(cost_microunits) AS cost_microunits").
+		Where("cost_microunits IS NOT NULL AND currency <> ''").
+		Group("currency").Order("currency").Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("query evaluation cost totals: %w", err)
+	}
+	totals := make([]types.ModelCostTotal, 0, len(rows))
+	for _, row := range rows {
+		totals = append(totals, types.ModelCostTotal{
+			Currency: row.Currency, CostMicrounits: row.CostMicrounits,
+		})
+	}
+	return &types.EvaluationRuntimeCost{
+		CallCount: counts.CallCount, AccountingCompleteCalls: counts.AccountingCompleteCalls,
+		UnpricedCalls: counts.UnpricedCalls, UsageUnreportedCalls: counts.UsageUnreportedCalls,
+		StartedCalls: counts.StartedCalls, Totals: totals,
+	}, nil
 }
 
 func (r *modelObservabilityRepository) StartModelCall(ctx context.Context, record *types.ModelCallRecord) error {
@@ -263,3 +315,4 @@ func (r *modelObservabilityRepository) ListModelPrices(
 }
 
 var _ modelobs.Store = (*modelObservabilityRepository)(nil)
+var _ modelobs.EvaluationCostStore = (*modelObservabilityRepository)(nil)
