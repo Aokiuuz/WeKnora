@@ -27,6 +27,10 @@ var (
 // visible to every tenant, tenant datasets only to their owner; cross-tenant
 // and missing objects share the same NotFound sentinel.
 type EvaluationDatasetRepository interface {
+	// ImportDataset commits the identity and first version together. Conflicting
+	// identities replay only when the immutable import manifest matches.
+	ImportDataset(ctx context.Context, dataset *types.EvaluationDataset, version *types.EvaluationDatasetVersion,
+		content *types.EvaluationDatasetVersionInput) (*types.EvaluationDatasetImportResult, error)
 	CreateDataset(ctx context.Context, dataset *types.EvaluationDataset) error
 	GetDataset(ctx context.Context, tenantID uint64, datasetID string) (*types.EvaluationDataset, error)
 	ListDatasets(ctx context.Context, tenantID uint64) ([]*types.EvaluationDataset, error)

@@ -114,6 +114,9 @@ func RegisterEvaluationRoutes(
 
 		datasets := evaluationRoutes.Group("/datasets")
 		{
+			datasets.GET("/catalog", g.Viewer(), datasetHandler.ListCatalog)
+			datasets.GET("/catalog/:id", g.Viewer(), datasetHandler.GetCatalogItem)
+			datasets.POST("/import", g.Admin(), datasetHandler.ImportDataset)
 			datasets.POST("", g.Admin(), datasetHandler.CreateDataset)
 			datasets.GET("", g.Viewer(), datasetHandler.ListDatasets)
 			datasets.POST("/:id/versions", g.Admin(), datasetHandler.CreateVersion)

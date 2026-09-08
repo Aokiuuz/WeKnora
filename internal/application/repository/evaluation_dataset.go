@@ -176,7 +176,7 @@ func (r *evaluationDatasetRepository) CreateVersion(
 			})
 		}
 		if len(passages) > 0 {
-			if err := tx.Create(&passages).Error; err != nil {
+			if err := tx.CreateInBatches(&passages, 200).Error; err != nil {
 				return fmt.Errorf("create evaluation dataset version %s: passages: %w", version.ID, err)
 			}
 		}
@@ -192,7 +192,7 @@ func (r *evaluationDatasetRepository) CreateVersion(
 			})
 		}
 		if len(questions) > 0 {
-			if err := tx.Create(&questions).Error; err != nil {
+			if err := tx.CreateInBatches(&questions, 200).Error; err != nil {
 				return fmt.Errorf("create evaluation dataset version %s: questions: %w", version.ID, err)
 			}
 		}
@@ -207,7 +207,7 @@ func (r *evaluationDatasetRepository) CreateVersion(
 			})
 		}
 		if len(relevance) > 0 {
-			if err := tx.Create(&relevance).Error; err != nil {
+			if err := tx.CreateInBatches(&relevance, 200).Error; err != nil {
 				return fmt.Errorf("create evaluation dataset version %s: relevance: %w", version.ID, err)
 			}
 		}

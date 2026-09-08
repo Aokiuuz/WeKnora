@@ -145,6 +145,51 @@ func TestEvaluationHandlerOmitsUnprovidedSeed(t *testing.T) {
 	assert.Nil(t, svc.lastOptions.Seed, "an absent seed must stay nil, never a silent zero")
 }
 
+func TestEvaluationHandlerPreservesConfigurationFieldPresence(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		body string
+		full bool
+	}{
+		{"partial", `{"configuration":{"retrieval":{"embedding_top_k":23}}}`, false},
+		{"explicit zero", `{"configuration":{` +
+			`"retrieval":{"vector_threshold":0,"keyword_threshold":0,"embedding_top_k":0},` +
+			`"rerank":{"rerank_top_k":0,"rerank_threshold":0}}}`, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			svc := &stubEvaluationService{}
+			engine := setupEvaluationHandlerRouter(svc)
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/evaluation", strings.NewReader(test.body))
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			engine.ServeHTTP(response, request)
+			require.Equal(t, http.StatusOK, response.Code)
+			require.NotNil(t, svc.lastOptions)
+			require.NotNil(t, svc.lastOptions.Configuration)
+			got := svc.lastOptions.Configuration
+			require.NotNil(t, got.Retrieval)
+			require.NotNil(t, got.Retrieval.EmbeddingTopK)
+			if test.full {
+				require.NotNil(t, got.Retrieval.VectorThreshold)
+				require.NotNil(t, got.Retrieval.KeywordThreshold)
+				require.NotNil(t, got.Rerank)
+				require.NotNil(t, got.Rerank.RerankTopK)
+				require.NotNil(t, got.Rerank.RerankThreshold)
+				assert.Zero(t, *got.Retrieval.EmbeddingTopK)
+				assert.Zero(t, *got.Retrieval.VectorThreshold)
+				assert.Zero(t, *got.Retrieval.KeywordThreshold)
+				assert.Zero(t, *got.Rerank.RerankTopK)
+				assert.Zero(t, *got.Rerank.RerankThreshold)
+			} else {
+				assert.Equal(t, 23, *got.Retrieval.EmbeddingTopK)
+				assert.Nil(t, got.Retrieval.VectorThreshold)
+				assert.Nil(t, got.Retrieval.KeywordThreshold)
+				assert.Nil(t, got.Rerank)
+			}
+		})
+	}
+}
+
 func TestEvaluationHandlerMapsSeedUnsupportedTo422(t *testing.T) {
 	svc := &stubEvaluationService{
 		err: fmt.Errorf("evaluation seed 0: chat model claude: %w", service.ErrEvaluationSeedUnsupported),

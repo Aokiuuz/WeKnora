@@ -21,13 +21,23 @@ func applyEvaluationConfigurationOverrides(
 		return nil
 	}
 	if overrides.Retrieval != nil {
-		params.VectorThreshold = overrides.Retrieval.VectorThreshold
-		params.KeywordThreshold = overrides.Retrieval.KeywordThreshold
-		params.EmbeddingTopK = overrides.Retrieval.EmbeddingTopK
+		if overrides.Retrieval.VectorThreshold != nil {
+			params.VectorThreshold = *overrides.Retrieval.VectorThreshold
+		}
+		if overrides.Retrieval.KeywordThreshold != nil {
+			params.KeywordThreshold = *overrides.Retrieval.KeywordThreshold
+		}
+		if overrides.Retrieval.EmbeddingTopK != nil {
+			params.EmbeddingTopK = *overrides.Retrieval.EmbeddingTopK
+		}
 	}
 	if overrides.Rerank != nil {
-		params.RerankTopK = overrides.Rerank.RerankTopK
-		params.RerankThreshold = overrides.Rerank.RerankThreshold
+		if overrides.Rerank.RerankTopK != nil {
+			params.RerankTopK = *overrides.Rerank.RerankTopK
+		}
+		if overrides.Rerank.RerankThreshold != nil {
+			params.RerankThreshold = *overrides.Rerank.RerankThreshold
+		}
 	}
 	if overrides.Generation != nil {
 		if overrides.Generation.Temperature != nil {

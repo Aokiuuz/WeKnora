@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 
@@ -90,22 +89,8 @@ func (h *EvaluationDatasetHandler) CreateVersion(c *gin.Context) {
 	}
 	datasetID := c.Param("id")
 
-	// The request body is bounded before decoding; the service revalidates
-	// the structured limits before the transactional write.
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, h.limits.MaxRequestBodyBytes)
 	var content types.EvaluationDatasetVersionInput
-	if err := c.ShouldBindJSON(&content); err != nil {
-		var maxBytesError *http.MaxBytesError
-		if errors.As(err, &maxBytesError) {
-			message := "Evaluation dataset request body exceeds the configured limit"
-			_ = c.Error(apperrors.NewRequestEntityTooLargeError(message).WithDetails(err.Error()))
-			return
-		}
-		if errors.Is(err, io.ErrUnexpectedEOF) {
-			_ = c.Error(apperrors.NewBadRequestError("Truncated evaluation dataset request body"))
-			return
-		}
-		_ = c.Error(apperrors.NewBadRequestError("Invalid evaluation dataset version content").WithDetails(err.Error()))
+	if !h.decodeDatasetJSON(c, &content, false) {
 		return
 	}
 

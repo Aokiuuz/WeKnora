@@ -15,3 +15,8 @@ cli/acceptance/testdata/**/*.json text eol=lf
 # picking either side (task state lives in task.json, not index.md). See
 # .trellis/spec/cli/backend/directory-structure.md for details.
 .trellis/workspace/*/journal-*.md merge=union
+# Public bundle hashes bind original bytes on every operating system.
+dataset/public/** -text
+# Verbatim licensed source files retain upstream whitespace as part of their hash.
+dataset/public/*/v1/LICENSE -whitespace
+dataset/public/*/v1/source_docs/** -whitespace

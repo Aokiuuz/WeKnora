@@ -20,6 +20,13 @@
       <span><Timer :size="15" aria-hidden="true" /><small>04</small>{{ t('evaluation.summary.duration') }}</span>
     </div>
 
+    <div class="workbench-actions">
+      <p>{{ t('evaluationFlow.startHint') }}</p>
+      <button type="button" class="button button--quiet" @click="datasetsVisible = true"><Database :size="16" aria-hidden="true" />{{ t('evaluationFlow.datasets') }}</button>
+      <button v-if="canManageLabels" type="button" class="button button--primary" @click="beginCreate()"><Plus :size="16" aria-hidden="true" />{{ t('evaluationFlow.newRun') }}</button>
+    </div>
+    <p v-if="pollingPaused" class="polling-notice" role="status">{{ t('evaluationFlow.pollingError') }}</p>
+
     <button type="button" class="filter-toggle" :aria-expanded="filtersExpanded" aria-controls="evaluation-filters" @click="filtersExpanded = !filtersExpanded">
       <SlidersHorizontal :size="16" aria-hidden="true" />{{ t('evaluation.filterTitle') }}<ChevronDown :size="16" :class="{ 'filter-toggle__arrow--open': filtersExpanded }" aria-hidden="true" />
     </button>
@@ -113,6 +120,7 @@
         <div v-else-if="tasks.length === 0" class="state-block">
           <FlaskConical :size="32" :stroke-width="1.2" aria-hidden="true" />
           <span>{{ t('evaluation.noRuns') }}</span>
+          <button v-if="canManageLabels" type="button" class="button button--primary button--compact" @click="beginCreate()">{{ t('evaluationFlow.newRun') }}</button>
         </div>
         <div v-else class="run-list">
           <article
@@ -494,14 +502,16 @@
         </div>
       </main>
     </div>
+    <EvaluationDatasetsDrawer v-model:visible="datasetsVisible" :tenant-key="tenantKey" :can-manage="canManageLabels" @create="beginCreate" @imported="onDatasetImported" />
+    <EvaluationCreateDrawer v-model:visible="createVisible" :tenant-key="tenantKey" :dataset-id="createDatasetId" :version-id="createVersionId" @created="onTaskCreated" @import="openImport" @refresh="applyFilters" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, CircleAlert, Coins, Crosshair, Download, FlaskConical, LoaderCircle, MessageSquareText, RefreshCw, ScanLine, SlidersHorizontal, Timer } from '@lucide/vue'
+import { ChevronDown, CircleAlert, Coins, Crosshair, Database, Download, FlaskConical, LoaderCircle, MessageSquareText, Plus, RefreshCw, ScanLine, SlidersHorizontal, Timer } from '@lucide/vue'
 
 import {
   EVALUATION_STATUS,
@@ -525,9 +535,26 @@ import {
 } from '@/api/evaluation'
 import { useAuthStore } from '@/stores/auth'
 import { summarizeEvaluation, summaryCost, summaryDuration } from './evaluationSummary'
+import EvaluationDatasetsDrawer from './EvaluationDatasetsDrawer.vue'
+import EvaluationCreateDrawer from './EvaluationCreateDrawer.vue'
+import { createEvaluationPoller } from './evaluationPolling'
+import type { DatasetImportResult } from '@/api/evaluation/datasets'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const tenantKey = computed(() => `${authStore.currentUserId ?? ''}:${authStore.selectedTenantId ?? authStore.currentTenantId ?? ''}`)
+const datasetsVisible = ref(false), createVisible = ref(false), createDatasetId = ref(''), createVersionId = ref('')
+const pollingPaused = ref(false)
+function beginCreate(datasetId = '', versionId = '') {
+  datasetsVisible.value = false; createDatasetId.value = datasetId; createVersionId.value = versionId; createVisible.value = true
+}
+function openImport() { createVisible.value = false; datasetsVisible.value = true }
+function onDatasetImported(result: DatasetImportResult) { createDatasetId.value = result.dataset.id; createVersionId.value = result.version.id }
+async function onTaskCreated(task: EvaluationTask) {
+  resetFilters()
+  tasks.value = [task, ...tasks.value.filter(item => item.id !== task.id)]
+  await openTask(task)
+}
 
 const ANSWER_QUALITY_RUBRIC_KEY = 'answer-quality'
 const ANSWER_QUALITY_RUBRIC_VERSION = '1.1.0'
@@ -583,6 +610,25 @@ let activeExportController: AbortController | null = null
 let labelSaveSequence = 0
 let activeLabelSaveToken: { taskId: string; sequence: number } | null = null
 const latestLabelSaveByTask = new Map<string, number>()
+const isRunning = (task: EvaluationTask | undefined) => task?.status === EVALUATION_STATUS.pending || task?.status === EVALUATION_STATUS.running
+const poller = createEvaluationPoller({
+  hasRunning: () => tasks.value.some(isRunning) || isRunning(detail.value?.task),
+  onPaused: () => { pollingPaused.value = true },
+  refresh: async isCurrent => {
+    if (listLoading.value || detailLoading.value) return
+    const taskId = activeTaskId.value
+    const listToken = taskListRequests.begin(JSON.stringify(filterInput()))
+    const detailToken = taskDetailRequests.begin(taskId)
+    const [page, run] = await Promise.all([listEvaluationTasks(filterInput()), taskId ? getEvaluationDetail(taskId) : Promise.resolve(null)])
+    if (!isCurrent()) return
+    if (taskListRequests.isCurrent(listToken)) { tasks.value = page.items; nextCursor.value = page.next_cursor }
+    if (run && taskDetailRequests.isCurrent(detailToken) && activeTaskId.value === taskId) {
+      run.task.labels = tasks.value.find(task => task.id === taskId)?.labels ?? detail.value?.task.labels ?? []
+      detail.value = run
+      if (!isRunning(run.task) || activeTab.value === 'questions') void loadQuestions(false)
+    }
+  },
+})
 
 interface HumanRatingPanelState {
   open: boolean
@@ -632,6 +678,7 @@ function filterInput(cursor = ''): EvaluationTaskFilters {
 
 async function loadTasks(append = false) {
   if (append && listLoading.value) return
+  poller.stop()
   const input = filterInput(append ? nextCursor.value : '')
   const request = taskListRequests.begin(JSON.stringify(input))
   listLoading.value = true
@@ -641,6 +688,8 @@ async function loadTasks(append = false) {
     if (!taskListRequests.isCurrent(request)) return
     tasks.value = append ? [...tasks.value, ...page.items] : page.items
     nextCursor.value = page.next_cursor
+    pollingPaused.value = false
+    poller.start()
   } catch (error) {
     if (taskListRequests.isCurrent(request)) listError.value = errorMessage(error)
   } finally {
@@ -663,6 +712,7 @@ function resetFilters() {
 }
 
 async function openTask(task: EvaluationTask) {
+  poller.stop()
   if (activeTaskId.value === task.id && detail.value) return
   const detailRequest = taskDetailRequests.begin(task.id)
   const questionRequest = questionRequests.begin(task.id)
@@ -696,6 +746,7 @@ async function openTask(task: EvaluationTask) {
   }
   if (taskDetailRequests.isCurrent(detailRequest) && activeTaskId.value === requestedTaskId) {
     void loadQuestions(false, questionRequest)
+    poller.start()
   }
 }
 
@@ -945,11 +996,22 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  poller.stop()
   taskListRequests.invalidate()
   taskDetailRequests.invalidate()
   questionRequests.invalidate()
   activeExportController?.abort()
 })
+
+watch(tenantKey, () => {
+  poller.stop(); taskListRequests.invalidate(); taskDetailRequests.invalidate(); questionRequests.invalidate(); comparisonRequests.invalidate()
+  activeExportController?.abort(); latestLabelSaveByTask.clear(); activeLabelSaveToken = null; savingLabels.value = false
+  datasetsVisible.value = false; createVisible.value = false; createDatasetId.value = ''; createVersionId.value = ''
+  tasks.value = []; nextCursor.value = ''; detail.value = null; activeTaskId.value = ''; questions.value = []; questionCursor.value = ''
+  detailLoading.value = false; detailError.value = ''; questionLoading.value = false; pollingPaused.value = false
+  for (const key of Object.keys(humanRatingPanels)) delete humanRatingPanels[Number(key)]
+  resetFilters()
+}, { flush: 'sync' })
 </script>
 
 <style scoped lang="less">
@@ -971,6 +1033,9 @@ onBeforeUnmount(() => {
     radial-gradient(circle at 92% 0%, rgba(7, 168, 114, 0.08), transparent 28%),
     #f7f9f8;
 }
+.workbench-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex-shrink: 0; margin-bottom: 15px; }
+.workbench-actions > p { margin: 0 auto 0 0; color: var(--eval-muted); font-size: 12px; line-height: 1.6; }
+.polling-notice { color: var(--eval-muted); margin: 0 0 10px; font-size: 12px; }
 
 .evaluation-header {
   position: relative;

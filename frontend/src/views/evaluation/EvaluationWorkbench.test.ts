@@ -56,6 +56,7 @@ interface WorkbenchBindings {
   tasks: { value: EvaluationTaskStub[] }
   toggleHumanRatings: (sampleIndex: number) => Promise<void>
   runComparison: () => Promise<void>
+  onTaskCreated: (task: EvaluationTaskStub) => Promise<void>
 }
 
 interface WorkbenchComponent {
@@ -89,6 +90,7 @@ const componentDependencies: Plugin = {
         export const computed = getter => ({ get value() { return getter() } })
         export const onMounted = callback => globalThis.__evaluationLifecycle.mounted.push(callback)
         export const onBeforeUnmount = callback => globalThis.__evaluationLifecycle.beforeUnmount.push(callback)
+        export const watch = (source, callback) => globalThis.__evaluationLifecycle.watchers.push(callback)
       `,
       'tdesign-vue-next': `
         export const MessagePlugin = {
@@ -98,7 +100,7 @@ const componentDependencies: Plugin = {
         }
       `,
       'vue-i18n': `export const useI18n = () => ({ t: key => key })`,
-      '@lucide/vue': ['ChevronDown', 'CircleAlert', 'Coins', 'Crosshair', 'Download', 'FlaskConical', 'LoaderCircle', 'MessageSquareText', 'RefreshCw', 'ScanLine', 'SlidersHorizontal', 'Timer'].map(name => `export const ${name} = {};`).join('\n'),
+      '@lucide/vue': ['ChevronDown', 'CircleAlert', 'Coins', 'Crosshair', 'Database', 'Download', 'FlaskConical', 'LoaderCircle', 'MessageSquareText', 'Plus', 'RefreshCw', 'ScanLine', 'SlidersHorizontal', 'Timer'].map(name => `export const ${name} = {};`).join('\n'),
       '@/stores/auth': `export const useAuthStore = () => ({ hasRole: () => true })`,
       '@/api/evaluation': `
         export const EVALUATION_STATUS = {
@@ -141,6 +143,8 @@ const componentDependencies: Plugin = {
       contents: modules[args.path],
       loader: 'js',
     }))
+    builder.onResolve({ filter: /Evaluation(?:Create|Datasets)Drawer\.vue$/ }, args => ({ path: args.path, namespace: 'evaluation-child' }))
+    builder.onLoad({ filter: /.*/, namespace: 'evaluation-child' }, () => ({ contents: 'export default {}', loader: 'js' }))
   },
 }
 
@@ -176,7 +180,7 @@ async function loadWorkbenchComponent(): Promise<WorkbenchComponent> {
 }
 
 function installWorkbenchApi(overrides: Record<string, (...args: any[]) => any>) {
-  ;(globalThis as any).__evaluationLifecycle = { mounted: [], beforeUnmount: [] }
+  ;(globalThis as any).__evaluationLifecycle = { mounted: [], beforeUnmount: [], watchers: [] }
   ;(globalThis as any).__evaluationMessages = []
   ;(globalThis as any).__evaluationWorkbenchApi = {
     appendRating: async () => ({}),
@@ -413,4 +417,37 @@ test('an older rubric revision stays in history without prefilling the current s
   const panel = workbench.ratingPanel(4)
   assert.equal(panel.items[0]?.rubric_version, '1.0.0')
   assert.equal(panel.score, 3)
+})
+
+test('a newly created evaluation refreshes the task list and opens its detail', async () => {
+  const created = { id: 'created-task', labels: [] }
+  const listed: string[] = [], details: string[] = []
+  installWorkbenchApi({
+    listTasks: async (filters: { datasetId: string }) => { listed.push(filters.datasetId); return { items: [created], next_cursor: '' } },
+    getDetail: async (id: string) => { details.push(id); return { task: created } },
+  })
+  const workbench = (await loadWorkbenchComponent()).setup({}, { expose() {} })
+  workbench.filters.datasetId = 'unrelated-filter'
+  await workbench.onTaskCreated(created)
+  assert.deepEqual(listed, [''])
+  assert.deepEqual(details, ['created-task'])
+  assert.equal(workbench.activeTaskId.value, 'created-task')
+  assert.equal(workbench.detail.value?.task.id, 'created-task')
+  assert.deepEqual(workbench.tasks.value.map(task => task.id), ['created-task'])
+})
+
+test('a tenant switch invalidates a previous task-list response and clears selected runs', async () => {
+  const delayed = deferred<{ items: EvaluationTaskStub[]; next_cursor: string }>()
+  let calls = 0
+  installWorkbenchApi({ listTasks: () => ++calls === 1 ? delayed.promise : Promise.resolve({ items: [{ id: 'new-space-task', labels: [] }], next_cursor: '' }) })
+  const workbench = (await loadWorkbenchComponent()).setup({}, { expose() {} })
+  const pending = workbench.loadTasks()
+  workbench.selectedTaskIds.value = ['old-task']
+  ;(globalThis as any).__evaluationLifecycle.watchers[0]()
+  await flushMicrotasks()
+  delayed.resolve({ items: [{ id: 'old-space-task', labels: [] }], next_cursor: '' })
+  await pending
+  assert.deepEqual(workbench.tasks.value.map(task => task.id), ['new-space-task'])
+  assert.deepEqual(workbench.selectedTaskIds.value, [])
+  assert.equal(workbench.detail.value, null)
 })

@@ -54,7 +54,8 @@ type EvaluationRequest struct {
 	// DatasetVersionID optionally pins one immutable dataset version.
 	DatasetVersionID string `json:"dataset_version_id,omitempty"`
 	// Configuration optionally overrides resolved retrieval/rerank/generation
-	// parameters; every override enters the experiment snapshot.
+	// parameters field by field. Omitted fields keep defaults; explicit zero
+	// values apply. The resolved configuration enters the experiment snapshot.
 	Configuration *types.EvaluationConfigurationOverrides `json:"configuration,omitempty"`
 	// Seed distinguishes "not provided" (nil) from an explicit seed=0.
 	Seed *int `json:"seed,omitempty"`
@@ -62,7 +63,7 @@ type EvaluationRequest struct {
 
 // Evaluation godoc
 // @Summary      执行评估
-// @Description  对知识库进行评估测试
+// @Description  对知识库进行评估测试；configuration 按字段覆盖，省略保留默认值，显式 0 生效
 // @Tags         评估
 // @Accept       json
 // @Produce      json

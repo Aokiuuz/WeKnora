@@ -25,6 +25,12 @@ type evaluationExecutionRegistryStub struct {
 	requestedVersion string
 }
 
+func (*evaluationExecutionRegistryStub) ImportDataset(
+	context.Context, uint64, *types.EvaluationDatasetImportInput,
+) (*types.EvaluationDatasetImportResult, error) {
+	return nil, interfaces.ErrEvaluationDatasetInvalid
+}
+
 func (*evaluationExecutionRegistryStub) CreateDataset(
 	context.Context, uint64, string, string,
 ) (*types.EvaluationDataset, error) {

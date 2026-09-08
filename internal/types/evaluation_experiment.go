@@ -36,11 +36,26 @@ type EvaluationGenerationOverrides struct {
 	MaxTokens   *int     `json:"max_tokens,omitempty"`
 }
 
-// EvaluationConfigurationOverrides carries optional resolved-parameter
-// overrides. Every override participates in the experiment snapshot and hash.
+// EvaluationRetrievalOverrides carries optional retrieval request fields.
+// Omitted fields preserve resolved defaults; explicit zero values are applied.
+type EvaluationRetrievalOverrides struct {
+	VectorThreshold  *float64 `json:"vector_threshold,omitempty"`
+	KeywordThreshold *float64 `json:"keyword_threshold,omitempty"`
+	EmbeddingTopK    *int     `json:"embedding_top_k,omitempty"`
+}
+
+// EvaluationRerankOverrides carries optional rerank request fields.
+// Omitted fields preserve resolved defaults; explicit zero values are applied.
+type EvaluationRerankOverrides struct {
+	RerankTopK      *int     `json:"rerank_top_k,omitempty"`
+	RerankThreshold *float64 `json:"rerank_threshold,omitempty"`
+}
+
+// EvaluationConfigurationOverrides carries optional request parameters.
+// The resolved values enter the experiment snapshot and its hash.
 type EvaluationConfigurationOverrides struct {
-	Retrieval  *EvaluationRetrievalSnapshot   `json:"retrieval,omitempty"`
-	Rerank     *EvaluationRerankSnapshot      `json:"rerank,omitempty"`
+	Retrieval  *EvaluationRetrievalOverrides  `json:"retrieval,omitempty"`
+	Rerank     *EvaluationRerankOverrides     `json:"rerank,omitempty"`
 	Generation *EvaluationGenerationOverrides `json:"generation,omitempty"`
 }
 

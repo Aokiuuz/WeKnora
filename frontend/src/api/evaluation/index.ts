@@ -12,38 +12,7 @@ export {
   type EvaluationTaskFilters,
 } from './query'
 
-export interface EvaluationRequestToken {
-  readonly key: string
-  readonly generation: number
-}
-
-export interface EvaluationRequestGate {
-  begin: (key: string) => EvaluationRequestToken
-  isCurrent: (token: EvaluationRequestToken) => boolean
-  invalidate: () => void
-}
-
-/**
- * Gives each logical request a key and monotonically increasing generation.
- * A response is applicable only while both values still identify the newest
- * request owned by that UI surface.
- */
-export function createEvaluationRequestGate(): EvaluationRequestGate {
-  let generation = 0
-  let currentKey = ''
-
-  return {
-    begin: (key: string) => {
-      currentKey = key
-      return { key, generation: ++generation }
-    },
-    isCurrent: token => token.generation === generation && token.key === currentKey,
-    invalidate: () => {
-      currentKey = ''
-      generation += 1
-    },
-  }
-}
+export { createEvaluationRequestGate, type EvaluationRequestGate, type EvaluationRequestToken } from './requestGate'
 
 export const EVALUATION_STATUS = {
   pending: 0,

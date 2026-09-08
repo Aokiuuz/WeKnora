@@ -15,10 +15,10 @@ import { notifyLoginSuccess } from '@/utils/loginNotify'
 import { renderWorkspaceNotifyContent } from '@/utils/workspaceNotifyContent'
 
 // TDesign locale configs
-import enUSConfig from 'tdesign-vue-next/esm/locale/en_US'
-import zhCNConfig from 'tdesign-vue-next/esm/locale/zh_CN'
-import koKRConfig from 'tdesign-vue-next/esm/locale/ko_KR'
-import ruRUConfig from 'tdesign-vue-next/esm/locale/ru_RU'
+import enUSConfig from 'tdesign-vue-next/es/locale/en_US'
+import zhCNConfig from 'tdesign-vue-next/es/locale/zh_CN'
+import koKRConfig from 'tdesign-vue-next/es/locale/ko_KR'
+import ruRUConfig from 'tdesign-vue-next/es/locale/ru_RU'
 
 const { locale, t, tm } = useI18n()
 const { formatRole, roleIcon } = useRoleLabel()

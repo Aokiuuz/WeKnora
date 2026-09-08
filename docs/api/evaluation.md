@@ -22,6 +22,9 @@
 | POST | `/evaluation/tasks/:task_id/questions/:sample_index/ratings` | Admin | `EvaluationHumanRatingRevision` |
 | POST | `/evaluation/datasets` | Admin | `EvaluationDataset` |
 | GET | `/evaluation/datasets` | Viewer | `{items: EvaluationDataset[]}` |
+| POST | `/evaluation/datasets/import` | Admin | `{dataset, version, replayed}` |
+| GET | `/evaluation/datasets/catalog` | Viewer | `{items, limits}` |
+| GET | `/evaluation/datasets/catalog/:id` | Viewer | `{id, name, description, content, manifest}` |
 | POST | `/evaluation/datasets/:id/versions` | Admin | `EvaluationDatasetVersion` |
 | GET | `/evaluation/datasets/:id/versions` | Viewer | `{items: EvaluationDatasetVersion[]}` |
 
@@ -50,6 +53,8 @@ curl -X POST 'http://localhost:8080/api/v1/evaluation' \
 ```
 
 模型提供方不支持请求种子时返回 `422`。数据集、版本或源知识库不可见时返回 `404`。
+
+`configuration` 的检索、重排序和生成参数逐字段覆盖。省略的字段保留已解析默认值，显式 `0` 参与覆盖。例如 `{"configuration":{"retrieval":{"embedding_top_k":23}}}` 只修改候选数量，向量阈值、关键词阈值和重排序参数保留默认配置。实验快照保存全部已解析数值，供结果比较和复现使用。
 
 ## 任务 DTO
 
@@ -107,6 +112,51 @@ curl -X POST 'http://localhost:8080/api/v1/evaluation' \
 
 ## 数据集与版本 DTO
 
+`POST /evaluation/datasets/import` 在一个事务内创建租户数据集、不可变初版、段落、问题和相关性关系。请求使用通用唯一标识符（Universally Unique Identifier，UUID）标识一次导入：
+
+```json
+{
+  "request_id": "d64cd39f-6e20-48b6-991a-360b27cb6b62",
+  "name": "阅读理解子集",
+  "description": "固定来源与抽样规则",
+  "content": {
+    "passages": [{"pid":"p-1","content":"段落内容","metadata":{"source":"manual"}}],
+    "questions": [{"qid":"q-1","question":"问题文本","answer":"参考答案"}],
+    "relevance": [{"qid":"q-1","pid":"p-1","grade":1}]
+  }
+}
+```
+
+`request_id` 使用小写连字符格式的非零 UUID。相同租户使用同一 `request_id` 重试相同请求时，响应返回同一个数据集和初版，并设置 `replayed:true`。首次创建返回 `replayed:false`。请求指纹包含名称、描述和完整版本输入，数组顺序也参与指纹；同一 `request_id` 对应不同请求时返回 `409`。其他租户拥有独立的请求标识空间。数据集追加版本后，导入重试仍返回初版，数据集的 `current_version_id` 指向当前版本。
+
+导入要求 `passages` 和 `questions` 为非空数组，`relevance` 为数组。段落与问题标识在各自数组内唯一，相关性关系引用已存在的标识，同一问题和段落只保留一项关系。段落内容与问题文本包含非空白文本；`answer` 可以为空字符串。`grade` 必须显式提交整数，范围为 `0` 至 `2147483647`。`0` 表示已标注不相关，未提供关系的组合保持未标注。
+
+导入与版本接口均验证完整 JSON 请求，拒绝未知字段、重复字段、尾随内容、截断输入、无效的八位 Unicode 转换格式（Unicode Transformation Format – 8-bit，UTF-8）字节和空标量。`metadata` 为可选 JSON 对象，嵌套属性可以为 `null`。名称最长 255 个 Unicode 字符，段落和问题标识最长 128 个 Unicode 字符；内容保存原文。描述使用 `max_question_bytes` 上限，参考答案和段落元数据使用 `max_passage_bytes` 上限。字段或引用错误返回 `400`，配置限额超限返回 `413`，失败导入不创建数据集身份或版本。
+
+## 公开数据集目录
+
+`GET /evaluation/datasets/catalog` 返回固定内嵌公开评测包与服务器实际限制。目录条目包含 `id`、`name`、`description`、`language`、`source_url`、`license`、`counts` 和 `limitations`。`counts` 包含 `passages`、`questions`、`relevance`、`source_documents`、`answerable`、`unanswerable` 和 `distractor_passages`。
+
+`GET /evaluation/datasets/catalog/:id` 返回可直接用于导入的 `content`，并通过 `manifest` 提供上游提交、抽样规则、文件摘要和使用限制。服务只读取编译到二进制中的 `cmrc2018-dev` 和 `squad2-dev`；按安全散列算法 256 位（Secure Hash Algorithm 256-bit，SHA-256）校验注册输入文件，再核对三类记录数量。未知条目返回 `404`，缺失或损坏的目录包返回 `500`。资料包 `weknora-docs` 保存在仓库中，用于知识库资料上传。
+
+`limits` 字段如下。部署可配置前六项，客户端应读取响应值。
+
+| 字段 | 默认值 | 单位或作用 |
+| --- | --- | --- |
+| `max_request_body_bytes` | 67108864 | 完整请求体字节 |
+| `max_passages` | 100000 | 段落数量 |
+| `max_questions` | 10000 | 问题数量 |
+| `max_relevance` | 1000000 | 相关性关系数量 |
+| `max_question_bytes` | 65536 | 问题或描述的 UTF-8 字节 |
+| `max_passage_bytes` | 1048576 | 段落、参考答案或元数据的 UTF-8 字节 |
+| `max_name_chars` | 255 | 名称字符数 |
+| `max_id_chars` | 128 | 段落或问题标识字符数 |
+| `max_grade` | 2147483647 | 相关性等级上界 |
+
+公开子集中的额外候选段落属于未标注资料。斯坦福问答数据集（Stanford Question Answering Dataset，SQuAD）2.0 无答案题的等级 `0` 只对应原始给定上下文；平台的检索得分和单参考答案得分需要结合目录限制解释。
+
+## 独立创建数据集与版本
+
 `POST /evaluation/datasets` 接受 `name` 和可选 `description`。数据集响应包含 `id`、`scope`、可选 `owner_tenant_id`、`name`、`description`、`current_version_id`、`created_at` 和 `updated_at`。
 
 `POST /evaluation/datasets/:id/versions` 接受以下结构：
@@ -120,6 +170,8 @@ curl -X POST 'http://localhost:8080/api/v1/evaluation' \
 ```
 
 版本响应包含 `id`、`dataset_id`、`version_number`、`schema_version`、`artifact_sha256`、`content_sha256`、`manifest`、`passage_count`、`question_count`、`relevance_count` 和 `created_at`。
+
+向已有租户数据集提交相同内容哈希的版本时返回 `409`。版本内容哈希采用模式版本 1 的规范编码，段落按 `pid`、问题按 `qid`、相关性关系按 `qid/pid` 排序，并保留原始文本。导入请求指纹与版本内容哈希分别记录请求重试身份和内容身份。
 
 ## 指标目录
 

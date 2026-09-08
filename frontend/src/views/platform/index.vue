@@ -1,5 +1,5 @@
 <template>
-    <div class="main" ref="dropzone">
+    <div class="main" :class="{ 'main--evaluation': route.name === 'evaluationWorkbench' }" ref="dropzone">
         <Menu></Menu>
         <div v-if="isRouterAlive" class="platform-route-outlet">
             <RouterView />
@@ -249,6 +249,11 @@ onUnmounted(() => {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+}
+
+/* The evaluation workbench supplies its own narrow-screen layout. */
+.main--evaluation {
+    min-width: 0;
 }
 
 .upload-mask {

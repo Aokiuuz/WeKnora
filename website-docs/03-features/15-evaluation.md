@@ -16,7 +16,8 @@
 
 ```mermaid
 flowchart LR
-    A["创建数据集身份"] --> B["创建不可变版本<br/>passages / questions / relevance"]
+    P["公开目录或本地 JSON"] --> A["校验导入请求"]
+    A --> B["事务创建租户数据集与不可变初版<br/>passages / questions / relevance"]
     B --> C["POST /evaluation<br/>冻结数据集版本与实验配置"]
     C --> D["持久化任务与逐题结果"]
     D --> E["查询任务和逐题分页"]
@@ -47,6 +48,9 @@ flowchart LR
 | POST | `/evaluation/tasks/:task_id/questions/:sample_index/ratings` | Admin | 追加人工评分修订 |
 | POST | `/evaluation/datasets` | Admin | 创建租户数据集身份 |
 | GET | `/evaluation/datasets` | Viewer | 列出可见数据集 |
+| POST | `/evaluation/datasets/import` | Admin | 原子导入租户数据集与初版，支持请求重试 |
+| GET | `/evaluation/datasets/catalog` | Viewer | 读取公开数据集目录和实际导入限制 |
+| GET | `/evaluation/datasets/catalog/:id` | Viewer | 读取公开包内容和来源清单 |
 | POST | `/evaluation/datasets/:id/versions` | Admin | 创建不可变数据集版本 |
 | GET | `/evaluation/datasets/:id/versions` | Viewer | 列出数据集版本 |
 
@@ -74,6 +78,8 @@ curl -X POST "$BASE/api/v1/evaluation" \
 
 服务返回 `{"success":true,"data":EvaluationTask}`。模型提供方无法兑现请求种子时返回 `422`；数据集、版本或源知识库不可见时返回 `404`。
 
+配置参数逐字段应用。仅提交 `configuration.retrieval.embedding_top_k` 时，服务保留向量阈值、关键词阈值和重排序参数的默认值；显式提交的 `0` 作为覆盖值生效。实验快照保存所有已解析参数，因此局部请求和具有相同有效数值的完整请求生成相同配置快照。
+
 ## 查询与管理任务
 
 `GET /api/v1/evaluation/tasks` 按 `(start_time DESC, id DESC)` 使用不透明游标分页。支持 `status`、`dataset_id`、`dataset_version_id`、`model_id`、`started_from`、`started_to`、可重复的 `label`、`page_size` 和 `cursor`。时间参数使用 RFC 3339（Request for Comments 3339）格式；`page_size` 默认 20，最大 100。
@@ -97,6 +103,14 @@ curl -X POST "$BASE/api/v1/evaluation" \
 服务保留每次人工评分修订，并通过 `supersedes_id` 连接同一 rubric 的上一修订。
 
 ## 数据集版本接口
+
+评测工作台通过公开目录和本地 JSON 导入资料。公开目录提供中文机器阅读理解数据集（Chinese Machine Reading Comprehension，CMRC 2018）与斯坦福问答数据集（Stanford Question Answering Dataset，SQuAD 2.0）的固定开发集子集。每个子集包含 32 个段落和 24 道问题，并附有来源地址、许可证、上游提交、抽样规则、文件摘要及适用限制。目录中的记录数量和导入上限来自服务响应。
+
+CMRC 2018 子集包含 24 道可回答题。SQuAD 2.0 子集包含 16 道可回答题和 8 道原始给定上下文的无答案题。每题只保留原始问题与上下文的标注关系，额外候选段落保持未标注。无答案题的相关性等级 `0` 表示指定原文不相关；该标注范围限定在原始上下文。检索指标表示命中已标注原文的情况，无正例时的检索零分需要结合无答案题类型解释。平台版本保存一个参考答案，完整多答案及字符偏移保存在资料包的 `annotations.json`。
+
+`POST /api/v1/evaluation/datasets/import` 接受 `request_id`、`name`、可选 `description` 与 `content`。`content` 使用下方三个数组的结构。请求标识使用通用唯一标识符（Universally Unique Identifier，UUID），前端在失败重试期间保留同一个标识。服务在一个数据库事务内创建数据集身份、不可变初版与全部内容，成功响应为 `{"success":true,"data":{"dataset":...,"version":...,"replayed":false}}`。相同租户和请求标识重试相同输入时返回同一个初版，并设置 `replayed:true`；不同输入复用该标识时返回 `409`。
+
+服务在写入前检查请求体字节、数组规模、标识长度、引用关系、文本长度和相关性等级，拒绝未知字段、重复字段、尾随 JSON 与截断输入。导入要求段落和问题数组非空，相关性数组可以为空。元数据为 JSON 对象，参考答案可以为空字符串。配置上限通过 `GET /api/v1/evaluation/datasets/catalog` 的 `data.limits` 返回，客户端据此在文件读取和提交前校验。导入过程保存评测输入，模型运行通过单独的任务创建操作启动。
 
 创建数据集身份的请求体为 `{"name":"回归集","description":"核心问答回归"}`。创建版本时提交三个数组：
 

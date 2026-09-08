@@ -2538,7 +2538,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "对知识库进行评估测试",
+                "description": "对知识库进行评估测试；configuration 按字段覆盖，省略保留默认值，显式 0 生效",
                 "consumes": [
                     "application/json"
                 ],
@@ -2700,6 +2700,144 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "数据集",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/evaluation/datasets/catalog": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "返回服务内嵌资料的来源、许可、规模及当前导入限制",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "评估"
+                ],
+                "summary": "列出公开评测数据集",
+                "responses": {
+                    "200": {
+                        "description": "公开目录与实际限制",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/evaluation/datasets/catalog/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "校验内嵌资料摘要后返回可导入内容和来源清单",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "评估"
+                ],
+                "summary": "读取公开评测数据集内容",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "公开数据集 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "内容与来源清单",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "未知公开数据集",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/evaluation/datasets/import": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "request_id 在租户内幂等；不同输入复用同一标识返回 409",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "评估"
+                ],
+                "summary": "原子导入评测数据集与初版",
+                "parameters": [
+                    {
+                        "description": "数据集和初版",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationDatasetImportInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "数据集、版本和重放状态",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "输入无效",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "请求标识冲突",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "413": {
+                        "description": "超出配置限制",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -19525,10 +19663,27 @@ const docTemplate = `{
                     "$ref": "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationGenerationOverrides"
                 },
                 "rerank": {
-                    "$ref": "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationRerankSnapshot"
+                    "$ref": "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationRerankOverrides"
                 },
                 "retrieval": {
-                    "$ref": "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationRetrievalSnapshot"
+                    "$ref": "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationRetrievalOverrides"
+                }
+            }
+        },
+        "github_com_Tencent_WeKnora_internal_types.EvaluationDatasetImportInput": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "$ref": "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationDatasetVersionInput"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
                 }
             }
         },
@@ -19617,7 +19772,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Tencent_WeKnora_internal_types.EvaluationRerankSnapshot": {
+        "github_com_Tencent_WeKnora_internal_types.EvaluationRerankOverrides": {
             "type": "object",
             "properties": {
                 "rerank_threshold": {
@@ -19628,7 +19783,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Tencent_WeKnora_internal_types.EvaluationRetrievalSnapshot": {
+        "github_com_Tencent_WeKnora_internal_types.EvaluationRetrievalOverrides": {
             "type": "object",
             "properties": {
                 "embedding_top_k": {
@@ -24858,7 +25013,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "configuration": {
-                    "description": "Configuration optionally overrides resolved retrieval/rerank/generation\nparameters; every override enters the experiment snapshot.",
+                    "description": "Configuration optionally overrides resolved retrieval/rerank/generation\nparameters field by field. Omitted fields keep defaults; explicit zero\nvalues apply. The resolved configuration enters the experiment snapshot.",
                     "allOf": [
                         {
                             "$ref": "#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationConfigurationOverrides"

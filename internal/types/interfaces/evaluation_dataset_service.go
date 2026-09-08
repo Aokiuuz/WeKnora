@@ -17,6 +17,8 @@ var (
 
 // EvaluationDatasetRegistryService manages tenant and built-in evaluation datasets.
 type EvaluationDatasetRegistryService interface {
+	ImportDataset(ctx context.Context, tenantID uint64,
+		input *types.EvaluationDatasetImportInput) (*types.EvaluationDatasetImportResult, error)
 	CreateDataset(
 		ctx context.Context,
 		tenantID uint64,

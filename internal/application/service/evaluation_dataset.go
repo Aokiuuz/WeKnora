@@ -87,6 +87,9 @@ func (s *EvaluationDatasetRegistryService) CreateVersion(
 	if err := s.validateLimits(content); err != nil {
 		return nil, err
 	}
+	if err := validateEvaluationDatasetFields(content); err != nil {
+		return nil, err
+	}
 
 	versions, err := s.repo.ListVersions(ctx, tenantID, datasetID)
 	if err != nil {
@@ -268,6 +271,10 @@ func (s *EvaluationDatasetRegistryService) validateLimits(content *types.Evaluat
 			len(content.Relevance), s.limits.MaxRelevance, interfaces.ErrEvaluationDatasetLimitExceeded)
 	}
 	for _, passage := range content.Passages {
+		if len(passage.Metadata) > s.limits.MaxPassageBytes {
+			return fmt.Errorf("passage %q metadata exceeds max_passage_bytes: %w",
+				passage.PID, interfaces.ErrEvaluationDatasetLimitExceeded)
+		}
 		if len(passage.Content) > s.limits.MaxPassageBytes {
 			return fmt.Errorf("passage %q content %d bytes exceed limit %d: %w",
 				passage.PID, len(passage.Content), s.limits.MaxPassageBytes,

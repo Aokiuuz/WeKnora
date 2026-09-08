@@ -1,4 +1,7 @@
+import { evaluationFlowRu as evaluationFlow } from '../evaluationFlow'
+
 export default {
+  evaluationFlow,
   platformApiKeys: {
     title: 'Платформенные API-ключи',
     description: 'Учетные данные для автоматизации между рабочими пространствами. Для API пространства используйте X-Tenant-ID.',

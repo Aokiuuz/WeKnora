@@ -28,6 +28,20 @@ type stubEvaluationDatasetRegistry struct {
 	lastDatasetID string
 }
 
+func (s *stubEvaluationDatasetRegistry) ImportDataset(
+	ctx context.Context, tenantID uint64, input *types.EvaluationDatasetImportInput,
+) (*types.EvaluationDatasetImportResult, error) {
+	dataset, err := s.CreateDataset(ctx, tenantID, input.Name, input.Description)
+	if err != nil {
+		return nil, err
+	}
+	version, err := s.CreateVersion(ctx, tenantID, dataset.ID, input.Content)
+	if err != nil {
+		return nil, err
+	}
+	return &types.EvaluationDatasetImportResult{Dataset: dataset, Version: version}, nil
+}
+
 func (s *stubEvaluationDatasetRegistry) CreateDataset(
 	_ context.Context, tenantID uint64, name, description string,
 ) (*types.EvaluationDataset, error) {
@@ -135,6 +149,9 @@ func setupEvaluationDatasetRouter(
 		cfg.Evaluation = &config.EvaluationConfig{Dataset: limits}
 	}
 	h := NewEvaluationDatasetHandler(cfg, registry)
+	engine.POST("/api/v1/evaluation/datasets/import", h.ImportDataset)
+	engine.GET("/api/v1/evaluation/datasets/catalog", h.ListCatalog)
+	engine.GET("/api/v1/evaluation/datasets/catalog/:id", h.GetCatalogItem)
 	engine.POST("/api/v1/evaluation/datasets", h.CreateDataset)
 	engine.GET("/api/v1/evaluation/datasets", h.ListDatasets)
 	engine.POST("/api/v1/evaluation/datasets/:id/versions", h.CreateVersion)

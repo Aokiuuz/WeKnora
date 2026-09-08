@@ -21,6 +21,7 @@ on:
       - "scripts/check-migrate-secret-output.sh"
       - "skills/preloaded/**"
       - "testdata/**"
+      - "dataset/**"
       - "docker/Dockerfile.app"
       - ".github/workflows/app.yml"
   pull_request:
@@ -39,6 +40,7 @@ on:
       - "scripts/check-migrate-secret-output.sh"
       - "skills/preloaded/**"
       - "testdata/**"
+      - "dataset/**"
       - "docker/Dockerfile.app"
       - ".github/workflows/app.yml"
   workflow_dispatch:

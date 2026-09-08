@@ -1,4 +1,7 @@
+import { evaluationFlowEn as evaluationFlow } from '../evaluationFlow'
+
 export default {
+  evaluationFlow,
   menu: {
     sessionInProgress: 'Conversation in progress',
     knowledgeBase: 'Knowledge Base',

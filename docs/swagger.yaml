@@ -1284,9 +1284,20 @@ definitions:
       generation:
         $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationGenerationOverrides'
       rerank:
-        $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationRerankSnapshot'
+        $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationRerankOverrides'
       retrieval:
-        $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationRetrievalSnapshot'
+        $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationRetrievalOverrides'
+    type: object
+  github_com_Tencent_WeKnora_internal_types.EvaluationDatasetImportInput:
+    properties:
+      content:
+        $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationDatasetVersionInput'
+      description:
+        type: string
+      name:
+        type: string
+      request_id:
+        type: string
     type: object
   github_com_Tencent_WeKnora_internal_types.EvaluationDatasetPassageInput:
     properties:
@@ -1343,14 +1354,14 @@ definitions:
       top_p:
         type: number
     type: object
-  github_com_Tencent_WeKnora_internal_types.EvaluationRerankSnapshot:
+  github_com_Tencent_WeKnora_internal_types.EvaluationRerankOverrides:
     properties:
       rerank_threshold:
         type: number
       rerank_top_k:
         type: integer
     type: object
-  github_com_Tencent_WeKnora_internal_types.EvaluationRetrievalSnapshot:
+  github_com_Tencent_WeKnora_internal_types.EvaluationRetrievalOverrides:
     properties:
       embedding_top_k:
         type: integer
@@ -5368,7 +5379,8 @@ definitions:
         - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationConfigurationOverrides'
         description: |-
           Configuration optionally overrides resolved retrieval/rerank/generation
-          parameters; every override enters the experiment snapshot.
+          parameters field by field. Omitted fields keep defaults; explicit zero
+          values apply. The resolved configuration enters the experiment snapshot.
       dataset_id:
         description: ID of dataset to evaluate
         type: string
@@ -8409,7 +8421,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 对知识库进行评估测试
+      description: 对知识库进行评估测试；configuration 按字段覆盖，省略保留默认值，显式 0 生效
       parameters:
       - description: 评估请求参数
         in: body
@@ -8620,6 +8632,92 @@ paths:
       - Bearer: []
       - ApiKeyAuth: []
       summary: 创建评测数据集版本
+      tags:
+      - 评估
+  /evaluation/datasets/catalog:
+    get:
+      description: 返回服务内嵌资料的来源、许可、规模及当前导入限制
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 公开目录与实际限制
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 列出公开评测数据集
+      tags:
+      - 评估
+  /evaluation/datasets/catalog/{id}:
+    get:
+      description: 校验内嵌资料摘要后返回可导入内容和来源清单
+      parameters:
+      - description: 公开数据集 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 内容与来源清单
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 未知公开数据集
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 读取公开评测数据集内容
+      tags:
+      - 评估
+  /evaluation/datasets/import:
+    post:
+      consumes:
+      - application/json
+      description: request_id 在租户内幂等；不同输入复用同一标识返回 409
+      parameters:
+      - description: 数据集和初版
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.EvaluationDatasetImportInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 数据集、版本和重放状态
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 输入无效
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: 请求标识冲突
+          schema:
+            additionalProperties: true
+            type: object
+        "413":
+          description: 超出配置限制
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 原子导入评测数据集与初版
       tags:
       - 评估
   /evaluation/metrics:
