@@ -119,6 +119,7 @@ func applyRawPromptCacheUsage(data []byte, usage *types.TokenUsage) {
 	if usage == nil || len(data) == 0 {
 		return
 	}
+	types.CaptureReportedCost(data, usage)
 	var raw rawPromptCacheUsage
 	if json.Unmarshal(data, &raw) != nil {
 		return

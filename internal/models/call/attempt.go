@@ -135,9 +135,11 @@ func ParseJSONUsage(body []byte) *types.TokenUsage {
 			prompt = total - completion
 		}
 	}
-	return &types.TokenUsage{
+	result := &types.TokenUsage{
 		UsageReported: true, PromptTokens: prompt, CompletionTokens: completion, TotalTokens: total,
 	}
+	types.CaptureReportedCost(body, result)
+	return result
 }
 
 // WithNewBatch assigns a fresh logical batch identity to the first request attempt.

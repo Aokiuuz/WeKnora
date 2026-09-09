@@ -166,6 +166,24 @@ func (c *activeCall) finish(ctx context.Context, status string, callErr error, u
 				}
 			}
 		}
+		// OpenRouter reports the routed request's USD cost, which can differ
+		// from a catalog minimum or configured estimate. Retain both facts.
+		if status == types.ModelCallStatusSuccess && usage != nil &&
+			usage.ReportedCost != nil && c.record.Currency == "USD" {
+			var snapshot map[string]any
+			if json.Unmarshal(completion.ModelSnapshot, &snapshot) == nil && snapshot["provider"] == "openrouter" {
+				if cost, ok := types.DecimalCostMicrounits(*usage.ReportedCost); ok {
+					billing := snapshot["billing_usage"].(map[string]any)
+					billing["price_estimate_microunits"] = completion.CostMicrounits
+					billing["cost_source"] = "openrouter_usage_cost"
+					if encoded, err := json.Marshal(snapshot); err == nil {
+						completion.ModelSnapshot = types.JSON(encoded)
+						completion.CostMicrounits = &cost
+						completion.AccountingComplete = true
+					}
+				}
+			}
+		}
 		finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ledgerFinishTimeout)
 		defer cancel()
 		var err error

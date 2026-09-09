@@ -1,0 +1,111 @@
+name: weknora-personal
+services:
+  postgres:
+    image: paradedb/paradedb:v0.22.2-pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  redis:
+    image: redis:7.0-alpine
+    restart: unless-stopped
+    volumes:
+      - redis:/data
+    command: [redis-server, --appendonly, 'yes']
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  docreader:
+    image: wechatopenai/weknora-docreader:latest
+    restart: unless-stopped
+    environment:
+      DOCREADER_IMAGE_OUTPUT_DIR: /tmp/docreader
+      TZ: Asia/Shanghai
+    volumes:
+      - docreader:/tmp/docreader
+    healthcheck:
+      test: [CMD, grpc_health_probe, '-addr=localhost:50051']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+  app:
+    image: weknora-nogit-go:1.26
+    restart: unless-stopped
+    working_dir: /app
+    entrypoint: [/runtime/WeKnora]
+    env_file: [.local-service/runtime.env]
+    environment:
+      DB_DRIVER: postgres
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ''
+      REDIS_USE_TLS: 'false'
+      DOCREADER_ADDR: docreader:50051
+      STORAGE_TYPE: local
+      LOCAL_STORAGE_BASE_DIR: /data/files
+      RETRIEVE_DRIVER: postgres
+      AUTO_MIGRATE: 'true'
+      AUTO_RECOVER_DIRTY: 'false'
+      MIGRATION_BACKUP_ID: personal-verified-backup
+      GIN_MODE: release
+      LOG_LEVEL: info
+      LOG_PATH: /var/log/weknora/app.log
+      LLM_DEBUG_LOG: 'false'
+      LANGFUSE_ENABLED: 'false'
+      GOLANG_PROTOBUF_REGISTRATION_CONFLICT: warn
+      JIEBA_DICT_DIR: /runtime/jieba
+      WEKNORA_SANDBOX_DOCKER_ENABLED: 'false'
+    volumes:
+      - .:/app:ro
+      - ./.local-service/bin:/runtime:ro
+      - ./.local-service/files:/data/files
+      - ./.local-service/logs:/var/log/weknora
+      - docreader:/tmp/docreader:ro
+    ports: ['127.0.0.1:18080:8080']
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      docreader: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, curl, -fsS, 'http://localhost:8080/health/ready']
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+  frontend:
+    image: dockerproxy.net/wechatopenai/weknora-ui:latest
+    restart: unless-stopped
+    entrypoint: [sh, /personal-entrypoint.sh]
+    environment:
+      APP_HOST: app
+      APP_PORT: '8080'
+      DEFAULT_LOCALE: zh-CN
+    ports: ['127.0.0.1:5174:80']
+    volumes:
+      - ./.local-service/dist:/usr/share/nginx/html
+      - ./frontend/docker-entrypoint.sh:/personal-entrypoint.sh:ro
+      - ./frontend/nginx.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./frontend/nginx-api-proxy.conf:/etc/nginx/api-proxy.conf:ro
+    depends_on:
+      app: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, wget, -q, --spider, 'http://127.0.0.1/']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+volumes:
+  postgres:
+  redis:
+  docreader:

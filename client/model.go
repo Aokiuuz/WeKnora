@@ -245,11 +245,13 @@ type ModelUsageOptions struct {
 	ModelIDs []string
 }
 
+// ModelCostTotal sums integer microcurrency amounts within one currency.
 type ModelCostTotal struct {
 	Currency       string `json:"currency"`
 	CostMicrounits int64  `json:"cost_microunits"`
 }
 
+// ProviderCacheStatistics reports cache tokens observed in provider responses.
 type ProviderCacheStatistics struct {
 	ReadTokens     int64    `json:"read_tokens"`
 	WriteTokens    int64    `json:"write_tokens"`
@@ -258,6 +260,7 @@ type ProviderCacheStatistics struct {
 	HitRate        *float64 `json:"hit_rate"`
 }
 
+// ApplicationCacheStatistics reports persistent embedding-cache lookups and item outcomes.
 type ApplicationCacheStatistics struct {
 	LookupCount             int64    `json:"lookup_count"`
 	BypassLookupCount       int64    `json:"bypass_lookup_count"`
@@ -271,6 +274,7 @@ type ApplicationCacheStatistics struct {
 	AverageLookupDurationMs float64  `json:"average_lookup_duration_ms"`
 }
 
+// ModelLatencyStatistics contains physical-call latency quantiles in milliseconds.
 type ModelLatencyStatistics struct {
 	P50Ms         *float64 `json:"p50_ms"`
 	P95Ms         *float64 `json:"p95_ms"`
@@ -278,6 +282,7 @@ type ModelLatencyStatistics struct {
 	ReportedCalls int64    `json:"reported_calls"`
 }
 
+// ModelUsageStatistics aggregates the call ledger for one model.
 type ModelUsageStatistics struct {
 	ModelID                 string                     `json:"model_id"`
 	CallCount               int64                      `json:"call_count"`
@@ -298,12 +303,14 @@ type ModelUsageStatistics struct {
 	ApplicationCache        ApplicationCacheStatistics `json:"application_cache"`
 }
 
+// ModelUsageReport contains model aggregates over a bounded time range.
 type ModelUsageReport struct {
 	From  time.Time              `json:"from"`
 	To    time.Time              `json:"to"`
 	Items []ModelUsageStatistics `json:"items"`
 }
 
+// ModelPriceVersion freezes rates and their effective interval for one model.
 type ModelPriceVersion struct {
 	CachePricing               *ModelCachePricing `json:"cache_pricing,omitempty"`
 	ID                         string             `json:"id"`
@@ -317,6 +324,7 @@ type ModelPriceVersion struct {
 	CreatedAt                  time.Time          `json:"created_at"`
 }
 
+// PutModelPriceRequest appends an effective-dated model price.
 type PutModelPriceRequest struct {
 	CachePricing               *ModelCachePricing `json:"cache_pricing,omitempty"`
 	ValidFrom                  time.Time          `json:"valid_from"`
@@ -334,10 +342,12 @@ type ModelCachePricing struct {
 	Write1hMicrounitsPerMillion *int64 `json:"write_1h_microunits_per_million"`
 }
 
+// ListModelUsage retrieves ledger aggregates for the selected time range.
 func (c *Client) ListModelUsage(ctx context.Context, options ModelUsageOptions) (*ModelUsageReport, error) {
 	return c.modelUsage(ctx, "/api/v1/models/usage", options)
 }
 
+// GetModelUsage retrieves ledger aggregates for one model.
 func (c *Client) GetModelUsage(
 	ctx context.Context,
 	modelID string,
@@ -371,6 +381,7 @@ func (c *Client) modelUsage(ctx context.Context, path string, options ModelUsage
 	return &response.Data, nil
 }
 
+// ListModelPrices retrieves the effective-dated price history of a model.
 func (c *Client) ListModelPrices(ctx context.Context, modelID string) ([]ModelPriceVersion, error) {
 	path := fmt.Sprintf("/api/v1/models/%s/pricing", url.PathEscape(modelID))
 	resp, err := c.doRequest(ctx, http.MethodGet, path, nil, nil)
@@ -387,6 +398,7 @@ func (c *Client) ListModelPrices(ctx context.Context, modelID string) ([]ModelPr
 	return response.Data, nil
 }
 
+// PutModelPrice appends a price version through the application API.
 func (c *Client) PutModelPrice(
 	ctx context.Context,
 	modelID string,

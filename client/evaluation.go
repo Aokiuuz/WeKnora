@@ -148,6 +148,7 @@ type EvaluationRuntimeCost struct {
 	Totals                  []ModelCostTotal `json:"totals"`
 }
 
+// EvaluationRuntimeDurations contains measured execution stages in milliseconds.
 type EvaluationRuntimeDurations struct {
 	DatasetLoadMs *int64 `json:"dataset_load_ms,omitempty"`
 	IndexingMs    *int64 `json:"indexing_ms,omitempty"`
@@ -157,6 +158,7 @@ type EvaluationRuntimeDurations struct {
 	TotalMs       *int64 `json:"total_ms,omitempty"`
 }
 
+// EvaluationRuntimeSamples counts question outcomes, including unfinished work.
 type EvaluationRuntimeSamples struct {
 	Total       int `json:"total"`
 	Started     int `json:"started"`
@@ -167,10 +169,13 @@ type EvaluationRuntimeSamples struct {
 	NotStarted  int `json:"not_started"`
 }
 
+// EvaluationRuntimeFailure preserves the numerator and denominator of a failure rate.
 type EvaluationRuntimeFailure struct {
 	Numerator   int `json:"numerator"`
 	Denominator int `json:"denominator"`
 }
+
+// EvaluationRuntimeTokens reports observed token totals and usage coverage.
 type EvaluationRuntimeTokens struct {
 	PromptTokens      int `json:"prompt_tokens"`
 	CompletionTokens  int `json:"completion_tokens"`

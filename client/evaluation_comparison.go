@@ -7,11 +7,13 @@ import (
 	"net/http"
 )
 
+// EvaluationComparisonRequest selects runs and an optional baseline.
 type EvaluationComparisonRequest struct {
 	TaskIDs        []string `json:"task_ids"`
 	BaselineTaskID string   `json:"baseline_task_id,omitempty"`
 }
 
+// EvaluationComparisonRun describes a persisted run and its observed coverage.
 type EvaluationComparisonRun struct {
 	TaskID                string                        `json:"task_id"`
 	Status                EvaluationStatus              `json:"status"`
@@ -30,6 +32,7 @@ type EvaluationComparisonRun struct {
 	TokenTotals           EvaluationTokenTotals         `json:"token_totals"`
 }
 
+// EvaluationPercentiles reports latency quantiles with valid and missing sample counts.
 type EvaluationPercentiles struct {
 	P50      float64 `json:"p50"`
 	P95      float64 `json:"p95"`
@@ -39,6 +42,7 @@ type EvaluationPercentiles struct {
 	NMissing int     `json:"n_missing"`
 }
 
+// EvaluationTokenTotals preserves token totals and reporting coverage.
 type EvaluationTokenTotals struct {
 	Prompt     int64 `json:"prompt"`
 	Completion int64 `json:"completion"`
@@ -60,18 +64,21 @@ type EvaluationConfidenceInterval struct {
 	Seed       int64   `json:"seed,omitempty"`
 }
 
+// EvaluationComparisonParameterValue contains one run's value at a configuration pointer.
 type EvaluationComparisonParameterValue struct {
 	TaskID  string          `json:"task_id"`
 	Missing bool            `json:"missing"`
 	Value   json.RawMessage `json:"value,omitempty"`
 }
 
+// EvaluationComparisonParameter compares a configuration field across runs.
 type EvaluationComparisonParameter struct {
 	Pointer string                               `json:"pointer"`
 	Differ  bool                                 `json:"differ"`
 	Values  []EvaluationComparisonParameterValue `json:"values"`
 }
 
+// EvaluationComparisonMetricValue contains one run's metric value and uncertainty.
 type EvaluationComparisonMetricValue struct {
 	TaskID           string                        `json:"task_id"`
 	IsBaseline       bool                          `json:"is_baseline"`
@@ -88,6 +95,7 @@ type EvaluationComparisonMetricValue struct {
 	NMissing         int                           `json:"n_missing"`
 }
 
+// EvaluationComparisonMetric groups values with their algorithm identity and compatibility.
 type EvaluationComparisonMetric struct {
 	Pointer        string                            `json:"pointer"`
 	Key            string                            `json:"key"`
@@ -98,6 +106,7 @@ type EvaluationComparisonMetric struct {
 	Values         []EvaluationComparisonMetricValue `json:"values"`
 }
 
+// EvaluationComparisonResponse contains the server's persisted-run comparison.
 type EvaluationComparisonResponse struct {
 	SchemaVersion  int                             `json:"schema_version"`
 	BaselineTaskID string                          `json:"baseline_task_id"`

@@ -39,7 +39,7 @@ func (c *Client) ExportEvaluation(
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		var body bytes.Buffer
 		_, _ = io.Copy(&body, io.LimitReader(response.Body, 1<<20))

@@ -1,4 +1,5 @@
 # 本地隐藏文件和目录
+.local-service/
 .env*
 !.env.example
 !.env.lite.example

@@ -45,6 +45,17 @@ jobs:
       - name: Run persistent HTTP evaluation and cache rebuild
         run: python3 scripts/evaluation-rag-http-smoke.py --output artifacts/evaluation-rag-http
 
+      - name: Verify provider accounting and cumulative budget guards
+        run: |
+          go test -tags sqlite_fts5 ./internal/modelobs ./internal/models/call ./internal/models/chat ./internal/types
+          python3 -B scripts/test_evaluation_openrouter_budget.py
+
+      - name: Verify cancellation and process-kill recovery
+        run: |
+          python3 scripts/evaluation-fault-http-smoke.py \
+            --output artifacts/evaluation-fault-http \
+            --server-binary artifacts/evaluation-rag-http/weknora-server
+
       - name: Check product version consistency
         run: python3 scripts/check-product-version.py
 
@@ -56,4 +67,5 @@ jobs:
           path: |
             artifacts/evaluation-regression/
             artifacts/evaluation-rag-http/
+            artifacts/evaluation-fault-http/
           if-no-files-found: error

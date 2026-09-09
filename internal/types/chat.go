@@ -19,16 +19,19 @@ const (
 
 // TokenUsage holds token consumption statistics returned by the model API.
 type TokenUsage struct {
-	UsageReportedCalls   int  `json:"usage_reported_calls,omitempty"`
-	UsageUnreportedCalls int  `json:"usage_unreported_calls,omitempty"`
-	CacheReportedCalls   int  `json:"cache_reported_calls,omitempty"`
-	CacheUnreportedCalls int  `json:"cache_unreported_calls,omitempty"`
-	UsageReported        bool `json:"usage_reported"`
-	CacheWrite5mTokens   *int `json:"cache_write_5m_tokens,omitempty"`
-	CacheWrite1hTokens   *int `json:"cache_write_1h_tokens,omitempty"`
-	PromptTokens         int  `json:"prompt_tokens"`
-	CompletionTokens     int  `json:"completion_tokens"`
-	TotalTokens          int  `json:"total_tokens"`
+	// ReportedCost preserves the provider's exact decimal amount. Its currency
+	// is interpreted only by a provider-specific accounting path.
+	ReportedCost         *string `json:"reported_cost,omitempty"`
+	UsageReportedCalls   int     `json:"usage_reported_calls,omitempty"`
+	UsageUnreportedCalls int     `json:"usage_unreported_calls,omitempty"`
+	CacheReportedCalls   int     `json:"cache_reported_calls,omitempty"`
+	CacheUnreportedCalls int     `json:"cache_unreported_calls,omitempty"`
+	UsageReported        bool    `json:"usage_reported"`
+	CacheWrite5mTokens   *int    `json:"cache_write_5m_tokens,omitempty"`
+	CacheWrite1hTokens   *int    `json:"cache_write_1h_tokens,omitempty"`
+	PromptTokens         int     `json:"prompt_tokens"`
+	CompletionTokens     int     `json:"completion_tokens"`
+	TotalTokens          int     `json:"total_tokens"`
 	// CachedTokens is the legacy alias for CacheReadTokens. It remains on the
 	// wire for compatibility with existing API consumers.
 	CachedTokens     int               `json:"cached_tokens,omitempty"`
