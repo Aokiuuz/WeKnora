@@ -45,6 +45,7 @@ type gateway struct {
 	db             *gorm.DB
 	client         *http.Client
 	key            string
+	embeddingKey   string
 	nonce          string
 	active         *Step
 	activeContext  context.Context
@@ -151,7 +152,11 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+g.key)
+	key := g.key
+	if step.Operation == "embedding" && g.embeddingKey != "" {
+		key = g.embeddingKey
+	}
+	req.Header.Set("Authorization", "Bearer "+key)
 	start := time.Now()
 	resp, sendErr := g.client.Do(req)
 	var response []byte
@@ -222,7 +227,7 @@ func validateWire(path string, b []byte, s Step) error {
 		_ = json.Unmarshal(raw["dimensions"], &dimensions)
 		_ = json.Unmarshal(raw["encoding_format"], &format)
 		_ = json.Unmarshal(raw["truncate_prompt_tokens"], &truncate)
-		if !reflect.DeepEqual(input, s.Input) || dimensions != 256 || format != "float" || truncate != 511 {
+		if !reflect.DeepEqual(input, s.Input) || dimensions != 1024 || format != "float" || truncate != 511 {
 			return errors.New("embedding payload")
 		}
 	} else {

@@ -34,6 +34,8 @@ type Options struct {
 	ConfirmPlanSHA256 string
 	ApprovedCNY       string
 	OutputDir         string
+	// Optional separate embedding key, read only after execution approval.
+	EmbeddingCredential func() (string, error)
 }
 
 // StepResult records one step's physical calls, usage, accounting and output evidence.
@@ -116,6 +118,13 @@ func run(
 	if strings.ContainsAny(key, "\r\n") {
 		return nil, errors.New("invalid credential")
 	}
+	embeddingKey := key
+	if opts.EmbeddingCredential != nil {
+		embeddingKey, err = opts.EmbeddingCredential()
+		if err != nil || strings.TrimSpace(embeddingKey) == "" || strings.ContainsAny(embeddingKey, "\r\n") {
+			return nil, errors.New("embedding credential unavailable or invalid")
+		}
+	}
 	// This command owns a process and does not initialize application telemetry.
 	if langfuse.GetManager().Enabled() {
 		return nil, errors.New("external tracing must be disabled")
@@ -158,7 +167,7 @@ func run(
 		client = newProviderClient()
 	}
 	gate := &gateway{
-		db: db, client: client, key: key, nonce: uuid.NewString(),
+		db: db, client: client, key: key, embeddingKey: embeddingKey, nonce: uuid.NewString(),
 		budget: min(approved, p.OriginalPriceUpperBoundMicrounits),
 	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

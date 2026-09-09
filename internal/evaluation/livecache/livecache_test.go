@@ -33,7 +33,7 @@ func TestPlanIsDeterministicAndPaired(t *testing.T) {
 	second, err := BuildPlan()
 	require.NoError(t, err)
 	require.Equal(t, p.SHA256, second.SHA256)
-	require.Equal(t, "f2003f6a4a1d69c9e93441a7b0374c1467fa5aa53679b7ed91ffa3a71a32b114", p.SHA256)
+	require.Equal(t, "aef4af0e29508383951d1d08aa8090389a40054bc346ed4ce0f8930809aa7634", p.SHA256)
 	require.Len(t, p.Steps, 20)
 	require.Less(t, p.OriginalPriceUpperBoundMicrounits, int64(1000000))
 	require.Greater(t, p.SharedPrefixApproxTokens, 2048)
@@ -127,7 +127,7 @@ func TestWireRejectsEmbeddingDefaultDrift(t *testing.T) {
 	require.NoError(t, err)
 	step := p.Steps[0]
 	base := map[string]any{
-		"model": EmbeddingModel, "input": step.Input, "dimensions": 256,
+		"model": EmbeddingModel, "input": step.Input, "dimensions": 1024,
 		"encoding_format": "float", "truncate_prompt_tokens": 511,
 	}
 	b, _ := json.Marshal(base)
@@ -158,9 +158,9 @@ func fixtureResponse(request *http.Request, mode string) (*http.Response, error)
 		_ = json.Unmarshal(payload["input"], &inputs)
 		data := []any{}
 		for i, text := range inputs {
-			vector := make([]float32, 256)
+			vector := make([]float32, 1024)
 			for j := range vector {
-				vector[j] = float32(len(text)+j+1) / 256
+				vector[j] = float32(len(text)+j+1) / 1024
 			}
 			data = append(data, map[string]any{"index": i, "embedding": vector})
 		}
@@ -261,6 +261,62 @@ func TestProductionPipelineOfflineFixture(t *testing.T) {
 	}
 }
 
+func TestSeparateCredentialsStayAtProviderBoundary(t *testing.T) {
+	p, err := BuildPlan()
+	require.NoError(t, err)
+	dir := filepath.Join(t.TempDir(), "separate-keys")
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		expected := "fixture-chat-only"
+		if strings.HasSuffix(r.URL.Path, "/embeddings") {
+			expected = "fixture-embedding-only"
+		}
+		require.Equal(t, "Bearer "+expected, r.Header.Get("Authorization"))
+		return fixtureResponse(r, "")
+	})}
+	result, err := run(context.Background(), Options{
+		Execute: true, OutputDir: dir, ConfirmPlanSHA256: p.SHA256, ApprovedCNY: "0.081",
+		EmbeddingCredential: func() (string, error) { return "fixture-embedding-only", nil },
+	}, func() (string, error) { return "fixture-chat-only", nil }, client, "offline-fixture")
+	require.NoError(t, err)
+	require.Equal(t, 2, result.EmbeddingRequests)
+	require.Equal(t, 16, result.ChatRequests)
+	files, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	for _, file := range files {
+		data, err := os.ReadFile(filepath.Join(dir, file.Name()))
+		require.NoError(t, err)
+		require.NotContains(t, string(data), "fixture-chat-only")
+		require.NotContains(t, string(data), "fixture-embedding-only")
+	}
+}
+
+func TestSeparateEmbeddingCredentialRespectsPreflightAndValidation(t *testing.T) {
+	p, err := BuildPlan()
+	require.NoError(t, err)
+	for _, execute := range []bool{false, true} {
+		_, err := Run(context.Background(), Options{
+			Execute: execute, OutputDir: filepath.Join(t.TempDir(), "preflight"),
+			EmbeddingCredential: func() (string, error) {
+				t.Fatal("embedding credential read before approval")
+				return "", nil
+			},
+		}, nil)
+		if execute {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+		}
+	}
+	for _, invalid := range []string{"", "bad\nheader"} {
+		_, err := Run(context.Background(), Options{
+			Execute: true, ConfirmPlanSHA256: p.SHA256, ApprovedCNY: "0.081",
+			OutputDir:           filepath.Join(t.TempDir(), "invalid"),
+			EmbeddingCredential: func() (string, error) { return invalid, nil },
+		}, func() (string, error) { return "fixture-chat-only", nil })
+		require.ErrorContains(t, err, "embedding credential")
+	}
+}
+
 func TestUnknownUsageAndFailureStopSubsequentRequests(t *testing.T) {
 	for _, test := range []struct {
 		mode   string
@@ -315,7 +371,7 @@ func TestGatewayRejectsRepeatedAttemptWithoutExternalCall(t *testing.T) {
 	}
 	require.NoError(t, g.arm(ctx, &step))
 	b, _ := json.Marshal(map[string]any{
-		"model": EmbeddingModel, "input": step.Input, "dimensions": 256,
+		"model": EmbeddingModel, "input": step.Input, "dimensions": 1024,
 		"encoding_format": "float", "truncate_prompt_tokens": 511,
 	})
 	for i := 0; i < 2; i++ {
@@ -361,7 +417,7 @@ func TestReservationFailureAndBudgetExhaustionMakeNoRequest(t *testing.T) {
 			}
 			require.NoError(t, g.arm(types.WithModelAccountingState(context.Background()), &step))
 			b, _ := json.Marshal(map[string]any{
-				"model": EmbeddingModel, "input": step.Input, "dimensions": 256,
+				"model": EmbeddingModel, "input": step.Input, "dimensions": 1024,
 				"encoding_format": "float", "truncate_prompt_tokens": 511,
 			})
 			req := httptest.NewRequest("POST", "/compatible-mode/v1/embeddings", bytes.NewReader(b))

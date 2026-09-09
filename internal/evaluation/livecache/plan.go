@@ -89,7 +89,7 @@ func models() (*types.Model, *types.Model) {
 		Parameters: types.ModelParameters{
 			BaseURL: Endpoint, Provider: "aliyun", InterfaceType: "openai", MaxConcurrency: 1,
 			EmbeddingParameters: types.EmbeddingParameters{
-				Dimension: 256, TruncatePromptTokens: 511, SupportsDimensionOverride: true,
+				Dimension: 1024, TruncatePromptTokens: 511, SupportsDimensionOverride: true,
 			},
 		},
 	}
@@ -101,7 +101,7 @@ func models() (*types.Model, *types.Model) {
 func BuildPlan() (*Plan, error) {
 	c, e := models()
 	p := &Plan{
-		Version: 1, Endpoint: Endpoint,
+		Version: 2, Endpoint: Endpoint,
 		ChatIdentity: types.EvaluationModelSnapshotFrom(c), EmbeddingIdentity: types.EvaluationModelSnapshotFrom(e),
 		ChatRequestLimit: MaxChatRequests, EmbeddingRequestLimit: MaxEmbeddingRequests, Currency: "CNY",
 		PrefixEstimator: "cl100k_base (approximation, not the Qwen tokenizer)",
@@ -114,7 +114,7 @@ func BuildPlan() (*Plan, error) {
 			"max_completion_tokens": 256, "cache_retention": "none", "provider_cache_mode": "implicit",
 		},
 		EmbeddingParameters: map[string]any{
-			"encoding_format": "float", "dimensions": 256, "truncate_prompt_tokens": 511,
+			"encoding_format": "float", "dimensions": 1024, "truncate_prompt_tokens": 511,
 		},
 		OmittedChatParameters: []string{"top_p", "seed", "tools"},
 	}
