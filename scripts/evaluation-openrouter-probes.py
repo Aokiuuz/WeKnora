@@ -1,5 +1,6 @@
 """Production adapter cache probes with persistent shared USD reservations."""
 import importlib.util
+import argparse
 import json
 import os
 from pathlib import Path
@@ -10,9 +11,15 @@ spec = importlib.util.spec_from_file_location('acceptance', Path(__file__).with_
 module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output', type=Path, default=Path('/evidence/probes-01'))
+    parser.add_argument('--budget-file', type=Path, default=Path('/evidence/budget.json'))
+    parser.add_argument('--probe-binary', type=Path, default=Path('/app/.local-service/bin/evaluation-provider-probe'))
+    args = parser.parse_args()
     credentials = json.loads(input())
-    root = Path('/evidence/probes-01'); root.mkdir()
-    relay = module.BudgetRelay(18810, credentials['openrouter_key'], root, Path('/evidence/budget.json'))
+    assert credentials.get('approved_usd') == 20
+    root = args.output; root.mkdir()
+    relay = module.BudgetRelay(18810, credentials['openrouter_key'], root, args.budget_file)
     relay.provider_only = 'gmicloud/fp8'
     prices = {}
     for route in ('models','embeddings/models'):
@@ -44,7 +51,7 @@ def main():
     def run(step):
         relay.round = step['step']
         before = len(relay.records)
-        proc = subprocess.run(['/app/.local-service/bin/evaluation-provider-probe'],input=json.dumps(common|step),text=True,capture_output=True,timeout=120,env=os.environ|{'GOLANG_PROTOBUF_REGISTRATION_CONFLICT':'warn'})
+        proc = subprocess.run([str(args.probe_binary)],input=json.dumps(common|step),text=True,capture_output=True,timeout=120,env=os.environ|{'GOLANG_PROTOBUF_REGISTRATION_CONFLICT':'warn'})
         (root/(step['step']+'.log')).write_text(proc.stderr,encoding='utf-8')
         assert proc.returncode==0, (step['step'],proc.stderr[-2000:])
         # Production logs may precede the final JSON line.

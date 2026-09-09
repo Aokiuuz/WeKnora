@@ -196,7 +196,6 @@ class Acceptance(offline.Regression):
             assert time.monotonic() < deadline, 'Evaluation timeout'
             time.sleep(1)
         save(self.output / (label + '-detail.json'), detail)
-        save(self.output / (label + '-detail.json'), detail)
         assert detail['task']['status'] == 2, detail['task']
         exported, raw = self.request('export JSON', 'GET', f'/api/v1/evaluation/tasks/{tid}/export?format=json')
         (self.output / (label + '.json')).write_bytes(raw)

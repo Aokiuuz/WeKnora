@@ -137,7 +137,16 @@ try {
         Compose up -d --wait --wait-timeout 180 postgres
         $db = (Compose ps -q postgres).Trim()
         Backup-Database $db ('before-build-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-        Docker run --rm --entrypoint sh -v "${repo}:/app" -v weknora-go-mod:/go/pkg/mod -v weknora-go-build:/root/.cache/go-build -w /app weknora-nogit-go:1.26 scripts/personal-build.sh
+        $buildCommit = 'unknown'
+        if (Get-Command git -ErrorAction SilentlyContinue) {
+            $revision = & git -c "safe.directory=$repo" -C $repo rev-parse HEAD 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $buildCommit = $revision.Trim()
+                $changes = & git -c "safe.directory=$repo" -C $repo status --porcelain 2>$null
+                if ($changes) { $buildCommit += '-dirty' }
+            }
+        }
+        Docker run --rm --entrypoint sh -e "WEKNORA_BUILD_COMMIT=$buildCommit" -v "${repo}:/app" -v weknora-go-mod:/go/pkg/mod -v weknora-go-build:/root/.cache/go-build -w /app weknora-nogit-go:1.26 scripts/personal-build.sh
         Docker run --rm --entrypoint sh -v "${repo}:/app" -v weknora-personal-npm:/root/.npm -w /app node:22-alpine scripts/personal-frontend-build.sh
         Set-Content -LiteralPath $stamp -Value $fingerprint
     }

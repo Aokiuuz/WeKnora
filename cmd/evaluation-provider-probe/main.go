@@ -30,6 +30,8 @@ type request struct {
 	Arm            string                  `json:"arm"`
 	Inputs         []string                `json:"inputs"`
 	Data           map[string]string       `json:"data"`
+	ChatModel      string                  `json:"chat_model"`
+	Messages       []chat.Message          `json:"messages"`
 	ChatPrice      types.ModelPriceVersion `json:"chat_price"`
 	EmbeddingPrice types.ModelPriceVersion `json:"embedding_price"`
 }
@@ -69,6 +71,12 @@ func (c *orderedChat) Chat(
 }
 
 func run(r request) error {
+	if r.ChatModel == "" {
+		r.ChatModel = "deepseek/deepseek-v4-flash"
+	}
+	if r.ChatModel != "deepseek/deepseek-v4-flash" && r.ChatModel != "deepseek/deepseek-v4-pro" {
+		return errors.New("unsupported probe model")
+	}
 	if r.BaseURL != "http://127.0.0.1:18810/v1" || r.Step == "" {
 		return errors.New("fixed loopback relay and step are required")
 	}
@@ -97,7 +105,7 @@ func run(r request) error {
 	ctx = context.WithValue(ctx, types.TenantIDContextKey, uint64(1))
 	ctx = modelobs.WithEvaluationTask(modelobs.WithPurpose(ctx, modelobs.PurposeEvaluation, true), r.Step)
 	chatModel := &types.Model{
-		ID: "probe-chat", TenantID: 1, Name: "deepseek/deepseek-v4-flash",
+		ID: "probe-chat", TenantID: 1, Name: r.ChatModel,
 		Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceRemote,
 		Parameters: types.ModelParameters{
 			Provider: "openrouter", InterfaceType: "openai", BaseURL: r.BaseURL,
@@ -142,8 +150,19 @@ func run(r request) error {
 		if err != nil {
 			return err
 		}
-		adapter := &orderedChat{inner: recorder.WrapChat(chatModel, provider), arm: r.Arm}
-		result, err = service.NewWikiPageEvaluationRunner(adapter)(ctx, r.Data)
+		observed := recorder.WrapChat(chatModel, provider)
+		if len(r.Messages) > 0 {
+			var response *types.ChatResponse
+			response, err = observed.Chat(ctx, r.Messages, &chat.ChatOptions{
+				MaxTokens: 512, Temperature: 0, CacheRetention: chat.CacheRetentionNone,
+			})
+			if response != nil {
+				result = response.Content
+			}
+		} else {
+			adapter := &orderedChat{inner: observed, arm: r.Arm}
+			result, err = service.NewWikiPageEvaluationRunner(adapter)(ctx, r.Data)
+		}
 		if err != nil {
 			return err
 		}

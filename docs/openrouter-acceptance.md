@@ -54,4 +54,11 @@ python3 scripts/evaluation-openrouter-acceptance.py \
 
 `evaluation-openrouter-probes.py` 通过生产 Wiki 页面提示词和模型适配器执行内容变化失效及 30 组固定前缀对照。两组使用相同资料与生成参数，改变共享资料块的位置，交替请求顺序，并固定上游路由。供应商缓存收益按真实观察值报告。
 
+模型辅助复核使用 `evaluation-openrouter-judge.py`，按问题交替交换匿名答案 A、B 的顺序，将 DeepSeek V4 Pro 的正确性及证据支持性判断单独保存。单个模型评分者的判断需要结合原始答案与证据审查。两个脚本通过 `--probe-binary` 指定使用生产适配器的探测程序：
+
+```sh
+go build -buildvcs=false -tags sqlite_fts5 \
+  -o .local-service/bin/evaluation-provider-probe ./cmd/evaluation-provider-probe
+```
+
 实验输出包括结果 JSON、逗号分隔值（Comma-Separated Values，CSV）文件、数据库、供应商收据与费用预留记录。自动指标和模型辅助复核保留各自身份；人工评分字段只接受真实评分者的结果。
