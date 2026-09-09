@@ -37,5 +37,5 @@ func (r *RecallMetric) Compute(metricInput *types.MetricInput) float64 {
 	}
 
 	// Recall = average recall across all ground truth sets
-	return totalRecall / float64(len(gtSets))
+	return 0.5 * totalRecall / float64(len(gtSets))
 }
