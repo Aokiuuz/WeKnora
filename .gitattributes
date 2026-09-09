@@ -20,3 +20,6 @@ dataset/public/** -text
 # Verbatim licensed source files retain upstream whitespace as part of their hash.
 dataset/public/*/v1/LICENSE -whitespace
 dataset/public/*/v1/source_docs/** -whitespace
+# Acceptance manifests hash report bytes consistently across operating systems.
+docs/reports/final-acceptance/*.json text eol=lf
+docs/reports/final-acceptance/*.md text eol=lf

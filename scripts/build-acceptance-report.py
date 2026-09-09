@@ -16,7 +16,7 @@ REPO=Path(__file__).resolve().parents[1]
 OUT=args.output or REPO/'docs/reports/final-acceptance'
 OUT.mkdir(parents=True,exist_ok=True)
 def read(p): return json.loads(p.read_text(encoding='utf-8-sig'))
-def write(p,d): p.write_text(json.dumps(d,ensure_ascii=False,indent=2),encoding='utf-8')
+def write(p,d): p.write_text(json.dumps(d,ensure_ascii=False,indent=2),encoding='utf-8',newline='\n')
 manifest=read(ROOT/'live-04/manifest.json');assert manifest['status']=='passed'
 probe_status=read(ROOT/'probes-01/status.json');assert probe_status['status']=='passed'
 judge_status=read(ROOT/'judge-02/status.json');assert judge_status['judged_pairs']==48
@@ -210,7 +210,7 @@ Apple M4 工程证据对应提交 `1776aa442a491f1657196ca21da914bab197b17c`。�
 
 运行操作见 [个人服务说明](../../personal-service.md)，模型角色、价格口径与命令见 [OpenRouter 验收说明](../../openrouter-acceptance.md)，逐步展示见 [演示与交付索引](../../acceptance-demo.md)。`summary.json` 保存汇总数值，`human-review.json` 保存 96 份回答、证据段落和模型辅助意见，`wiki-pairs.json` 保存 30 组配对数据。人工评分需要真实评分者填写；本报告中的自动评分均保留机器评分身份。浏览器视觉交互尚未完成独立验证。
 '''
-(OUT/'README.md').write_text(report,encoding='utf-8')
+(OUT/'README.md').write_text(report,encoding='utf-8',newline='\n')
 write(OUT/'artifact-sha256.json',{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in OUT.iterdir() if p.is_file() and p.name!='artifact-sha256.json'})
 print(json.dumps({'report':str(OUT/'README.md'),'reported_actual_usd':str(paid),'held_usd':str(held)},ensure_ascii=False))
 
