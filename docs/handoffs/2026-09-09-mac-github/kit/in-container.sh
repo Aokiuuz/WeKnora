@@ -19,7 +19,10 @@ cp /kit/source-identity.json /evidence/source-identity.json
   python3 -c 'import sqlite3; print("Python SQLite", sqlite3.sqlite_version)'
 } > /evidence/software-versions.txt
 go version -m /usr/local/bin/weknora-server > /evidence/server-build.txt
-go list -m all > /evidence/go-modules.txt
+{
+  go version -m /usr/local/bin/weknora-server
+  go version -m /usr/local/bin/evaluation-reproduce
+} > /evidence/go-modules.txt
 sha256sum /usr/local/bin/weknora-server /usr/local/bin/evaluation-reproduce > /evidence/binaries.sha256
 find dataset -type f -print0 | sort -z | xargs -0 sha256sum > /evidence/dataset-files.sha256
 set +e
