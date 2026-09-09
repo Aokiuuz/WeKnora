@@ -58,6 +58,8 @@ python3 scripts/evaluation-openrouter-acceptance.py \
 
 模型辅助复核使用 `evaluation-openrouter-judge.py`，按问题交替交换匿名答案 A、B 的顺序，将 DeepSeek V4 Pro 的正确性及证据支持性判断单独保存。单个模型评分者的判断需要结合原始答案与证据审查。两个脚本通过 `--probe-binary` 指定使用生产适配器的探测程序：
 
+自动复核意外中断后，使用相同参数加 `--resume` 继续。脚本验证源结果摘要和评分提示词，沿用冻结报价，并跳过已有逐题结果；无效评分保留原始输出，避免自动重复扣费。
+
 ```sh
 go build -buildvcs=false -tags sqlite_fts5 \
   -o .local-service/bin/evaluation-provider-probe ./cmd/evaluation-provider-probe

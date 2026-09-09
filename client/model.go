@@ -15,6 +15,7 @@ import (
 // ModelType represents the type of AI model
 type ModelType string
 
+// Supported model types identify each model's application role.
 const (
 	ModelTypeEmbedding   ModelType = "Embedding"   // Embedding model
 	ModelTypeRerank      ModelType = "Rerank"      // Rerank model
@@ -35,6 +36,7 @@ func AllModelTypes() []ModelType {
 // ModelSource represents the source of the model
 type ModelSource string
 
+// Supported model sources identify local runtimes and remote providers.
 const (
 	ModelSourceLocal       ModelSource = "local"        // Local model
 	ModelSourceRemote      ModelSource = "remote"       // Remote model

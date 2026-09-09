@@ -1,0 +1,812 @@
+[
+  {
+    "pair": 1,
+    "stable-prefix": {
+      "cache_read_tokens": 2765,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000129,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": false
+      },
+      "answer": "SUMMARY: Acceptance room 1 is a room with 101 seats, catalog identifier ACC-001, and daily opening hours from 09:00 to 17:00.\n\n# Acceptance room 1\n\nAcceptance room 1 contains 101 seats. Its catalog identifier is ACC-001. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 2834,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000123,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": false
+      },
+      "answer": "SUMMARY: Acceptance room 1 is a meeting room with 101 seats, catalog identifier ACC-001, open from 09:00 to 17:00 daily.\n\n# Acceptance room 1\n\nAcceptance room 1 contains 101 seats. Its catalog identifier is ACC-001. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 2,
+    "stable-prefix": {
+      "cache_read_tokens": 0,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000329,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": false
+      },
+      "answer": "SUMMARY: Acceptance room 2 is a room with 102 seats, identifier ACC-002, open from 09:00 to 17:00 daily.\n\n# Acceptance room 2\n\nAcceptance room 2 contains 102 seats. Its catalog identifier is ACC-002. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 3111,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000102,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": false
+      },
+      "answer": "SUMMARY: Acceptance room 2 is a cataloged room with 102 seats, open daily hours from 09:00 to 17:00.\n\n# Acceptance room 2\n\nAcceptance room 2 contains 102 seats.\n\nIts catalog identifier is ACC-002.\n\nIt opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 3,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000123,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: This page provides details about Acceptance room 3, including its capacity, catalog identifier, and operating hours.\n\n# Acceptance room 3\n\nAcceptance room 3 contains 103 seats. Its catalog identifier is ACC-003. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000292,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 3 is a room with 103 seats, catalog identifier ACC-003, open from 09:00 to 17:00.\n\n# Acceptance room 3\n\nAcceptance room 3 contains 103 seats. Its catalog identifier is ACC-003. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 4,
+    "stable-prefix": {
+      "cache_read_tokens": 2834,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000123,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": false
+      },
+      "answer": "SUMMARY: Acceptance room 4 is a room containing 104 seats, identified as ACC-004, open daily from 09:00 to 17:00.\n\n# Acceptance room 4\n\nAcceptance room 4 contains 104 seats. Its catalog identifier is ACC-004. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 2869,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.00012,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 4 is a room with 104 seats, catalog identifier ACC-004, open from 09:00 to 17:00.\n\n# Acceptance room 4\n\nAcceptance room 4 contains 104 seats. Its catalog identifier is ACC-004. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 5,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000124,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": false
+      },
+      "answer": "SUMMARY: Acceptance room 5 is a room with 105 seats, catalog identifier ACC-005, open daily from 09:00 to 17:00.\n\n# Acceptance room 5\n\nAcceptance room 5 contains 105 seats. Its catalog identifier is ACC-005. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000291,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 5 is a catalogued room with 105 seats, open from 09:00 to 17:00.\n\n# Acceptance room 5\n\nAcceptance room 5 contains 105 seats. Its catalog identifier is ACC-005. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 6,
+    "stable-prefix": {
+      "cache_read_tokens": 2834,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000123,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": false
+      },
+      "answer": "SUMMARY: Acceptance room 6 (ACC-006) is a room with 106 seats, open from 09:00 to 17:00 daily.\n\n# Acceptance room 6\n\nAcceptance room 6 contains 106 seats. Its catalog identifier is ACC-006. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000288,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: This page describes Acceptance room 6, including its seat count, catalog identifier, and opening hours.\n\n# Acceptance room 6\n\nAcceptance room 6 contains 106 seats. Its catalog identifier is ACC-006. It opens at 09:00 and closes at 17:00."
+    }
+  },
+  {
+    "pair": 7,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000123,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: This page provides factual details about Acceptance room 7, including its capacity, identifier, and operating hours.\n\n# Acceptance room 7\n\nAcceptance room 7 contains 107 seats. Its catalog identifier is ACC-007. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 3076,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000106,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": false
+      },
+      "answer": "SUMMARY: Acceptance room 7 is a room with 107 seats, catalog identifier ACC-007, open daily from 09:00 to 17:00.\n\n# Acceptance room 7\n\nAcceptance room 7 contains 107 seats. Its catalog identifier is ACC-007. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 8,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000123,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 8 is a room with 108 seats, catalog identifier ACC-008, operating from 09:00 to 17:00.\n\n# Acceptance room 8\n\nAcceptance room 8 contains 108 seats. Its catalog identifier is ACC-008. It opens at 09:00 and closes at 17:00."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000291,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 8 is a catalogued room with 108 seats, open from 09:00 to 17:00.\n\n# Acceptance room 8\n\nAcceptance room 8 contains 108 seats. Its catalog identifier is ACC-008. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 9,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000125,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: This page details Acceptance room 9, a venue with 109 seats, catalog identifier ACC-009, and operating hours from 09:00 to 17:00.\n\n# Acceptance room 9\n\nAcceptance room 9 contains 109 seats. Its catalog identifier is ACC-009. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000292,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 9 is a meeting room with 109 seats, catalog identifier ACC-009, open from 09:00 to 17:00.\n\n# Acceptance room 9\n\nAcceptance room 9 contains 109 seats. Its catalog identifier is ACC-009. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 10,
+    "stable-prefix": {
+      "cache_read_tokens": 2834,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000124,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": false
+      },
+      "answer": "SUMMARY: Acceptance room 10 is a catalog-listed room with 110 seats, open daily-style hours from 09:00 to 17:00 and identifier ACC-010.\n\n# Acceptance room 10\n\nAcceptance room 10 has a catalog identifier of ACC-010 and contains 110 seats. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000291,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 10 is a cataloged room with 110 seats, operating from 09:00 to 17:00.\n\n# Acceptance room 10\n\nAcceptance room 10 contains 110 seats. Its catalog identifier is ACC-010. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 11,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000123,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: This page lists the operational details and capacity of Acceptance room 11, including its seat count, catalog identifier, and opening hours.\n\n# Acceptance room 11\n\nAcceptance room 11 contains 111 seats. Its catalog identifier is ACC-011. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 2834,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000124,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 11 is a room with 111 seats, catalog identifier ACC-011, and regular opening hours from 09:00 to 17:00.\n\n# Acceptance room 11\n\nAcceptance room 11 contains 111 seats. Its catalog identifier is ACC-011. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 12,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000124,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 12 is a room with 112 seats, catalog identifier ACC-012, and open from 09:00 to 17:00.\n\n# Acceptance room 12\n\nAcceptance room 12 contains 112 seats. Its catalog identifier is ACC-012. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000288,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: This page lists the seats, catalog identifier, and opening hours for Acceptance room 12.\n\n# Acceptance room 12\n\nAcceptance room 12 contains 112 seats. Its catalog identifier is ACC-012. It opens at 09:00 and closes at 17:00."
+    }
+  },
+  {
+    "pair": 13,
+    "stable-prefix": {
+      "cache_read_tokens": 2938,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000114,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 13, a room with 113 seats and catalog identifier ACC-013, opens at 09:00 and closes at 17:00.\n\n# Acceptance room 13\n\nAcceptance room 13 contains 113 seats. Its catalog identifier is ACC-013. It opens at 09:00 and closes at 17:00."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.00029,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: This page lists the seat count, catalog identifier, and opening hours for Acceptance room 13.\n\n# Acceptance room 13\n\nAcceptance room 13 contains 113 seats. Its catalog identifier is ACC-013. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 14,
+    "stable-prefix": {
+      "cache_read_tokens": 3042,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000108,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 14 is a seated room with 114 seats, catalog identifier ACC-014, open from 09:00 to 17:00.\n\n# Acceptance room 14\n\nAcceptance room 14 contains 114 seats. Its catalog identifier is ACC-014. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 2800,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000126,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 14 is a cataloged room with 114 seats, identifier ACC-014, and opening hours from 09:00 to 17:00.\n\n# Acceptance room 14\n\nAcceptance room 14 contains 114 seats. Its catalog identifier is ACC-014. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 15,
+    "stable-prefix": {
+      "cache_read_tokens": 2973,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000113,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": false
+      },
+      "answer": "SUMMARY: Acceptance room 15 is a catalogued room with 115 seats, identified as ACC-015, operating daily from 09:00 to 17:00.\n\n# Acceptance room 15\n\nAcceptance room 15 contains 115 seats. Its catalog identifier is ACC-015. It opens at 09:00 and closes at 17:00. Days of operation are not specified."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000292,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 15 is a room with 115 seats, catalog identifier ACC-015, open from 09:00 to 17:00.\n\n# Acceptance room 15\n\nAcceptance room 15 contains 115 seats. Its catalog identifier is ACC-015. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 16,
+    "stable-prefix": {
+      "cache_read_tokens": 2973,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000113,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 16 is a room with 116 seats, catalog identifier ACC-016, and operating hours from 09:00 to 17:00.\n\n# Acceptance room 16\n\nAcceptance room 16 contains 116 seats.\n\nIts catalog identifier is ACC-016.\n\nIt opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 3042,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000107,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 16 is a catalogued room with 116 seats, operating hours from 09:00 to 17:00.\n\n# Acceptance room 16\n\nAcceptance room 16 contains 116 seats. Its catalog identifier is ACC-016. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 17,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000123,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 17 is a room with 117 seats, catalog identifier ACC-017, operating from 09:00 to 17:00.\n\n# Acceptance room 17\n\nAcceptance room 17 contains 117 seats. Its catalog identifier is ACC-017. It opens at 09:00 and closes at 17:00."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.00029,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: This page documents Acceptance room 17, including its catalog identifier, seat capacity, and opening hours.\n\n# Acceptance room 17\n\nAcceptance room 17 contains 117 seats. Its catalog identifier is ACC-017. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 18,
+    "stable-prefix": {
+      "cache_read_tokens": 3111,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.0001,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 18 details include its seating capacity, catalog identifier, and opening hours.\n\n# Acceptance room 18\n\nAcceptance room 18 contains 118 seats. Its catalog identifier is ACC-018. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000291,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 18 is a cataloged room with 118 seats, open from 09:00 to 17:00.\n\n# Acceptance room 18\n\nAcceptance room 18 contains 118 seats. Its catalog identifier is ACC-018. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 19,
+    "stable-prefix": {
+      "cache_read_tokens": 3076,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000106,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 19 is a room at a venue, cataloged as ACC-019 with 119 seats and open from 09:00 to 17:00.\n\n# Acceptance room 19\n\nAcceptance room 19 contains 119 seats. Its catalog identifier is ACC-019. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000292,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 19 is a cataloged room with 119 seats, opening at 09:00 and closing at 17:00.\n\n# Acceptance room 19\n\nAcceptance room 19 contains 119 seats. Its catalog identifier is ACC-019. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 20,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000125,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 20 is a room with 120 seats, catalog identifier ACC-020, operating from 09:00 to 17:00 with unspecified days.\n\n# Acceptance room 20\n\nAcceptance room 20 contains 120 seats. Its catalog identifier is ACC-020. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.00029,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": false
+      },
+      "answer": "SUMMARY: Acceptance room 20 is a 120-seat room with catalog identifier ACC-020, open daily from 09:00 to 17:00.\n\n# Acceptance room 20\n\nAcceptance room 20 contains 120 seats. Its catalog identifier is ACC-020. It opens at 09:00 and closes at 17:00."
+    }
+  },
+  {
+    "pair": 21,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000122,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 21 has 121 seats, operates from 09:00 to 17:00, and is identified as ACC-021.\n\n# Acceptance room 21\n\nAcceptance room 21 contains 121 seats. Its catalog identifier is ACC-021. It opens at 09:00 and closes at 17:00."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000292,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 21 is a room with 121 seats, catalog identifier ACC-021, open from 09:00 to 17:00.\n\n# Acceptance room 21\n\nAcceptance room 21 contains 121 seats. Its catalog identifier is ACC-021. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 22,
+    "stable-prefix": {
+      "cache_read_tokens": 3007,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.00011,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": false
+      },
+      "answer": "SUMMARY: Acceptance room 22 is a catalogued room with 122 seats, open from 09:00 to 17:00 daily.\n\n# Acceptance room 22\n\nAcceptance room 22 contains 122 seats. Its catalog identifier is ACC-022. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000292,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 22 is a room with 122 seats, catalog identifier ACC-022, open from 09:00 to 17:00.\n\n# Acceptance room 22\n\nAcceptance room 22 contains 122 seats. Its catalog identifier is ACC-022. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 23,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000121,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: This page details Acceptance room 23, including its capacity, catalog identifier, and operating hours.\n\n# Acceptance room 23\n\nAcceptance room 23 contains 123 seats. Its catalog identifier is ACC-023. It opens at 09:00 and closes at 17:00."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000292,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": false
+      },
+      "answer": "SUMMARY: Acceptance room 23 is a cataloged room with 123 seats, open daily from 09:00 to 17:00, identified as ACC-023.\n\n# Acceptance room 23\n\nAcceptance room 23 contains 123 seats. Its catalog identifier is ACC-023. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 24,
+    "stable-prefix": {
+      "cache_read_tokens": 2834,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000122,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 24 is a room containing 124 seats, with catalog identifier ACC-024, opening at 09:00 and closing at 17:00.\n\n# Acceptance room 24\n\nAcceptance room 24 contains 124 seats. Its catalog identifier is ACC-024. It opens at 09:00 and closes at 17:00."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000292,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 24 is a room with 124 seats, catalog identifier ACC-024, and opening hours from 09:00 to 17:00.\n\n# Acceptance room 24\n\nAcceptance room 24 contains 124 seats. Its catalog identifier is ACC-024. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 25,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000121,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: This page provides details about Acceptance room 25, including its capacity, catalog identifier, and operating hours.\n\n# Acceptance room 25\n\nAcceptance room 25 contains 125 seats. Its catalog identifier is ACC-025. It opens at 09:00 and closes at 17:00."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.00029,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 25 is a room with 125 seats, catalog identifier ACC-025, open from 09:00 to 17:00.\n\n# Acceptance room 25\n\nAcceptance room 25 contains 125 seats. Its catalog identifier is ACC-025. It opens at 09:00 and closes at 17:00."
+    }
+  },
+  {
+    "pair": 26,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000124,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 26 is a room with 126 seats, catalog identifier ACC-026, open from 09:00 to 17:00.\n\n# Acceptance room 26\n\nAcceptance room 26 contains 126 seats. Its catalog identifier is ACC-026. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.00029,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: This page lists the seat count, catalog identifier, and opening hours for Acceptance room 26.\n\n# Acceptance room 26\n\nAcceptance room 26 contains 126 seats. Its catalog identifier is ACC-026. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 27,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000125,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 27 is a room with 127 seats, identified by catalog identifier ACC-027, operating from 09:00 to 17:00.\n\n# Acceptance room 27\n\nAcceptance room 27 contains 127 seats. Its catalog identifier is ACC-027. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000292,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: This page describes Acceptance room 27, a room with 127 seats, catalog identifier ACC-027, operating from 09:00 to 17:00.\n\n# Acceptance room 27\n\nAcceptance room 27 contains 127 seats. Its catalog identifier is ACC-027. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 28,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000125,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: This page describes Acceptance room 28, a room with 128 seats, catalog identifier ACC-028, and operating hours from 09:00 to 17:00.\n\n# Acceptance room 28\n\nAcceptance room 28 contains 128 seats. Its catalog identifier is ACC-028. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    },
+    "page-first": {
+      "cache_read_tokens": 512,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000292,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 28 is a room with 128 seats, catalog identifier ACC-028, operating from 09:00 to 17:00.\n\n# Acceptance room 28\n\nAcceptance room 28 contains 128 seats. Its catalog identifier is ACC-028. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 29,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000123,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 29 is a cataloged room with 129 seats, open from 09:00 to 17:00, identified by ACC-029.\n\n# Acceptance room 29\n\nAcceptance room 29 contains 129 seats. Its catalog identifier is ACC-029. It opens at 09:00 and closes at 17:00."
+    },
+    "page-first": {
+      "cache_read_tokens": 3076,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000104,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: A catalog page listing the seating capacity, identifier, and operating hours of Acceptance room 29, an individual room.\n\n# Acceptance room 29\n\nAcceptance room 29 contains 129 seats. Its catalog identifier is ACC-029.\n\nIt opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  },
+  {
+    "pair": 30,
+    "stable-prefix": {
+      "cache_read_tokens": 2816,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000122,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 30 (ACC-030) has 130 seats and opens at 09:00, closing at 17:00.\n\n# Acceptance room 30\n\nAcceptance room 30 contains 130 seats. Its catalog identifier is ACC-030. It opens at 09:00 and closes at 17:00."
+    },
+    "page-first": {
+      "cache_read_tokens": 2869,
+      "prompt_tokens": 3457,
+      "cost_usd": 0.000121,
+      "fact_checks": {
+        "seats": true,
+        "catalog": true,
+        "hours": true,
+        "no_daily_claim": true
+      },
+      "answer": "SUMMARY: Acceptance room 30 is a 130-seat room, categorized as ACC-030, that opens at 09:00 and closes at 17:00.\n\n# Acceptance room 30\n\nAcceptance room 30 contains 130 seats. Its catalog identifier is ACC-030. It opens at 09:00 and closes at 17:00. The source does not specify days of operation."
+    }
+  }
+]

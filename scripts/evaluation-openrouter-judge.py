@@ -25,17 +25,24 @@ def main():
     p.add_argument('--run',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--budget-file',type=Path,required=True)
+    p.add_argument('--resume',action='store_true',help='Continue saved judgments without repeating completed pairs')
     p.add_argument('--probe-binary',type=Path,default=Path('/app/.local-service/bin/evaluation-provider-probe'))
-    args=p.parse_args(); credentials=json.loads(input());args.output.mkdir()
+    args=p.parse_args(); credentials=json.loads(input());args.output.mkdir(exist_ok=args.resume)
     assert credentials.get('approved_usd')==20
     relay=module.BudgetRelay(18810,credentials['openrouter_key'],args.output,args.budget_file)
     catalog=json.loads(relay.opener.open('https://openrouter.ai/api/v1/models',timeout=30).read())
     quote=next(m['pricing'] for m in catalog['data'] if m['id']==JUDGE)
+    if args.resume:
+        plan=json.loads((args.output/'plan.json').read_text())
+        assert plan['judge_model']==JUDGE and plan['prompt']==SYSTEM
+        assert plan['source_manifest_sha256']==module.offline.digest((args.run/'manifest.json').read_bytes())
+        quote=plan['quote']
     price={k:int((Decimal(quote[s])*10**12).quantize(Decimal(1),rounding=ROUND_HALF_UP))
            for k,s in [('input_microunits_per_million','prompt'),('output_microunits_per_million','completion')]}
     manifest=json.loads((args.run/'manifest.json').read_text())
     module.save(args.output/'plan.json',{'judge_model':JUDGE,'prompt':SYSTEM,'order':'alternating A/B','mode':'model-assisted; not human ratings','quote':quote,'source_manifest_sha256':module.offline.digest((args.run/'manifest.json').read_bytes())})
-    results=[]
+    results=json.loads((args.output/'judgments.json').read_text()) if args.resume else []
+    completed={(r['dataset'],r['qid']) for r in results}
     relay.start()
     try:
         for dataset in ('cmrc','squad'):
@@ -50,10 +57,11 @@ def main():
             truth={q['qid']:{indices[r['pid']] for r in corpus['relevance'] if r['qid']==q['qid'] and r['grade']>0} for q in corpus['questions']}
             for index,(one,two) in enumerate(zip(bundles[0][1]['questions'],bundles[1][1]['questions'])):
                 assert one['qid']==two['qid']
-                assert set(one['ground_truth_pids'])==truth[one['qid']]
+                if (dataset,one['qid']) in completed: continue
+                assert set(one['ground_truth_pids'] or [])==truth[one['qid']]
                 pair=[(bundles[0][0],one),(bundles[1][0],two)]
                 if index%2: pair.reverse()
-                payload={'question':one['question'],'reference_answer':one['reference_answer']}
+                payload={'question':one['question'],'reference_answer':one['reference_answer'] or ''}
                 identities={}
                 for label,(model,q) in zip(('A','B'),pair):
                     identities[label]=model
