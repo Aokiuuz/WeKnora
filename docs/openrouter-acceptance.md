@@ -4,6 +4,8 @@
 
 本机服务入口为 `http://127.0.0.1:5174`。运行项目外层的 `启动WeKnora.cmd` 可启动数据库、缓存、文档解析、后端和网页；具体配置见 [个人服务说明](personal-service.md)。
 
+仓库内同时提供 `Start-WeKnora.cmd`、`Stop-WeKnora.cmd` 和 `WeKnora-Status.cmd`，分别执行启动、停止和状态查看。
+
 模型管理中的远程模型使用 `https://openrouter.ai/api/v1`，供应商选择 OpenRouter，密钥填写账户提供的 API Key。API（Application Programming Interface，应用程序编程接口）密钥保存在本机私有配置或加密模型配置中。
 
 | 模型标识 | 用途 | 本次配置 |

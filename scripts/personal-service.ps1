@@ -113,7 +113,9 @@ try {
         $full = Join-Path $repo $inputPath
         if (Test-Path $full) { Get-ChildItem -LiteralPath $full -Recurse -File }
     }
-    $files += Get-ChildItem -LiteralPath $repo -File | Where-Object { $_.Name -match '^(go\.(mod|sum)|Makefile)$' }
+    $files += Get-ChildItem -LiteralPath $repo -File | Where-Object { $_.Name -match '^(go\.(mod|sum)|Makefile|VERSION)$' }
+    $files += Get-Item -LiteralPath (Join-Path $repo 'scripts/personal-build.sh')
+    $files += Get-Item -LiteralPath (Join-Path $repo 'scripts/personal-frontend-build.sh')
     $files += Get-ChildItem -LiteralPath (Join-Path $repo 'frontend') -File
     $fileSha = [Security.Cryptography.SHA256]::Create()
     try {

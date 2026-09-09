@@ -45,7 +45,7 @@ class BudgetTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError,'budget exhausted'):
             self.relay.forward('/v1/chat/completions',self.payload)
         self.assertEqual(self.relay.opener.calls,0)
-    def test_second_process_cannot_share_unlocked_budget(self):
+    def test_independent_budget_handle_cannot_take_lock(self):
         import fcntl
         with (self.root/'budget.lock').open('a') as lock:
             with self.assertRaises(BlockingIOError): fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)

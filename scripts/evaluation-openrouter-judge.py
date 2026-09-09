@@ -64,7 +64,9 @@ def main():
                          'step':step,'chat_model':JUDGE,'chat_price':price,'messages':[
                           {'role':'system','content':SYSTEM},{'role':'user','content':json.dumps(payload,ensure_ascii=False)}]}
                 before=len(relay.records)
-                proc=subprocess.run([str(args.probe_binary)],input=json.dumps(request),text=True,capture_output=True,timeout=120,env=os.environ|{'GOLANG_PROTOBUF_REGISTRATION_CONFLICT':'warn'})
+                proc=subprocess.run([str(args.probe_binary)],input=json.dumps(request).encode('utf-8'),capture_output=True,timeout=120,env=os.environ|{'GOLANG_PROTOBUF_REGISTRATION_CONFLICT':'warn'})
+                proc.stderr=proc.stderr.decode('utf-8',errors='replace')
+                proc.stdout=proc.stdout.splitlines()[-1].decode('utf-8')
                 (args.output/(step+'.log')).write_text(proc.stderr,encoding='utf-8')
                 assert proc.returncode==0,(step,proc.stderr[-1200:])
                 response=json.loads(proc.stdout.splitlines()[-1]);receipts=relay.records[before:]

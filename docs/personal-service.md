@@ -18,6 +18,8 @@
 
 脚本以当前源码构建后端和网页。源文件内容哈希保存在 `.local-service/build-stamp.txt`；源代码变化触发重新构建。构建使用本机已有的 `weknora-nogit-go:1.26` 和 `node:22-alpine` 镜像，网页运行在本机已有的 WeKnora Nginx 镜像中。依赖安装可能需要联网。这套入口针对本机现有环境。
 
+网页构建在 Linux 容器的临时目录中完成，成功后复制网页资源。后端构建写入提交身份和构建时间。构建失败时脚本尝试启动已有后端产物，并保留错误记录。项目根目录同时提供 `Start-WeKnora.cmd`、`Stop-WeKnora.cmd` 和 `WeKnora-Status.cmd`，便于从仓库目录启动、停止和查看状态。
+
 命令行操作：
 
 ```powershell

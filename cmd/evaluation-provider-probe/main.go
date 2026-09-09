@@ -109,14 +109,18 @@ func run(r request) error {
 		Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceRemote,
 		Parameters: types.ModelParameters{
 			Provider: "openrouter", InterfaceType: "openai", BaseURL: r.BaseURL,
-			APIKey: "acceptance-relay-placeholder", MaxOutputTokens: 512, ContextWindow: 32768, MaxConcurrency: 1}}
+			APIKey: "acceptance-relay-placeholder", MaxOutputTokens: 512, ContextWindow: 32768, MaxConcurrency: 1,
+		},
+	}
 	embedModel := &types.Model{
 		ID: "probe-embedding", TenantID: 1, Name: "qwen/qwen3-embedding-8b",
 		Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote,
 		Parameters: types.ModelParameters{
 			Provider: "openrouter", InterfaceType: "openai", BaseURL: r.BaseURL,
 			APIKey: "acceptance-relay-placeholder", MaxConcurrency: 1,
-			EmbeddingParameters: types.EmbeddingParameters{Dimension: 1024, SupportsDimensionOverride: true}}}
+			EmbeddingParameters: types.EmbeddingParameters{Dimension: 1024, SupportsDimensionOverride: true},
+		},
+	}
 	prices := map[string]types.ModelPriceVersion{chatModel.ID: r.ChatPrice, embedModel.ID: r.EmbeddingPrice}
 	for id, price := range prices {
 		current, err := repo.EffectiveModelPrice(ctx, 1, id, time.Now())
