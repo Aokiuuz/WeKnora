@@ -1,5 +1,6 @@
 """No-network regression tests for cumulative model-spending reservations."""
 import importlib.util
+import gzip
 import json
 from pathlib import Path
 import tempfile
@@ -43,6 +44,19 @@ class BudgetTest(unittest.TestCase):
         relay.opener = ChangingOpener()
         relay.forward('/v1/chat/completions', self.payload)
         self.assertEqual(relay.records[0]['round'], 'original-request')
+    def test_compressed_receipt_preserves_provider_cost(self):
+        data = {'usage': {'cost': 0.0000014}, 'id': 'fixture'}
+        class CompressedOpener:
+            def open(self, *args, **kwargs):
+                response = Response(data)
+                response.headers = {'Content-Encoding': 'gzip'}
+                response.read = lambda: gzip.compress(json.dumps(data).encode())
+                return response
+        self.relay.opener = CompressedOpener()
+        status, raw = self.relay.forward('/v1/chat/completions', self.payload)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(raw), data)
+        self.assertEqual(self.relay.records[0]['usage'], data['usage'])
     def test_unknown_transport_keeps_full_reservation(self):
         self.relay.opener=Opener(TimeoutError('fixture timeout'))
         with self.assertRaises(TimeoutError): self.relay.forward('/v1/chat/completions',self.payload)

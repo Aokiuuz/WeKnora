@@ -2,6 +2,7 @@
 import argparse
 import importlib.util
 import json
+import sqlite3
 from pathlib import Path
 import time
 
@@ -14,6 +15,11 @@ class Expanded(module.Acceptance):
         super().__init__(args, key)
         self.env.update(CONCURRENCY_POOL_SIZE='4', BATCH_EMBED_SIZE='5')
         self.embedding_concurrency = 4
+        # WAL and shared-memory locking must remain on the Linux filesystem.
+        # Export a consistent SQLite backup after the application stops.
+        self.database = Path('/tmp/weknora-expanded.sqlite')
+        assert not self.database.exists(), 'Use a fresh isolated container'
+        self.env['DB_PATH'] = str(self.database)
         self.manifest['concurrency_pool_size'] = 4
         self.manifest['embedding_batch_size'] = 5
 
@@ -37,6 +43,9 @@ class Expanded(module.Acceptance):
             self.manifest['human_review_status'] = 'excluded by user'
         finally:
             self.stop(); self.supplier.close()
+            if self.database.exists():
+                with sqlite3.connect(self.database) as source, sqlite3.connect(self.output / 'x07-rag.sqlite') as target:
+                    source.backup(target)
             self.manifest['supplier_errors'] = self.supplier.errors
             self.manifest['paid_provider_requests'] = len(self.supplier.records)
             module.save(self.output / 'manifest.json', self.manifest)

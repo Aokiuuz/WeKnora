@@ -8,6 +8,7 @@ import argparse
 import collections
 import csv
 import fcntl
+import gzip
 from decimal import Decimal, ROUND_HALF_UP
 import hashlib
 import http.server
@@ -126,13 +127,15 @@ class BudgetRelay:
             save(self.budget_path, self.budget)
         start = time.monotonic()
         req = urllib.request.Request('https://openrouter.ai/api' + path, raw,
-              {'Authorization': 'Bearer ' + self.key, 'Content-Type': 'application/json'})
+              {'Authorization': 'Bearer ' + self.key, 'Content-Type': 'application/json', 'Accept-Encoding': 'gzip'})
         try:
             try:
                 response = self.opener.open(req, timeout=90)
             except urllib.error.HTTPError as error:
                 response = error
             encoded = response.read()
+            if getattr(response, 'headers', {}).get('Content-Encoding') == 'gzip':
+                encoded = gzip.decompress(encoded)
             data = json.loads(encoded)
         except Exception as error:
             # An incomplete response is still a paid attempt. Preserve its full
@@ -232,11 +235,15 @@ class Acceptance(offline.Regression):
                     'rerank': {'rerank_top_k': 6, 'rerank_threshold': 0}, 'generation': {'temperature': 0, 'max_tokens': 512}}, 'seed': 0}
         task, _ = self.request('create real evaluation', 'POST', '/api/v1/evaluation', creation)
         tid = task['data']['task']['id']
+        last_progress = 0
         deadline = time.monotonic() + 1800
         while True:
             detail, _ = self.request('poll', 'GET', '/api/v1/evaluation?task_id=' + tid, record=False)
             detail = detail['data']
             if detail['task']['status'] not in (0, 1): break
+            if time.monotonic() - last_progress >= 30:
+                save(self.output / 'progress.json', {'label': label, 'task': detail['task']})
+                last_progress = time.monotonic()
             assert time.monotonic() < deadline, 'Evaluation timeout'
             time.sleep(1)
         save(self.output / (label + '-detail.json'), detail)
@@ -252,6 +259,12 @@ class Acceptance(offline.Regression):
             records = [dict(r) for r in db.execute('SELECT * FROM model_call_records WHERE evaluation_task_id=? ORDER BY started_at,id', (tid,))]
             persisted = db.execute('SELECT runtime_metrics FROM evaluation_tasks WHERE id=?', (tid,)).fetchone()[0]
             assert json.loads(persisted) == detail['runtime_metrics']
+        # A timed-out client can finish before its supplier socket settles.
+        # Wait for those attempted requests to acquire a response/unknown record.
+        settle_deadline = time.monotonic() + 180
+        while any(r.get('round') == label and r['state'] == 'reserved' for r in self.supplier.budget['requests']):
+            assert time.monotonic() < settle_deadline, 'Supplier attempts did not settle; reservations retained'
+            time.sleep(1)
         attempts = [r for r in self.supplier.records if r['round'] == label]
         assert len(attempts) == len(records), ('request ledger count', len(attempts), len(records))
         accounting = validate_paid_ledger(records, attempts)
