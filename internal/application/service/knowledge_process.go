@@ -3546,10 +3546,7 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 		QuestionCount:            payload.QuestionCount,
 		EnableMultimodel:         payload.EnableMultimodel,
 		StoredImages:             storedImages,
-	}
-
-	if convertResult != nil {
-		processOpts.Metadata = convertResult.Metadata
+		Metadata:                 convertResult.Metadata,
 	}
 
 	if eff.ChunkingConfig.EnableParentChild {

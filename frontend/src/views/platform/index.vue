@@ -7,8 +7,8 @@
         <div class="upload-mask" v-show="ismask">
             <UploadMask></UploadMask>
         </div>
-        <!-- 全局设置模态框，供所有 platform 子路由使用 -->
-        <Settings />
+        <!-- The settings route owns its instance; other routes use this modal host. -->
+        <Settings v-if="route.name !== 'settings'" />
         <!-- 全局命令面板 (⌘K)，随 platform 路由存活 -->
         <GlobalCommandPalette />
         <!-- 全局右上角"待处理邀请"铃铛。固定定位，z-index 低于抽屉，业务页面
