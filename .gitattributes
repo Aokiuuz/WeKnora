@@ -23,3 +23,5 @@ dataset/public/*/v1/source_docs/** -whitespace
 # Acceptance manifests hash report bytes consistently across operating systems.
 docs/reports/final-acceptance/*.json text eol=lf
 docs/reports/final-acceptance/*.md text eol=lf
+docs/reports/expanded-acceptance/*.json text eol=lf
+docs/reports/expanded-acceptance/*.md text eol=lf

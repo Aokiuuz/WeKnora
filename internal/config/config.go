@@ -621,7 +621,9 @@ func LoadConfig() (*Config, error) {
 	})
 
 	// 使用处理后的配置内容
-	viper.ReadConfig(strings.NewReader(result))
+	if err := viper.ReadConfig(strings.NewReader(result)); err != nil {
+		return nil, fmt.Errorf("error reading expanded config: %w", err)
+	}
 
 	// 解析配置到结构体
 	var cfg Config

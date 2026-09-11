@@ -31,6 +31,8 @@ const (
 	// CleanupRoundTimeout bounds one complete expiration sweep.
 	CleanupRoundTimeout = 30 * time.Second
 	cacheWriteTimeout   = 2 * time.Second
+	// Bound the amount of successful work lost when a later provider batch fails.
+	cacheProgressWindow = 64
 )
 
 // CachePrefix is the non-text portion of the tenant-isolated composite key.
@@ -169,9 +171,23 @@ func (e *cachedEmbedder) BatchEmbedWithPool(
 	_ embedding.Embedder,
 	texts []string,
 ) ([][]float32, error) {
-	return e.cachedBatch(ctx, texts, func(callCtx context.Context, missing []string) ([][]float32, error) {
-		return e.inner.BatchEmbedWithPool(callCtx, e.inner, missing)
-	})
+	result := make([][]float32, 0, len(texts))
+	for start := 0; start < len(texts); start += cacheProgressWindow {
+		if err := ctx.Err(); err != nil {
+			return nil, context.Cause(ctx)
+		}
+		end := min(start+cacheProgressWindow, len(texts))
+		vectors, err := e.cachedBatch(ctx, texts[start:end], func(
+			callCtx context.Context, missing []string,
+		) ([][]float32, error) {
+			return e.inner.BatchEmbedWithPool(callCtx, e.inner, missing)
+		})
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, vectors...)
+	}
+	return result, nil
 }
 
 func (e *cachedEmbedder) GetModelName() string { return e.inner.GetModelName() }

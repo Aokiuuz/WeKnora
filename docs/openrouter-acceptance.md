@@ -66,3 +66,37 @@ go build -buildvcs=false -tags sqlite_fts5 \
 ```
 
 实验输出包括结果 JSON、逗号分隔值（Comma-Separated Values，CSV）文件、数据库、供应商收据与费用预留记录。自动指标和模型辅助复核保留各自身份；人工评分字段只接受真实评分者的结果。
+
+## 扩展数据与实验复现
+
+扩展数据准备脚本读取 CMRC2018、SQuAD 2.0 和多跳问答 HotpotQA 的固定公开版本，记录许可证、下载文件摘要、无效标注排除和来源分组。默认生成 96 道调试题、600 道正式题，以及两套各含 500 段和 50 道可回答题的检索数据。文件处理依赖 Python 与 `pyarrow`。
+
+```sh
+python3 scripts/prepare-expanded-evaluation.py --output /private/evidence/data
+python3 scripts/prepare-expanded-retrieval.py --data /private/evidence/data
+```
+
+`evaluation-expanded-reader.py` 使用生产聊天适配器回答原始上下文问题。`--data` 指定上述数据目录，`--split` 选择 `tuning` 或 `holdout`，`--baseline` 指定保存的对照提示词 YAML 文件。`--source-commit` 必须与 `--probe-binary` 的构建标识一致；编译时用 `-ldflags` 写入 `internal/buildinfo.CommitID`。调试结果按预先冻结的选择规则处理，正式集仅用于评测。
+
+完整检索流程在一个新建 Linux 容器中运行：
+
+```sh
+python3 scripts/evaluation-expanded-http.py \
+  --data /private/evidence/data \
+  --output /private/evidence/http-run \
+  --budget-file /private/shared-budget/budget.json \
+  --server-binary /private/bin/WeKnora
+```
+
+该脚本通过标准输入接收同一种凭据对象。SQLite 运行数据库位于容器内 `/tmp/weknora-expanded.sqlite`，应用停止后生成输出目录中的一致性备份。运行时通过 `progress.json` 查看任务进度；主机工具只读取已导出的数据库备份。供应商传输失败记录为费用未知，预算预留持续保留，JSON 与 CSV 对账只聚合已知金额。
+
+页面缓存实验使用 `evaluation-openrouter-probes.py --batch-id <独立批次标识> --skip-embedding`，每批包含 30 对请求。各批次依次运行并复用上述预算文件。汇总图表依赖 `numpy` 与 `matplotlib`，报告生成命令为：
+
+```sh
+python3 scripts/build-excellence-report.py \
+  --evidence /private/evidence/2026-09-11-excellence \
+  --baseline /private/evidence/2026-09-09-final-acceptance \
+  --output docs/reports/expanded-acceptance
+```
+
+报告生成器核对样本摘要、来源构建、成功调用费用及两个导出格式的一致性，并输出静态图表、逐题结果与文件摘要。实测规模、置信区间和质量限制见[扩展验收报告](reports/expanded-acceptance/README.md)。

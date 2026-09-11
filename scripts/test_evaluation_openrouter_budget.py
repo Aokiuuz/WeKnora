@@ -1,5 +1,6 @@
 """No-network regression tests for cumulative model-spending reservations."""
 import importlib.util
+import gzip
 import json
 from pathlib import Path
 import tempfile
@@ -43,12 +44,29 @@ class BudgetTest(unittest.TestCase):
         relay.opener = ChangingOpener()
         relay.forward('/v1/chat/completions', self.payload)
         self.assertEqual(relay.records[0]['round'], 'original-request')
+    def test_compressed_receipt_preserves_provider_cost(self):
+        data = {'usage': {'cost': 0.0000014}, 'id': 'fixture'}
+        class CompressedOpener:
+            def open(self, *args, **kwargs):
+                response = Response(data)
+                response.headers = {'Content-Encoding': 'gzip'}
+                response.read = lambda: gzip.compress(json.dumps(data).encode())
+                return response
+        self.relay.opener = CompressedOpener()
+        status, raw = self.relay.forward('/v1/chat/completions', self.payload)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(raw), data)
+        self.assertEqual(self.relay.records[0]['usage'], data['usage'])
     def test_unknown_transport_keeps_full_reservation(self):
         self.relay.opener=Opener(TimeoutError('fixture timeout'))
         with self.assertRaises(TimeoutError): self.relay.forward('/v1/chat/completions',self.payload)
         record=json.loads((self.root/'budget.json').read_text())['requests'][0]
         self.assertGreater(float(record['reserved_usd']),0)
         self.assertNotIn('actual_usd',record)
+        self.assertEqual(record['state'], 'uncertain')
+        receipt = json.loads((self.root/'supplier.jsonl').read_text())
+        self.assertIsNone(receipt['status'])
+        self.assertEqual(receipt['transport_error'], 'TimeoutError')
     def test_budget_rejects_before_network(self):
         self.relay.budget['requests']=[{'reserved_usd':'19.999'}]
         self.relay.opener=Opener({})
@@ -59,5 +77,31 @@ class BudgetTest(unittest.TestCase):
         import fcntl
         with (self.root/'budget.lock').open('a') as lock:
             with self.assertRaises(BlockingIOError): fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+
+class LedgerTest(unittest.TestCase):
+    def setUp(self):
+        self.record = {'status': 'success', 'accounting_complete': True, 'cost_microunits': 1,
+                       'model_snapshot': json.dumps({'name': module.CHAT, 'billing_usage': {
+                           'reported_cost': '0.0000014', 'cost_source': 'openrouter_usage_cost'}})}
+        self.receipt = {'model': module.CHAT, 'status': 200, 'usage': {'cost': 0.0000014}}
+    def test_failed_attempt_remains_unknown(self):
+        failed = {'status': 'error', 'accounting_complete': False, 'cost_microunits': None}
+        result = module.validate_paid_ledger([self.record, failed], [self.receipt, {'status': None}])
+        self.assertEqual(result, {'known_cost_microunits': 1, 'unknown_cost_attempts': 1, 'failed_attempts': 1})
+    def test_unknown_must_not_be_zero(self):
+        with self.assertRaisesRegex(AssertionError, 'remain null'):
+            module.validate_paid_ledger([{'status': 'error', 'accounting_complete': False,
+                                          'cost_microunits': 0}], [{'status': None}])
+    def test_receipt_cannot_be_reused(self):
+        with self.assertRaisesRegex(AssertionError, 'matching supplier'):
+            module.validate_paid_ledger([self.record, self.record], [self.receipt, {'status': None}])
+    def test_unknown_success_requires_matching_missing_usage_receipt(self):
+        row = dict(self.record, accounting_complete=False, cost_microunits=None,
+                   model_snapshot=json.dumps({'name': module.CHAT, 'billing_usage': {'usage_reported': False}}))
+        with self.assertRaisesRegex(AssertionError, 'unreported supplier'):
+            module.validate_paid_ledger([row], [self.receipt])
+        result = module.validate_paid_ledger([row], [{'model': module.CHAT, 'status': 200, 'usage': {}}])
+        self.assertEqual(result['unknown_cost_attempts'], 1)
+        self.assertEqual(result['known_cost_microunits'], 0)
 
 if __name__=='__main__': unittest.main()

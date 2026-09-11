@@ -8,6 +8,7 @@ import argparse
 import collections
 import csv
 import fcntl
+import gzip
 from decimal import Decimal, ROUND_HALF_UP
 import hashlib
 import http.server
@@ -36,6 +37,36 @@ ALLOW = {CHAT, COMPARE, EMBED, 'qwen/qwen3.8-flash', 'deepseek/deepseek-v4-pro'}
 
 def save(path, data):
     offline.dump(path, data)
+
+def validate_paid_ledger(records, attempts):
+    """Reconcile successful receipts and retain explicitly unknown failed costs."""
+    assert len(attempts) == len(records), 'Every physical request must have a ledger attempt'
+    available = collections.Counter((r['model'], Decimal(str(r['usage']['cost']))) for r in attempts
+                                    if r['status'] == 200 and r.get('usage', {}).get('cost') is not None)
+    unreported = collections.Counter(r['model'] for r in attempts
+                                    if r['status'] == 200 and r.get('usage', {}).get('cost') is None)
+    total, unknown, failed = 0, 0, 0
+    for record in records:
+        failed += record['status'] != 'success'
+        if not record['accounting_complete']:
+            assert record['cost_microunits'] is None, 'Unknown cost must remain null'
+            if record['status'] == 'success':
+                snapshot = json.loads(record['model_snapshot'])
+                assert unreported[snapshot['name']] > 0, 'Unknown successful call requires an unreported supplier receipt'
+                assert not snapshot.get('billing_usage', {}).get('usage_reported'), 'Reported usage must reconcile'
+                unreported[snapshot['name']] -= 1
+            unknown += 1
+            continue
+        snapshot = json.loads(record['model_snapshot'])
+        amount = Decimal(snapshot['billing_usage']['reported_cost'])
+        expected = int((amount * 1000000).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+        assert record['cost_microunits'] == expected
+        assert snapshot['billing_usage']['cost_source'] == 'openrouter_usage_cost'
+        key = (snapshot['name'], amount)
+        assert available[key] > 0, 'Priced ledger has no matching supplier receipt'
+        available[key] -= 1
+        total += expected
+    return {'known_cost_microunits': total, 'unknown_cost_attempts': unknown, 'failed_attempts': failed}
 
 class BudgetRelay:
     def __init__(self, port, key, evidence, budget_path):
@@ -96,18 +127,35 @@ class BudgetRelay:
             used = sum(Decimal(str(r.get('actual_usd', r['reserved_usd']))) for r in self.budget['requests'])
             assert used + reserve < Decimal('20'), 'Cumulative USD budget exhausted'
             assert len(self.budget['requests']) < 5000, 'Request count ceiling reached'
-            reservation = {'sequence': len(self.budget['requests']) + 1, 'model': model, 'reserved_usd': str(reserve), 'state': 'reserved'}
+            reservation = {'sequence': len(self.budget['requests']) + 1, 'round': request_round, 'path': path,
+                           'model': model, 'reserved_usd': str(reserve), 'state': 'reserved'}
             self.budget['requests'].append(reservation)
             save(self.budget_path, self.budget)
         start = time.monotonic()
         req = urllib.request.Request('https://openrouter.ai/api' + path, raw,
-              {'Authorization': 'Bearer ' + self.key, 'Content-Type': 'application/json'})
+              {'Authorization': 'Bearer ' + self.key, 'Content-Type': 'application/json', 'Accept-Encoding': 'gzip'})
         try:
-            response = self.opener.open(req, timeout=90)
-        except urllib.error.HTTPError as error:
-            response = error
-        encoded = response.read()
-        data = json.loads(encoded)
+            try:
+                response = self.opener.open(req, timeout=90)
+            except urllib.error.HTTPError as error:
+                response = error
+            encoded = response.read()
+            if getattr(response, 'headers', {}).get('Content-Encoding') == 'gzip':
+                encoded = gzip.decompress(encoded)
+            data = json.loads(encoded)
+        except Exception as error:
+            # An incomplete response is still a paid attempt. Preserve its full
+            # reservation and attribution even when the provider cost is unknown.
+            record = {'sequence': reservation['sequence'], 'round': request_round, 'model': model, 'path': path,
+                      'status': None, 'usage': {}, 'request_sha256': offline.digest(raw),
+                      'elapsed_ms': round((time.monotonic()-start)*1000), 'transport_error': type(error).__name__}
+            with self.lock:
+                reservation['state'] = 'uncertain'
+                save(self.budget_path, self.budget)
+                self.records.append(record)
+                with (self.evidence / 'supplier.jsonl').open('a', encoding='utf-8') as stream:
+                    stream.write(json.dumps(record) + '\n')
+            raise
         usage = data.get('usage', {})
         record = {'sequence': reservation['sequence'], 'round': request_round, 'model': model, 'path': path,
                   'status': response.status, 'provider_request_id': data.get('id'), 'provider': data.get('provider'),
@@ -158,9 +206,10 @@ class Acceptance(offline.Regression):
         for name in (CHAT, COMPARE, EMBED):
             kind = 'Embedding' if name == EMBED else 'KnowledgeQA'
             params = {'base_url': f'http://127.0.0.1:{self.args.supplier_port}/v1', 'api_key': 'acceptance-relay-placeholder',
-                      'provider': 'openrouter', 'max_concurrency': 1}
+                      'provider': 'openrouter', 'max_concurrency': getattr(self, 'chat_concurrency', 1)}
             if name == EMBED:
                 params['embedding_parameters'] = {'dimension': 1024, 'supports_dimension_override': True}
+                params['max_concurrency'] = getattr(self, 'embedding_concurrency', 1)
             else:
                 params.update(max_output_tokens=512, context_window=32768, extra_config={'thinking_control': 'none'})
             created, _ = self.request('model', 'POST', '/api/v1/models', {'name': name, 'type': kind, 'source': 'remote', 'parameters': params}, 201)
@@ -192,11 +241,15 @@ class Acceptance(offline.Regression):
                     'rerank': {'rerank_top_k': 6, 'rerank_threshold': 0}, 'generation': {'temperature': 0, 'max_tokens': 512}}, 'seed': 0}
         task, _ = self.request('create real evaluation', 'POST', '/api/v1/evaluation', creation)
         tid = task['data']['task']['id']
+        last_progress = 0
         deadline = time.monotonic() + 1800
         while True:
             detail, _ = self.request('poll', 'GET', '/api/v1/evaluation?task_id=' + tid, record=False)
             detail = detail['data']
             if detail['task']['status'] not in (0, 1): break
+            if time.monotonic() - last_progress >= 30:
+                save(self.output / 'progress.json', {'label': label, 'task': detail['task']})
+                last_progress = time.monotonic()
             assert time.monotonic() < deadline, 'Evaluation timeout'
             time.sleep(1)
         save(self.output / (label + '-detail.json'), detail)
@@ -212,21 +265,21 @@ class Acceptance(offline.Regression):
             records = [dict(r) for r in db.execute('SELECT * FROM model_call_records WHERE evaluation_task_id=? ORDER BY started_at,id', (tid,))]
             persisted = db.execute('SELECT runtime_metrics FROM evaluation_tasks WHERE id=?', (tid,)).fetchone()[0]
             assert json.loads(persisted) == detail['runtime_metrics']
+        # A timed-out client can finish before its supplier socket settles.
+        # Wait for those attempted requests to acquire a response/unknown record.
+        settle_deadline = time.monotonic() + 180
+        while any(r.get('round') == label and r['state'] == 'reserved' for r in self.supplier.budget['requests']):
+            assert time.monotonic() < settle_deadline, 'Supplier attempts did not settle; reservations retained'
+            time.sleep(1)
         attempts = [r for r in self.supplier.records if r['round'] == label]
         assert len(attempts) == len(records), ('request ledger count', len(attempts), len(records))
-        assert all(r['status'] == 'success' and r['accounting_complete'] for r in records)
-        for record in records:
-            snapshot = json.loads(record['model_snapshot'])
-            amount = snapshot['billing_usage']['reported_cost']
-            expected = int((Decimal(amount) * 1000000).quantize(Decimal(1), rounding=ROUND_HALF_UP))
-            assert record['cost_microunits'] == expected
-            assert snapshot['billing_usage']['cost_source'] == 'openrouter_usage_cost'
-        total = sum(r['cost_microunits'] for r in records)
+        accounting = validate_paid_ledger(records, attempts)
+        total = accounting['known_cost_microunits']
         assert detail['runtime_metrics']['cost']['totals'] == [{'currency': 'USD', 'cost_microunits': total}]
         save(self.output / (label + '-ledger.json'), records)
         summary = {'label': label, 'task_id': tid, 'model': model, 'questions': len(exported['questions']),
                    'attempts': dict(collections.Counter(r['path'] for r in attempts)), 'cost_microunits': total,
-                   'metric': detail['metric'], 'runtime_metrics': detail['runtime_metrics']}
+                   'metric': detail['metric'], 'runtime_metrics': detail['runtime_metrics'], 'accounting': accounting}
         self.manifest['rounds'].append(summary)
         save(self.output / 'manifest.json', self.manifest)
         print(json.dumps({'completed': label, 'questions': summary['questions'], 'attempts': summary['attempts'], 'cost_usd': total/1e6}), flush=True)

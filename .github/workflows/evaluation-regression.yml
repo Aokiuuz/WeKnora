@@ -49,6 +49,7 @@ jobs:
         run: |
           go test -tags sqlite_fts5 ./internal/modelobs ./internal/models/call ./internal/models/chat ./internal/types
           python3 -B scripts/test_evaluation_openrouter_budget.py
+          python3 -B scripts/test_evaluation_expanded_reader.py
 
       - name: Verify cancellation and process-kill recovery
         run: |
