@@ -358,8 +358,8 @@ def main():
     (out / 'README.md').write_text(render_report(facts), encoding='utf-8', newline='\n')
     for name in ['01-evaluation-overview.png', '02-question-evidence.png', '04-model-statistics.png']:
         shutil.copy2(root / 'browser' / name, out / name)
-    shutil.copy2(root / 'data/sources.json', out / 'sources.json')
-    shutil.copy2(root / 'cache-recovery.json', out / 'cache-recovery.json')
+    write(out / 'sources.json', read(root / 'data/sources.json'))
+    write(out / 'cache-recovery.json', cache_recovery)
     write(out / 'artifact-sha256.json', {p.name: sha(p) for p in sorted(out.iterdir()) if p.is_file() and p.name != 'artifact-sha256.json'})
     print(json.dumps({'status': 'passed', 'reader_outputs': 1200, 'http_outputs': 200, 'wiki_pairs': 90, 'reported_usd': str(paid)}))
 

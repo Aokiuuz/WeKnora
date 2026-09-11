@@ -1,0 +1,16 @@
+{
+  "01-evaluation-overview.png": "1b4b58b286ef2193a3eabac621b190ce66df5f200d6c09b1d5591076ff2a56e3",
+  "02-question-evidence.png": "9a2cbf1a0f1409464f25c3fa88c5e25688584729750381aff07a50d8a1367f27",
+  "04-model-statistics.png": "92ac45f1ab883d58f00141d12e953ae383be6737b3c7708fde1665b1189c07b8",
+  "cache-recovery.json": "6b1ec9b87e894ef59284bf9aa3bdd59c239606d097b075724fc8cb0faf54bdc4",
+  "provenance.json": "9349c6908e7506e61274d56dac2f0b5033b6ca3114fb2ff760a9e0e1427d373d",
+  "reader-quality.png": "4d73e2bbb47331274ac3051fb196af132567b5c5e924dcb68ad6b07d13a8b2f6",
+  "reader-scores.json": "b870341a63efdb65081c8bcee72d9cf0cd122bbe291abee1553bd6d49cdb8288",
+  "reader-summary.json": "e106c37ff6a5014d38f6a938ac5e5b49ee9fe8c29e5af4fd1c9a9cbc157153d0",
+  "README.md": "2f79e7cf79ad51b294c04dd1a7b602baf6c971108511183d4efb8b322f4eb33d",
+  "sources.json": "14949a6598674570a142e09a9a1fde9e143231a1ba3a34532e30f0ff134e6f80",
+  "summary.json": "a36e28cf6c79ac7456887a28e3ae158c38a6e4b98d958fa9e8c830e415ae1799",
+  "unanswerable.png": "1b11ed977686db0e6b006ca84a1d9c5018428166d845952de5200174249df139",
+  "wiki-batches.png": "9488f35e0c35da93a8211a9282c6fb13eaa54c9ba12cac46160ebde2fa97045f",
+  "wiki-pairs.json": "97c591f9cdd421e2c38222588bbeb71b37b957db61b8f8520a9f4d5d06821226"
+}
