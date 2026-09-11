@@ -6090,7 +6090,7 @@
     }
   },
   "readout_status": "评分快照包含 700 / 800 个已归档逐页调用，100 个调用尚无完整记录",
-  "readout_generated_at": "2026-09-11T09:31:50.802899+00:00",
+  "readout_generated_at": "2026-09-11T09:33:34.157849+00:00",
   "omni_standard_metrics": {
     "builtin": {
       "text_edit_distance": 1.0,

@@ -196,6 +196,8 @@ def main():
     fig.tight_layout(rect=(0, .1, 1, .92))
     fig.savefig(out / 'coverage-and-quality.png', dpi=180, facecolor='white')
     fig.savefig(out / 'coverage-and-quality.svg', facecolor='white')
+    svg_path = out / 'coverage-and-quality.svg'
+    svg_path.write_text('\n'.join(line.rstrip() for line in svg_path.read_text(encoding='utf-8').splitlines()) + '\n', encoding='utf-8')
     plt.close(fig)
 
     title = '# 八解析引擎公开基准实验' + ('：过程快照' if done < expected else '')
