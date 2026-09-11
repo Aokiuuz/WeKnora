@@ -1,6 +1,6 @@
 # 解析引擎测评运行说明
 
-当前测评工作区为 `D:\XINIUNIAO\integrations\WeKnora-parser-benchmark`，主应用工作区为 `D:\XINIUNIAO\integrations\WeKnora-topic3-0.8`。测评包含八个解析引擎，共用固定的 100 页公开文档清单。文档来源、抽样、参考标注与评分定义见 [公开基准子集说明](parser-benchmark-dataset.md)。正式执行进度以逐页证据及报告页面为准；PaddleOCR-VL 已完成单页验证，100 页正式批次正在后台执行，完成后自动生成评分与报告。
+当前测评工作区为 `D:\XINIUNIAO\integrations\WeKnora-parser-benchmark`，主应用工作区为 `D:\XINIUNIAO\integrations\WeKnora-topic3-0.8`。测评包含八个解析引擎，共用固定的 100 页公开文档清单。文档来源、抽样、参考标注与评分定义见 [公开基准子集说明](parser-benchmark-dataset.md)。八个引擎已各完成 100 页调用及自动评分。PaddleOCR-VL 正式批次保存 84 个成功、15 个错误和 1 个空结果；100 份独立收据与五步后处理均完成。正式结果见 [实验报告](reports/parser-benchmark/README.md)，后台批次进程已退出。
 
 ## 服务与浏览器入口
 
@@ -146,7 +146,7 @@ $env:PLAYWRIGHT_BROWSERS_PATH = (Join-Path (Resolve-Path artifacts/parser-benchm
 
 1. 通过 `http://127.0.0.1:18090` 优先核验 `recommended_first_pass` 指定的 20 页内容，检查表格归属、公式符号、阅读顺序、遗漏和重复。
 2. 对照供应商控制台核验实际账单和用量，记录核验时间及计费口径。
-3. 确认当前账号对应的额度、并发、文件限制和使用条件，并记录供应商未通过接口提供的限制。
+3. 核对当前账号对应的额度、并发、文件限制和使用条件；云端运行记录中未包含的内部模型版本与限制单独列为信息缺口。
 
 内容核验结果写入 `human-review.json` 的审核者、时间、决定与备注，签名绑定对应输入和输出摘要。自动评分与 AI 核验建议保留为辅助证据，人工签名由实际审核者完成。
 
