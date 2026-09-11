@@ -130,8 +130,9 @@ const crypto = require('node:crypto');
     check('custom time window');
     assert.deepEqual(errors,[],'uncaught browser errors');
     check('no uncaught browser errors');
+    const systemInfo = (await (await api('/api/v1/system/info')).json()).data;
     await fs.writeFile(path.join(output,'status.json'),JSON.stringify({status:'passed',browser:browser.version(),
-      tested_at:new Date().toISOString(),checks,human_review:'excluded; no annotation controls used',errors},null,2));
+      tested_at:new Date().toISOString(),system_info:systemInfo,checks,human_review:'excluded; no annotation controls used',errors},null,2));
     console.log(JSON.stringify({status:'passed',checks:checks.length,output}));
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error.stack);process.exit(1)});

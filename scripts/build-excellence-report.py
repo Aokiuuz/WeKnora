@@ -173,7 +173,7 @@ def render_report(facts):
         for s in facts['reader'])
     http_rows = '\n'.join(
         f"| {r['dataset'].upper()} | {NAMES[MODELS.index(r['model'])]} | {r['questions']} / {r['passages']} | "
-        f"{r['recall']:.1%} | {r['ndcg3']:.4f} | {r['cost_usd']:.6f} | {r['accounting']['unknown_cost_attempts']} |"
+        f"{r['recall']:.1%} | {r['ndcg3']:.4f} | {r['cost_usd']:.6f} | {r['accounting']['unknown_cost_attempts']} | {r['empty_outputs']} |"
         for r in facts['http'])
     wiki_rows = '\n'.join(
         f"| {s['batch']} | {s['pairs']} | {s['cache_read_tokens_stable_minus_page_mean']:.1f} | {s['cost_ratio']:.3f} | "
@@ -182,7 +182,7 @@ def render_report(facts):
     budget = facts['budget']
     return f'''# 扩展验收实测报告
 
-系统提供固定数据评测、逐题证据、供应商用量账本、持久化向量缓存、页面生成和一键启动。验收证据包括 1,200 份原始上下文回答、200 份完整检索流程回答、90 组页面生成配对数据及 12 项真实浏览器检查。人工评分字段为空。
+系统提供固定数据评测、逐题证据、供应商用量账本、持久化向量缓存、页面生成和一键启动。验收证据包括 1,200 份原始上下文回答、200 条完整检索流程结果、90 组页面生成配对数据及 12 项真实浏览器检查。人工评分字段为空。
 
 ## 系统与验证范围
 
@@ -243,11 +243,11 @@ DeepSeek V4 Flash 正确拒答 43/100，Kimi K2.5 正确拒答 29/100。证据�
 
 每个数据集使用 500 个真实段落与 50 道可回答问题，每个模型完成一轮。相关性标签标记问题的原始证据段落，语料中可能存在其他语义相关段落。召回率按这些固定标签计算；归一化折损累计增益前三位（Normalized Discounted Cumulative Gain at 3，NDCG@3）衡量前三项的排序质量。
 
-| 数据集 | 模型 | 问题 / 段落 | 召回率 | NDCG@3 | 已知费用 USD | 费用未知尝试 |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 数据集 | 模型 | 问题 / 段落 | 召回率 | NDCG@3 | 已知费用 USD | 费用未知尝试 | 空输出 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 {http_rows}
 
-供应商嵌入批次包含 5 段，模型与执行池并发均为 4。每个评测任务均核对数据库、详情接口、JSON 与 CSV 的运行指标。成功调用费用按供应商收据逐条转换为百万分之一美元并核对总和；网络失败对应的未知金额保持空值。
+供应商嵌入批次包含 5 段，嵌入模型与执行池并发均为 4。CMRC 的 DeepSeek 任务使用 1 个问题工作线程，其余任务使用 4 个；运行资源差异限制了任务总耗时的直接比较。每个评测任务均核对数据库、详情接口、JSON 与 CSV 的运行指标。成功调用费用按供应商收据逐条转换为百万分之一美元并核对总和；网络失败或供应商未报告用量时，未知金额保持空值。空输出按零分计入自动质量指标，表中的空输出列保留其数量。
 
 持久化向量缓存按租户、模型、行为参数和文本内容区分条目。池化嵌入每 64 段保存一轮进度，后续窗口失败时已保存窗口可供重试和进程重启使用。500 段回归覆盖中途失败、重启复用、重复文本顺序、返回向量独立性及取消停止后续调用。五组真实冷启动与重启对照、内容修改探测见[缓存实测证据](../final-acceptance/README.md)。
 
@@ -273,7 +273,7 @@ Wiki 知识页面生成使用 DeepSeek V4 Flash，固定供应商路由 `gmiclou
 
 页面截图来自本机两个合成问题的固定演示任务，用于验证界面行为。大规模质量结论来自上述独立数据实验。
 
-文件写入同时检查复制与关闭错误；配置读取拒绝无效展开内容；批量知识访问传播数据库错误并处理空代理；审批订阅退避在接收实际消息后复位。对应回归测试和本轮增量静态检查通过。项目全量根模块静态扫描仍有 5,923 项发现，其内容含代码格式、长行、错误处理与静态分析建议；全量扫描状态与本轮增量状态分别保存，不能据增量通过宣称全仓检查通过。
+文件写入同时检查复制与关闭错误；配置读取拒绝无效展开内容；批量知识访问传播数据库错误并处理空代理；审批订阅退避在接收实际消息后复位。对应回归测试和本轮增量静态检查通过。项目全量根模块静态扫描记录 5,923 项发现，其内容含代码格式、长行、错误处理与静态分析建议；全量扫描状态与本轮增量状态分别保存，不能据增量通过宣称全仓检查通过。
 
 固定评测门禁、持久化 HTTP 冷热缓存、取消、重复取消、进程终止与执行租约恢复均保留零费用回归证据。[交付变更](https://github.com/Aokiuuz/WeKnora/pull/1)保存持续集成结果；[受控退化变更](https://github.com/Aokiuuz/WeKnora/pull/2)保存召回退化触发必需检查失败及阻断合并的证据。
 
@@ -297,7 +297,7 @@ def main():
     parser.add_argument('--baseline', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--reader-only', action='store_true')
-    parser.add_argument('--http-directory', default='http-03')
+    parser.add_argument('--http-directory', default='http-04')
     args = parser.parse_args(); root, out = args.evidence, args.output
     out.mkdir(parents=True, exist_ok=True)
     plt.rcParams.update({'font.family': 'Microsoft YaHei', 'font.size': 10,
@@ -312,15 +312,19 @@ def main():
     runs = []
     import csv
     for run in manifest['rounds']:
-        data = read(http_root / (run['label'] + '.json'))
-        with (http_root / (run['label'] + '.csv')).open(encoding='utf-8-sig', newline='') as stream:
+        run_root = root / run.get('evidence_directory', args.http_directory)
+        data = read(run_root / (run['label'] + '.json'))
+        with (run_root / (run['label'] + '.csv')).open(encoding='utf-8-sig', newline='') as stream:
             record = next(row for row in csv.DictReader(stream) if row['record_type'] == 'run')
         assert json.loads(record['runtime_metrics_json']) == data['runtime_metrics']
         runs.append({'dataset': run['label'].split('-')[0], 'model': run['model'], 'questions': run['questions'],
                      'passages': 500, 'recall': run['metric']['retrieval_metrics']['recall'],
                      'ndcg3': run['metric']['retrieval_metrics']['ndcg3'],
                      'cost_usd': run['cost_microunits'] / 1e6, 'runtime': run['runtime_metrics'],
-                     'code': data['experiment']['code'], 'task_id': run['task_id'], 'accounting': run['accounting']})
+                     'code': data['experiment']['code'], 'task_id': run['task_id'], 'accounting': run['accounting'],
+                     'evidence_directory': run_root.name, 'export_sha256': sha(run_root / (run['label'] + '.json')),
+                     'question_workers': run.get('question_workers', manifest['question_workers']),
+                     'empty_outputs': sum(not q['generated_text'].strip() for q in data['questions'])})
     assert len(runs) == 4 and sum(r['questions'] for r in runs) == 200
     browser = read(root / 'browser/status.json'); assert browser['status'] == 'passed'
     with (root / 'browser/browser-export.csv').open(encoding='utf-8-sig', newline='') as stream:

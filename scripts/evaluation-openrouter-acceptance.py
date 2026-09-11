@@ -43,12 +43,18 @@ def validate_paid_ledger(records, attempts):
     assert len(attempts) == len(records), 'Every physical request must have a ledger attempt'
     available = collections.Counter((r['model'], Decimal(str(r['usage']['cost']))) for r in attempts
                                     if r['status'] == 200 and r.get('usage', {}).get('cost') is not None)
+    unreported = collections.Counter(r['model'] for r in attempts
+                                    if r['status'] == 200 and r.get('usage', {}).get('cost') is None)
     total, unknown, failed = 0, 0, 0
     for record in records:
         failed += record['status'] != 'success'
         if not record['accounting_complete']:
-            assert record['status'] != 'success', 'A successful answer requires a priced provider receipt'
             assert record['cost_microunits'] is None, 'Unknown cost must remain null'
+            if record['status'] == 'success':
+                snapshot = json.loads(record['model_snapshot'])
+                assert unreported[snapshot['name']] > 0, 'Unknown successful call requires an unreported supplier receipt'
+                assert not snapshot.get('billing_usage', {}).get('usage_reported'), 'Reported usage must reconcile'
+                unreported[snapshot['name']] -= 1
             unknown += 1
             continue
         snapshot = json.loads(record['model_snapshot'])
@@ -200,7 +206,7 @@ class Acceptance(offline.Regression):
         for name in (CHAT, COMPARE, EMBED):
             kind = 'Embedding' if name == EMBED else 'KnowledgeQA'
             params = {'base_url': f'http://127.0.0.1:{self.args.supplier_port}/v1', 'api_key': 'acceptance-relay-placeholder',
-                      'provider': 'openrouter', 'max_concurrency': 1}
+                      'provider': 'openrouter', 'max_concurrency': getattr(self, 'chat_concurrency', 1)}
             if name == EMBED:
                 params['embedding_parameters'] = {'dimension': 1024, 'supports_dimension_override': True}
                 params['max_concurrency'] = getattr(self, 'embedding_concurrency', 1)

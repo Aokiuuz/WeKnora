@@ -95,8 +95,13 @@ class LedgerTest(unittest.TestCase):
     def test_receipt_cannot_be_reused(self):
         with self.assertRaisesRegex(AssertionError, 'matching supplier'):
             module.validate_paid_ledger([self.record, self.record], [self.receipt, {'status': None}])
-    def test_success_requires_cost(self):
-        with self.assertRaisesRegex(AssertionError, 'priced provider'):
-            module.validate_paid_ledger([dict(self.record, accounting_complete=False)], [self.receipt])
+    def test_unknown_success_requires_matching_missing_usage_receipt(self):
+        row = dict(self.record, accounting_complete=False, cost_microunits=None,
+                   model_snapshot=json.dumps({'name': module.CHAT, 'billing_usage': {'usage_reported': False}}))
+        with self.assertRaisesRegex(AssertionError, 'unreported supplier'):
+            module.validate_paid_ledger([row], [self.receipt])
+        result = module.validate_paid_ledger([row], [{'model': module.CHAT, 'status': 200, 'usage': {}}])
+        self.assertEqual(result['unknown_cost_attempts'], 1)
+        self.assertEqual(result['known_cost_microunits'], 0)
 
 if __name__=='__main__': unittest.main()
