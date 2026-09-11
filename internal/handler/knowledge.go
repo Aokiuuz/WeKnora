@@ -1712,7 +1712,7 @@ func (h *KnowledgeHandler) GetKnowledgeBatch(c *gin.Context) {
 			if err != nil {
 				accessError = accessError.WithDetails(err.Error())
 			}
-			c.Error(accessError)
+			_ = c.Error(accessError)
 			return
 		}
 		_ = userID
@@ -1737,7 +1737,7 @@ func (h *KnowledgeHandler) GetKnowledgeBatch(c *gin.Context) {
 	if kbID := secutils.SanitizeForLog(req.KBID); kbID != "" {
 		_, _, effID, _, accessErr := h.validateKnowledgeBaseAccessWithKBID(c, kbID)
 		if accessErr != nil {
-			c.Error(accessErr)
+			_ = c.Error(accessErr)
 			return
 		}
 		if agentAllowedKBIDs != nil && !sliceContains(agentAllowedKBIDs, kbID) {
