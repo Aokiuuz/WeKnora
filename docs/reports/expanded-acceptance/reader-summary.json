@@ -1,0 +1,158 @@
+{
+  "source_commit": "86436db4cecf13039b9a41ff8c78ac1fac8fff58",
+  "binary_sha256": "f35f10bd048de4517377bc1f55a883c7a121885127c2b66f9a4e735d520bf4dd",
+  "summaries": [
+    {
+      "dataset": "cmrc",
+      "model": "deepseek/deepseek-v4-flash",
+      "n": 200,
+      "groups": 182,
+      "em": 0.685,
+      "f1": 0.9059435200534227,
+      "em_ci95": [
+        0.6185567010309279,
+        0.7526581540057036
+      ],
+      "f1_ci95": [
+        0.8787485703928312,
+        0.9310379920120013
+      ],
+      "unanswerable_n": 0,
+      "correct_refusals": 0,
+      "false_refusals": 1,
+      "answerable_n": 200,
+      "invalid_json": 1,
+      "attempts": 202,
+      "successful_call_usd": "0.0170075234",
+      "p50_ms": 2967.0,
+      "p95_ms": 11623.149999999965
+    },
+    {
+      "dataset": "cmrc",
+      "model": "moonshotai/kimi-k2.5",
+      "n": 200,
+      "groups": 182,
+      "em": 0.725,
+      "f1": 0.9228411563906767,
+      "em_ci95": [
+        0.6619030365769496,
+        0.78922213622291
+      ],
+      "f1_ci95": [
+        0.89898874946403,
+        0.945890938458455
+      ],
+      "unanswerable_n": 0,
+      "correct_refusals": 0,
+      "false_refusals": 0,
+      "answerable_n": 200,
+      "invalid_json": 1,
+      "attempts": 200,
+      "successful_call_usd": "0.087620120",
+      "p50_ms": 2188.5,
+      "p95_ms": 5953.149999999989
+    },
+    {
+      "dataset": "squad",
+      "model": "deepseek/deepseek-v4-flash",
+      "n": 200,
+      "groups": 12,
+      "em": 0.555,
+      "f1": 0.6282282917859375,
+      "em_ci95": [
+        0.484440956651719,
+        0.6514331797235022
+      ],
+      "f1_ci95": [
+        0.5531718075661258,
+        0.7241889199642522
+      ],
+      "unanswerable_n": 100,
+      "correct_refusals": 43.0,
+      "false_refusals": 4,
+      "answerable_n": 100,
+      "invalid_json": 0,
+      "attempts": 204,
+      "successful_call_usd": "0.0144853731",
+      "p50_ms": 2852.0,
+      "p95_ms": 8851.849999999995
+    },
+    {
+      "dataset": "squad",
+      "model": "moonshotai/kimi-k2.5",
+      "n": 200,
+      "groups": 12,
+      "em": 0.5,
+      "f1": 0.5711273858504408,
+      "em_ci95": [
+        0.44571132494448557,
+        0.5542857142857143
+      ],
+      "f1_ci95": [
+        0.520018886423098,
+        0.6233759713658148
+      ],
+      "unanswerable_n": 100,
+      "correct_refusals": 29.0,
+      "false_refusals": 2,
+      "answerable_n": 100,
+      "invalid_json": 0,
+      "attempts": 203,
+      "successful_call_usd": "0.067411687",
+      "p50_ms": 2204.0,
+      "p95_ms": 4914.399999999999
+    },
+    {
+      "dataset": "hotpot",
+      "model": "deepseek/deepseek-v4-flash",
+      "n": 200,
+      "groups": 200,
+      "em": 0.565,
+      "f1": 0.648454014939309,
+      "em_ci95": [
+        0.495,
+        0.635
+      ],
+      "f1_ci95": [
+        0.5868793067226891,
+        0.7075131944444444
+      ],
+      "unanswerable_n": 0,
+      "correct_refusals": 0,
+      "false_refusals": 28,
+      "answerable_n": 200,
+      "invalid_json": 0,
+      "attempts": 200,
+      "successful_call_usd": "0.0375185807",
+      "p50_ms": 2810.0,
+      "p95_ms": 5633.399999999997
+    },
+    {
+      "dataset": "hotpot",
+      "model": "moonshotai/kimi-k2.5",
+      "n": 200,
+      "groups": 200,
+      "em": 0.635,
+      "f1": 0.7380982142857142,
+      "em_ci95": [
+        0.565,
+        0.7
+      ],
+      "f1_ci95": [
+        0.6834431299603173,
+        0.791430357142857
+      ],
+      "unanswerable_n": 0,
+      "correct_refusals": 0,
+      "false_refusals": 20,
+      "answerable_n": 200,
+      "invalid_json": 4,
+      "attempts": 202,
+      "successful_call_usd": "0.189669657",
+      "p50_ms": 2127.5,
+      "p95_ms": 3992.099999999995
+    }
+  ],
+  "uncertainty": "5000 source-group bootstrap resamples; seed 20260911; 95% percentile intervals",
+  "human_review": "excluded"
+}
