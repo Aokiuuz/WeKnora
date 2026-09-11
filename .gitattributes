@@ -25,3 +25,10 @@ docs/reports/final-acceptance/*.json text eol=lf
 docs/reports/final-acceptance/*.md text eol=lf
 docs/reports/expanded-acceptance/*.json text eol=lf
 docs/reports/expanded-acceptance/*.md text eol=lf
+# Parser evidence binds the exact manifest, model configuration and runner bytes.
+dataset/parser-benchmark/** -text whitespace=cr-at-eol
+deploy/parser-benchmark/** -text whitespace=cr-at-eol
+# Preserve the exact vendor configuration used by the model validation receipt.
+deploy/parser-benchmark/paddle/pipeline.yaml -whitespace
+scripts/run-parser-benchmark.py -text
+scripts/run-parser-benchmark-cpu-batch.py -text

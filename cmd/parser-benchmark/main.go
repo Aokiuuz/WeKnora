@@ -49,6 +49,7 @@ type record struct {
 	InputSHA256    string            `json:"input_sha256"`
 	ManifestSHA256 string            `json:"manifest_sha256"`
 	SourceCommit   string            `json:"source_commit"`
+	BinarySHA256   string            `json:"binary_sha256"`
 	StartedAt      string            `json:"started_at"`
 	Status         string            `json:"status"`
 	DurationMS     int64             `json:"duration_ms"`
@@ -82,6 +83,35 @@ func redact(s string, secretValues []string) string {
 		}
 	}
 	return signedURL.ReplaceAllString(s, "$1?[REDACTED]")
+}
+
+func publicOverrides(overrides map[string]string, secrets []string) map[string]string {
+	public := map[string]string{}
+	for k, v := range overrides {
+		if strings.Contains(k, "key") || strings.Contains(k, "token") {
+			public[k] = "configured"
+		} else {
+			public[k] = redact(v, secrets)
+		}
+	}
+	return public
+}
+
+func validateResume(old, expected record, markdown []byte) error {
+	oldConfig, _ := json.Marshal(old.Config)
+	wantConfig, _ := json.Marshal(expected.Config)
+	if old.Engine != expected.Engine || old.SampleID != expected.SampleID || old.InputSHA256 != expected.InputSHA256 ||
+		old.ManifestSHA256 != expected.ManifestSHA256 || old.SourceCommit != expected.SourceCommit ||
+		old.BinarySHA256 == "" || old.BinarySHA256 != expected.BinarySHA256 || string(oldConfig) != string(wantConfig) ||
+		old.MarkdownSHA256 != hash(markdown) {
+		return errors.New("resume identity mismatch; preserve existing evidence and choose a new output directory")
+	}
+	switch old.Status {
+	case "success", "error", "timeout", "empty":
+		return nil
+	default:
+		return errors.New("stored result has an unknown status")
+	}
 }
 func engineOverrides(engine string, c *types.ParserEngineConfig, language string) map[string]string {
 	all := c.ToOverridesMap()
@@ -220,18 +250,37 @@ func run() error {
 		return err
 	}
 	manifestHash := hash(data)
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	binary, err := os.ReadFile(executable)
+	if err != nil {
+		return err
+	}
+	binaryHash := hash(binary)
 	failures := 0
 	for _, s := range m.Samples {
 		resultPath := filepath.Join(dir, s.ID+".json")
+		overrides := engineOverrides(*engine, creds.ParserConfig, s.Language)
+		publicConfig := publicOverrides(overrides, secrets)
+		r := record{SchemaVersion: 2, Engine: *engine, SampleID: s.ID, InputSHA256: s.SHA256, ManifestSHA256: manifestHash, SourceCommit: commitID, BinarySHA256: binaryHash, StartedAt: time.Now().UTC().Format(time.RFC3339), Config: publicConfig, FallbackStatus: "not_reported_by_adapter", CostBasis: "provider_invoice_not_available", OutputScope: "production_reader_adapter_markdown_before_chunking_and_image_OCR"}
 		if old, e := os.ReadFile(resultPath); e == nil {
-			var r record
-			if json.Unmarshal(old, &r) != nil || r.InputSHA256 != s.SHA256 || r.ManifestSHA256 != manifestHash || r.SourceCommit != commitID {
-				return errors.New("resume identity mismatch; choose a new output directory")
+			var saved record
+			if json.Unmarshal(old, &saved) != nil {
+				return errors.New("stored result is not valid JSON")
 			}
-			if r.Status != "success" {
+			md, e := os.ReadFile(filepath.Join(dir, s.ID+".md"))
+			if e != nil {
+				return errors.New("stored Markdown is missing; preserve evidence and use a new output directory")
+			}
+			if e = validateResume(saved, r, md); e != nil {
+				return e
+			}
+			if saved.Status != "success" {
 				failures++
 			}
-			fmt.Printf("resume engine=%s sample=%s status=%s\n", *engine, s.ID, r.Status)
+			fmt.Printf("resume engine=%s sample=%s status=%s\n", *engine, s.ID, saved.Status)
 			continue
 		}
 		path := s.PDFPath
@@ -242,16 +291,6 @@ func run() error {
 		if e != nil {
 			return e
 		}
-		overrides := engineOverrides(*engine, creds.ParserConfig, s.Language)
-		publicConfig := map[string]string{}
-		for k, v := range overrides {
-			if strings.Contains(k, "key") || strings.Contains(k, "token") {
-				publicConfig[k] = "configured"
-			} else {
-				publicConfig[k] = redact(v, secrets)
-			}
-		}
-		r := record{SchemaVersion: 1, Engine: *engine, SampleID: s.ID, InputSHA256: s.SHA256, ManifestSHA256: manifestHash, SourceCommit: commitID, StartedAt: time.Now().UTC().Format(time.RFC3339), Config: publicConfig, FallbackStatus: "not_reported_by_adapter", CostBasis: "provider_invoice_not_available", OutputScope: "production_reader_adapter_markdown_before_chunking_and_image_OCR"}
 		if *engine == "builtin" || *engine == "markitdown" || *engine == "opendataloader" || *engine == "mineru" || *engine == "paddleocr_vl" {
 			zero := 0.0
 			r.CostUSD = &zero
@@ -286,10 +325,8 @@ func run() error {
 				r.Status = "error"
 				r.Error = redact(result.Error, secrets)
 			}
-			for k, v := range result.Metadata {
-				if strings.Contains(strings.ToLower(k), "fallback") {
-					r.FallbackStatus = k + "=" + v
-				}
+			if fallback := result.Metadata["parser_fallback"]; fallback != "" {
+				r.FallbackStatus = redact(fallback, secrets)
 			}
 		}
 		if r.Status == "success" && strings.TrimSpace(md) == "" {

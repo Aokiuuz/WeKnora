@@ -1,5 +1,6 @@
 export const evaluationFlowZh = {
   datasets: '数据集与导入',
+  parserBenchmark: '解析引擎横评',
   importHint: '检查公开评测集或本地标注文件，预览后保存不可变版本。',
   publicCatalog: '公开目录',
   localFile: '本地文件',
@@ -97,6 +98,7 @@ export const evaluationFlowZh = {
 }
 export const evaluationFlowEn = {
   datasets: 'Datasets & import',
+  parserBenchmark: 'Parser benchmark',
   importHint: 'Inspect public evaluation data or local annotations, then save an immutable version.',
   publicCatalog: 'Public catalog',
   localFile: 'Local file',
@@ -194,6 +196,7 @@ export const evaluationFlowEn = {
 }
 export const evaluationFlowKo = {
   datasets: '데이터셋 및 가져오기',
+  parserBenchmark: '문서 파서 벤치마크',
   importHint: '공개 평가 데이터나 로컬 주석을 확인한 후 변경 불가능한 버전을 저장합니다.',
   publicCatalog: '공개 카탈로그',
   localFile: '로컬 파일',
@@ -291,6 +294,7 @@ export const evaluationFlowKo = {
 }
 export const evaluationFlowRu = {
   datasets: 'Наборы данных и импорт',
+  parserBenchmark: 'Тестирование парсеров',
   importHint: 'Проверьте открытые данные или локальную разметку и сохраните неизменяемую версию.',
   publicCatalog: 'Открытый каталог',
   localFile: 'Локальный файл',

@@ -12,7 +12,7 @@ ENGINES = ('builtin', 'markitdown', 'opendataloader', 'weknoracloud', 'mineru', 
 
 
 def docker(*args: str) -> str:
-    p = subprocess.run(['docker', *args], capture_output=True, text=True, encoding='utf-8')
+    p = subprocess.run(['docker', *args], capture_output=True, text=True, encoding='utf-8', timeout=90)
     if p.returncode:
         raise RuntimeError(f'Docker operation failed: {args[0]} (exit {p.returncode})')
     return p.stdout.strip()
@@ -45,6 +45,7 @@ def main() -> int:
     p.add_argument('--manifest', required=True)
     p.add_argument('--output', required=True)
     p.add_argument('--engine', choices=ENGINES, required=True)
+    p.add_argument('--binary', default='artifacts/parser-benchmark/bin/parser-benchmark', help='Frozen adapter executable; use a distinct path for another build')
     p.add_argument('--timeout', default='10m')
     p.add_argument('--execute', action='store_true')
     p.add_argument('--max-samples', type=int, default=100)
@@ -68,7 +69,7 @@ def main() -> int:
         args.manifest = str(shard_path)
     cmd = ['docker', 'run', '--rm', '-i', '--name', f'weknora-parser-run-{args.engine}-{args.shard_index}', '--network', 'weknora-personal_default', '--memory', '1g', '--cpus', '2',
            '-e', 'SSRF_WHITELIST=weknora-parser-mineru,weknora-parser-paddle', '-e', 'LOG_LEVEL=fatal', '-e', 'JIEBA_DICT_DIR=/workspace/artifacts/parser-benchmark/bin/jieba',
-           '-v', f'{ROOT}:/workspace', '-w', '/workspace', '--entrypoint', '/workspace/artifacts/parser-benchmark/bin/parser-benchmark',
+           '-v', f'{ROOT}:/workspace', '-w', '/workspace', '--entrypoint', container_path(args.binary),
            'weknora-nogit-go:1.26', '--root', '/workspace', '--manifest', container_path(args.manifest), '--output', container_path(args.output),
            '--engine', args.engine, '--timeout', args.timeout, '--max-samples', str(args.max_samples), '--docreader', 'weknora-parser-docreader:50051']
     payload = b''

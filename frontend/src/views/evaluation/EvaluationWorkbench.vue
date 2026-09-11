@@ -22,6 +22,7 @@
 
     <div class="workbench-actions">
       <p>{{ t('evaluationFlow.startHint') }}</p>
+      <a v-if="parserBenchmarkUrl" :href="parserBenchmarkUrl" class="button button--quiet" target="_blank" rel="noreferrer"><ExternalLink :size="16" aria-hidden="true" />{{ t('evaluationFlow.parserBenchmark') }}</a>
       <button type="button" class="button button--quiet" @click="datasetsVisible = true"><Database :size="16" aria-hidden="true" />{{ t('evaluationFlow.datasets') }}</button>
       <button v-if="canManageLabels" type="button" class="button button--primary" @click="beginCreate()"><Plus :size="16" aria-hidden="true" />{{ t('evaluationFlow.newRun') }}</button>
     </div>
@@ -511,7 +512,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, CircleAlert, Coins, Crosshair, Database, Download, FlaskConical, LoaderCircle, MessageSquareText, Plus, RefreshCw, ScanLine, SlidersHorizontal, Timer } from '@lucide/vue'
+import { ChevronDown, CircleAlert, Coins, Crosshair, Database, Download, ExternalLink, FlaskConical, LoaderCircle, MessageSquareText, Plus, RefreshCw, ScanLine, SlidersHorizontal, Timer } from '@lucide/vue'
 
 import {
   EVALUATION_STATUS,
@@ -541,6 +542,14 @@ import { createEvaluationPoller } from './evaluationPolling'
 import type { DatasetImportResult } from '@/api/evaluation/datasets'
 
 const { t } = useI18n()
+const parserBenchmarkUrl = computed(() => {
+  const configured = import.meta.env.VITE_PARSER_BENCHMARK_URL
+  if (!configured) return ''
+  try {
+    const url = new URL(configured, window.location.origin)
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : ''
+  } catch { return '' }
+})
 const authStore = useAuthStore()
 const tenantKey = computed(() => `${authStore.currentUserId ?? ''}:${authStore.selectedTenantId ?? authStore.currentTenantId ?? ''}`)
 const datasetsVisible = ref(false), createVisible = ref(false), createDatasetId = ref(''), createVersionId = ref('')

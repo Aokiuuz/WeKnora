@@ -100,7 +100,7 @@ const componentDependencies: Plugin = {
         }
       `,
       'vue-i18n': `export const useI18n = () => ({ t: key => key })`,
-      '@lucide/vue': ['ChevronDown', 'CircleAlert', 'Coins', 'Crosshair', 'Database', 'Download', 'FlaskConical', 'LoaderCircle', 'MessageSquareText', 'Plus', 'RefreshCw', 'ScanLine', 'SlidersHorizontal', 'Timer'].map(name => `export const ${name} = {};`).join('\n'),
+      '@lucide/vue': ['ChevronDown', 'CircleAlert', 'Coins', 'Crosshair', 'Database', 'Download', 'ExternalLink', 'FlaskConical', 'LoaderCircle', 'MessageSquareText', 'Plus', 'RefreshCw', 'ScanLine', 'SlidersHorizontal', 'Timer'].map(name => `export const ${name} = {};`).join('\n'),
       '@/stores/auth': `export const useAuthStore = () => ({ hasRole: () => true })`,
       '@/api/evaluation': `
         export const EVALUATION_STATUS = {

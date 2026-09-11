@@ -25,3 +25,32 @@ func TestRedactSecretsAndSignedDownloads(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestResumeRejectsChangedEvidenceAndConfiguration(t *testing.T) {
+	md := []byte("actual result")
+	want := record{Engine: "mineru", SampleID: "sample-1", InputSHA256: "pdf", ManifestSHA256: "manifest",
+		SourceCommit: "build-label", BinarySHA256: "binary-1", MarkdownSHA256: hash(md), Status: "success", Config: map[string]string{"model": "pipeline"}}
+	if err := validateResume(want, want, md); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]func(*record){
+		"changed_binary_same_label": func(r *record) { r.BinarySHA256 = "binary-2" },
+		"missing_binary_identity":   func(r *record) { r.BinarySHA256 = "" },
+		"different_engine":          func(r *record) { r.Engine = "builtin" },
+		"different_sample":          func(r *record) { r.SampleID = "sample-2" },
+		"different_model":           func(r *record) { r.Config = map[string]string{"model": "vlm"} },
+		"unknown_status":            func(r *record) { r.Status = "pending" },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			saved := want
+			mutate(&saved)
+			if validateResume(saved, want, md) == nil {
+				t.Fatal("changed evidence reused")
+			}
+		})
+	}
+	if validateResume(want, want, []byte("corrupt result")) == nil {
+		t.Fatal("corrupt Markdown reused")
+	}
+}
