@@ -37,6 +37,30 @@ ALLOW = {CHAT, COMPARE, EMBED, 'qwen/qwen3.8-flash', 'deepseek/deepseek-v4-pro'}
 def save(path, data):
     offline.dump(path, data)
 
+def validate_paid_ledger(records, attempts):
+    """Reconcile successful receipts and retain explicitly unknown failed costs."""
+    assert len(attempts) == len(records), 'Every physical request must have a ledger attempt'
+    available = collections.Counter((r['model'], Decimal(str(r['usage']['cost']))) for r in attempts
+                                    if r['status'] == 200 and r.get('usage', {}).get('cost') is not None)
+    total, unknown, failed = 0, 0, 0
+    for record in records:
+        failed += record['status'] != 'success'
+        if not record['accounting_complete']:
+            assert record['status'] != 'success', 'A successful answer requires a priced provider receipt'
+            assert record['cost_microunits'] is None, 'Unknown cost must remain null'
+            unknown += 1
+            continue
+        snapshot = json.loads(record['model_snapshot'])
+        amount = Decimal(snapshot['billing_usage']['reported_cost'])
+        expected = int((amount * 1000000).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+        assert record['cost_microunits'] == expected
+        assert snapshot['billing_usage']['cost_source'] == 'openrouter_usage_cost'
+        key = (snapshot['name'], amount)
+        assert available[key] > 0, 'Priced ledger has no matching supplier receipt'
+        available[key] -= 1
+        total += expected
+    return {'known_cost_microunits': total, 'unknown_cost_attempts': unknown, 'failed_attempts': failed}
+
 class BudgetRelay:
     def __init__(self, port, key, evidence, budget_path):
         self.key, self.evidence, self.budget_path = key, evidence, budget_path
@@ -96,18 +120,33 @@ class BudgetRelay:
             used = sum(Decimal(str(r.get('actual_usd', r['reserved_usd']))) for r in self.budget['requests'])
             assert used + reserve < Decimal('20'), 'Cumulative USD budget exhausted'
             assert len(self.budget['requests']) < 5000, 'Request count ceiling reached'
-            reservation = {'sequence': len(self.budget['requests']) + 1, 'model': model, 'reserved_usd': str(reserve), 'state': 'reserved'}
+            reservation = {'sequence': len(self.budget['requests']) + 1, 'round': request_round, 'path': path,
+                           'model': model, 'reserved_usd': str(reserve), 'state': 'reserved'}
             self.budget['requests'].append(reservation)
             save(self.budget_path, self.budget)
         start = time.monotonic()
         req = urllib.request.Request('https://openrouter.ai/api' + path, raw,
               {'Authorization': 'Bearer ' + self.key, 'Content-Type': 'application/json'})
         try:
-            response = self.opener.open(req, timeout=90)
-        except urllib.error.HTTPError as error:
-            response = error
-        encoded = response.read()
-        data = json.loads(encoded)
+            try:
+                response = self.opener.open(req, timeout=90)
+            except urllib.error.HTTPError as error:
+                response = error
+            encoded = response.read()
+            data = json.loads(encoded)
+        except Exception as error:
+            # An incomplete response is still a paid attempt. Preserve its full
+            # reservation and attribution even when the provider cost is unknown.
+            record = {'sequence': reservation['sequence'], 'round': request_round, 'model': model, 'path': path,
+                      'status': None, 'usage': {}, 'request_sha256': offline.digest(raw),
+                      'elapsed_ms': round((time.monotonic()-start)*1000), 'transport_error': type(error).__name__}
+            with self.lock:
+                reservation['state'] = 'uncertain'
+                save(self.budget_path, self.budget)
+                self.records.append(record)
+                with (self.evidence / 'supplier.jsonl').open('a', encoding='utf-8') as stream:
+                    stream.write(json.dumps(record) + '\n')
+            raise
         usage = data.get('usage', {})
         record = {'sequence': reservation['sequence'], 'round': request_round, 'model': model, 'path': path,
                   'status': response.status, 'provider_request_id': data.get('id'), 'provider': data.get('provider'),
@@ -161,6 +200,7 @@ class Acceptance(offline.Regression):
                       'provider': 'openrouter', 'max_concurrency': 1}
             if name == EMBED:
                 params['embedding_parameters'] = {'dimension': 1024, 'supports_dimension_override': True}
+                params['max_concurrency'] = getattr(self, 'embedding_concurrency', 1)
             else:
                 params.update(max_output_tokens=512, context_window=32768, extra_config={'thinking_control': 'none'})
             created, _ = self.request('model', 'POST', '/api/v1/models', {'name': name, 'type': kind, 'source': 'remote', 'parameters': params}, 201)
@@ -214,19 +254,13 @@ class Acceptance(offline.Regression):
             assert json.loads(persisted) == detail['runtime_metrics']
         attempts = [r for r in self.supplier.records if r['round'] == label]
         assert len(attempts) == len(records), ('request ledger count', len(attempts), len(records))
-        assert all(r['status'] == 'success' and r['accounting_complete'] for r in records)
-        for record in records:
-            snapshot = json.loads(record['model_snapshot'])
-            amount = snapshot['billing_usage']['reported_cost']
-            expected = int((Decimal(amount) * 1000000).quantize(Decimal(1), rounding=ROUND_HALF_UP))
-            assert record['cost_microunits'] == expected
-            assert snapshot['billing_usage']['cost_source'] == 'openrouter_usage_cost'
-        total = sum(r['cost_microunits'] for r in records)
+        accounting = validate_paid_ledger(records, attempts)
+        total = accounting['known_cost_microunits']
         assert detail['runtime_metrics']['cost']['totals'] == [{'currency': 'USD', 'cost_microunits': total}]
         save(self.output / (label + '-ledger.json'), records)
         summary = {'label': label, 'task_id': tid, 'model': model, 'questions': len(exported['questions']),
                    'attempts': dict(collections.Counter(r['path'] for r in attempts)), 'cost_microunits': total,
-                   'metric': detail['metric'], 'runtime_metrics': detail['runtime_metrics']}
+                   'metric': detail['metric'], 'runtime_metrics': detail['runtime_metrics'], 'accounting': accounting}
         self.manifest['rounds'].append(summary)
         save(self.output / 'manifest.json', self.manifest)
         print(json.dumps({'completed': label, 'questions': summary['questions'], 'attempts': summary['attempts'], 'cost_usd': total/1e6}), flush=True)

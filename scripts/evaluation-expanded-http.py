@@ -10,6 +10,13 @@ module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 
 
 class Expanded(module.Acceptance):
+    def __init__(self, args, key):
+        super().__init__(args, key)
+        self.env.update(CONCURRENCY_POOL_SIZE='4', BATCH_EMBED_SIZE='5')
+        self.embedding_concurrency = 4
+        self.manifest['concurrency_pool_size'] = 4
+        self.manifest['embedding_batch_size'] = 5
+
     def execute(self):
         self.supplier.start()
         try:

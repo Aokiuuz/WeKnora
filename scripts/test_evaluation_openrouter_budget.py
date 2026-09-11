@@ -49,6 +49,10 @@ class BudgetTest(unittest.TestCase):
         record=json.loads((self.root/'budget.json').read_text())['requests'][0]
         self.assertGreater(float(record['reserved_usd']),0)
         self.assertNotIn('actual_usd',record)
+        self.assertEqual(record['state'], 'uncertain')
+        receipt = json.loads((self.root/'supplier.jsonl').read_text())
+        self.assertIsNone(receipt['status'])
+        self.assertEqual(receipt['transport_error'], 'TimeoutError')
     def test_budget_rejects_before_network(self):
         self.relay.budget['requests']=[{'reserved_usd':'19.999'}]
         self.relay.opener=Opener({})
@@ -59,5 +63,26 @@ class BudgetTest(unittest.TestCase):
         import fcntl
         with (self.root/'budget.lock').open('a') as lock:
             with self.assertRaises(BlockingIOError): fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+
+class LedgerTest(unittest.TestCase):
+    def setUp(self):
+        self.record = {'status': 'success', 'accounting_complete': True, 'cost_microunits': 1,
+                       'model_snapshot': json.dumps({'name': module.CHAT, 'billing_usage': {
+                           'reported_cost': '0.0000014', 'cost_source': 'openrouter_usage_cost'}})}
+        self.receipt = {'model': module.CHAT, 'status': 200, 'usage': {'cost': 0.0000014}}
+    def test_failed_attempt_remains_unknown(self):
+        failed = {'status': 'error', 'accounting_complete': False, 'cost_microunits': None}
+        result = module.validate_paid_ledger([self.record, failed], [self.receipt, {'status': None}])
+        self.assertEqual(result, {'known_cost_microunits': 1, 'unknown_cost_attempts': 1, 'failed_attempts': 1})
+    def test_unknown_must_not_be_zero(self):
+        with self.assertRaisesRegex(AssertionError, 'remain null'):
+            module.validate_paid_ledger([{'status': 'error', 'accounting_complete': False,
+                                          'cost_microunits': 0}], [{'status': None}])
+    def test_receipt_cannot_be_reused(self):
+        with self.assertRaisesRegex(AssertionError, 'matching supplier'):
+            module.validate_paid_ledger([self.record, self.record], [self.receipt, {'status': None}])
+    def test_success_requires_cost(self):
+        with self.assertRaisesRegex(AssertionError, 'priced provider'):
+            module.validate_paid_ledger([dict(self.record, accounting_complete=False)], [self.receipt])
 
 if __name__=='__main__': unittest.main()
