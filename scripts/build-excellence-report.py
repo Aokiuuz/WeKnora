@@ -138,7 +138,10 @@ def wiki_batches(root, baseline, out):
             current.append(pair)
         summary = {'batch': batch, 'pairs': len(current), 'plan_sha256': sha(directory / 'plan.json')}
         for field in ['cache_read_tokens', 'cost_usd', 'duration_ms']:
-            summary[field + '_stable_minus_page_mean'] = float(np.mean([p['stable-prefix'][field] - p['page-first'][field] for p in current]))
+            differences = [p['stable-prefix'][field] - p['page-first'][field] for p in current
+                           if p['stable-prefix'][field] is not None and p['page-first'][field] is not None]
+            summary[field + '_reported_pairs'] = len(differences)
+            summary[field + '_stable_minus_page_mean'] = float(np.mean(differences)) if differences else None
         for arm in ['stable-prefix', 'page-first']:
             summary[arm] = {'cost_usd': sum(p[arm]['cost_usd'] for p in current),
                 'duration_p50_ms': float(np.median([p[arm]['duration_ms'] for p in current])),
@@ -152,13 +155,16 @@ def wiki_batches(root, baseline, out):
     for ax, field, title, reference in zip(axes,
             ['cache_read_tokens_stable_minus_page_mean', 'cost_ratio', 'latency_p50_ratio'],
             ['平均缓存读取令牌差', '总费用比：稳定前缀 / 页面优先', '中位耗时比：稳定前缀 / 页面优先'], [0, 1, 1]):
-        values = [s[field] for s in summaries]
+        values = [s[field] if s[field] is not None else float('nan') for s in summaries]
         ax.bar(range(3), values, width=.5, color='#176889')
         ax.axhline(reference, color='#404f59', linewidth=1, linestyle='--')
         ax.set_xticks(range(3), ['批次 A', '批次 B', '批次 C'])
         ax.set_title(title, fontsize=10); ax.grid(axis='y', alpha=.18); ax.set_axisbelow(True)
-        ax.set_ylim(min(0, min(values) * 1.2), max(max(values), reference) * 1.25)
+        finite = [v for v in values if np.isfinite(v)] or [1]
+        ax.set_ylim(min(0, min(finite) * 1.2), max(max(finite), reference, .01) * 1.25)
         for i, value in enumerate(values):
+            if not np.isfinite(value):
+                ax.text(i, 0, '未报告', ha='center', va='bottom'); continue
             ax.annotate(f'{value:.1f}' if field.startswith('cache') else f'{value:.2f}', (i, value),
                         xytext=(0, 7), textcoords='offset points', ha='center')
     fig.suptitle('Wiki 页面生成 · 3 批次 × 30 对 · 固定供应商路由', fontsize=14)
@@ -167,6 +173,9 @@ def wiki_batches(root, baseline, out):
 
 
 def render_report(facts):
+    def cache_difference(s):
+        value = s['cache_read_tokens_stable_minus_page_mean']
+        return '未报告' if value is None else f"{value:.1f}（{s['cache_read_tokens_reported_pairs']}/30）"
     reader_rows = '\n'.join(
         f"| {DATA_NAMES[DATASETS.index(s['dataset'])]} | {NAMES[MODELS.index(s['model'])]} | {s['n']} | "
         f"{s['em']:.1%} | {s['f1']:.1%} | {s['f1_ci95'][0]:.1%}–{s['f1_ci95'][1]:.1%} | {s['invalid_json']} |"
@@ -176,7 +185,7 @@ def render_report(facts):
         f"{r['recall']:.1%} | {r['ndcg3']:.4f} | {r['cost_usd']:.6f} | {r['accounting']['unknown_cost_attempts']} | {r['empty_outputs']} |"
         for r in facts['http'])
     wiki_rows = '\n'.join(
-        f"| {s['batch']} | {s['pairs']} | {s['cache_read_tokens_stable_minus_page_mean']:.1f} | {s['cost_ratio']:.3f} | "
+        f"| {s['batch']} | {s['pairs']} | {cache_difference(s)} | {s['cost_ratio']:.3f} | "
         f"{s['latency_p50_ratio']:.3f} | {s['stable-prefix']['checks_passed']}/30 / {s['page-first']['checks_passed']}/30 |"
         for s in facts['wiki'])
     budget = facts['budget']
@@ -207,7 +216,7 @@ flowchart LR
 
 ## 数据来源与质量
 
-三个公开开发集共读取 22,497 题。结构、答案位置、支持句索引与重复标识检查保留 22,320 题，排除 177 题。来源为 [CMRC2018 官方仓库](https://github.com/ymcui/cmrc2018)、[SQuAD 官方项目](https://rajpurkar.github.io/SQuAD-explorer/)和 [HotpotQA 官方项目](https://hotpotqa.github.io/)；HotpotQA 文件使用作者组织的[固定版本镜像](https://huggingface.co/datasets/hotpotqa/hotpot_qa/tree/1908d6afbbead072334abe2965f91bd2709910ab)。版本、许可文件、下载地址和 SHA-256 摘要见 [sources.json](sources.json)。SHA-256 是安全散列算法 256 位版本，用于验证文件内容一致性。
+三个公开开发集共读取 22,497 题。结构、答案位置、支持句索引与重复标识检查保留 22,320 题，排除 177 题。来源为 [中文机器阅读理解数据集 CMRC2018（Chinese Machine Reading Comprehension 2018）](https://github.com/ymcui/cmrc2018)、[斯坦福问答数据集 SQuAD 2.0（Stanford Question Answering Dataset 2.0）](https://rajpurkar.github.io/SQuAD-explorer/)和[多跳问答数据集 HotpotQA](https://hotpotqa.github.io/)；HotpotQA 文件使用作者组织的[固定版本镜像](https://huggingface.co/datasets/hotpotqa/hotpot_qa/tree/1908d6afbbead072334abe2965f91bd2709910ab)。版本、许可文件、下载地址和 SHA-256 摘要见 [sources.json](sources.json)。SHA-256 是安全散列算法 256 位版本，用于验证文件内容一致性。
 
 | 数据集 | 读取题数 | 有效题数 | 排除题数 | 调试样本 | 正式样本 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -219,7 +228,7 @@ flowchart LR
 
 ## 原始上下文回答
 
-96 道调试题形成 192 份提示词对照输出，规则选择以预先保存的宏平均 F1 和拒答条件为依据。正式集固定后，两个模型各回答 600 题，共完成 1,200 份输出和 1,211 次尝试。失败尝试保留于原始证据；6 份格式无效的回答按零分计入正式样本。
+96 道调试题形成 192 份提示词对照输出，规则选择以预先保存的宏平均词元重合 F1（精确率与召回率的调和平均）和拒答条件为依据。正式集固定后，两个模型各回答 600 题，共完成 1,200 份输出和 1,211 次尝试。失败尝试保留于原始证据；6 份格式无效的回答按零分计入正式样本。
 
 完全匹配（Exact Match，EM）衡量标准化答案是否与任一参考答案一致。F1 为词元重合的精确率与召回率的调和平均。英文采用 SQuAD 标准化规则，中文采用汉字与拉丁词分段；HotpotQA 的是非答案不匹配时计零。中文分词方案属于本实验口径。
 
@@ -241,7 +250,7 @@ DeepSeek V4 Flash 正确拒答 43/100，Kimi K2.5 正确拒答 29/100。证据�
 
 ## 完整检索流程
 
-每个数据集使用 500 个真实段落与 50 道可回答问题，每个模型完成一轮。相关性标签标记问题的原始证据段落，语料中可能存在其他语义相关段落。召回率按这些固定标签计算；归一化折损累计增益前三位（Normalized Discounted Cumulative Gain at 3，NDCG@3）衡量前三项的排序质量。
+每个数据集使用 500 个真实段落与 50 道可回答问题，每个模型完成一轮。相关性标签标记问题的原始证据段落，语料中可能存在其他语义相关段落。召回率按这些固定标签计算；归一化折损累计增益前三位（Normalized Discounted Cumulative Gain at 3，NDCG@3）衡量前三项的排序质量。费用单位为美元（United States Dollar，USD）。
 
 | 数据集 | 模型 | 问题 / 段落 | 召回率 | NDCG@3 | 已知费用 USD | 费用未知尝试 | 空输出 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -249,11 +258,11 @@ DeepSeek V4 Flash 正确拒答 43/100，Kimi K2.5 正确拒答 29/100。证据�
 
 供应商嵌入批次包含 5 段，嵌入模型与执行池并发均为 4。CMRC 的 DeepSeek 任务使用 1 个问题工作线程，其余任务使用 4 个；运行资源差异限制了任务总耗时的直接比较。每个评测任务均核对数据库、详情接口、JSON 与 CSV 的运行指标。成功调用费用按供应商收据逐条转换为百万分之一美元并核对总和；网络失败或供应商未报告用量时，未知金额保持空值。空输出按零分计入自动质量指标，表中的空输出列保留其数量。
 
-持久化向量缓存按租户、模型、行为参数和文本内容区分条目。池化嵌入每 64 段保存一轮进度，后续窗口失败时已保存窗口可供重试和进程重启使用。500 段回归覆盖中途失败、重启复用、重复文本顺序、返回向量独立性及取消停止后续调用。五组真实冷启动与重启对照、内容修改探测见[缓存实测证据](../final-acceptance/README.md)。
+持久化向量缓存按租户、模型、行为参数和文本内容区分条目。池化嵌入每 64 段保存一轮进度，后续窗口失败时已保存窗口可供重试使用。真实 500 段索引在末个窗口失败后，前 448 段全部命中缓存，剩余 52 段重新请求；成功收据中的重复输入为 47 段，详见 [cache-recovery.json](cache-recovery.json)。500 段单元回归同时覆盖新建缓存协调器后的存储复用、重复文本顺序、返回向量独立性及取消停止后续调用。五组真实冷启动与进程重启对照、内容修改探测见[缓存实测证据](../final-acceptance/README.md)。
 
 ## 页面生成缓存、费用与耗时
 
-Wiki 知识页面生成使用 DeepSeek V4 Flash，固定供应商路由 `gmicloud/fp8`。每批 30 对请求交替安排稳定前缀与页面优先两种布局；批次 A、B、C 使用独立的前缀命名空间。四项自动事实检查覆盖座位数、目录项、开放时间和未经支持的每日开放描述。
+Wiki 知识页面生成使用 DeepSeek V4 Flash，固定供应商路由 `gmicloud/fp8`。每批 30 对请求交替安排稳定前缀与页面优先两种布局；批次 A、B、C 使用独立的前缀命名空间。四项自动字符串检查覆盖座位数、目录项、开放时间和每日开放措辞；否定语境也可能触发字符串匹配，这些检查不能替代语义核验。
 
 | 批次 | 配对数 | 缓存读取令牌平均差 | 总费用比 | 中位耗时比 | 四项全通过：稳定 / 页面 |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -263,7 +272,7 @@ Wiki 知识页面生成使用 DeepSeek V4 Flash，固定供应商路由 `gmiclou
 
 ![页面生成配对结果](wiki-batches.png)
 
-缓存收益随批次变化；同批请求共享供应商缓存状态，配对样本不能视为完全独立。费用与耗时采用实际记录，四项自动检查属于有限规则覆盖。逐对数据见 [wiki-pairs.json](wiki-pairs.json)。
+缓存收益随批次变化；同批请求共享供应商缓存状态，配对样本不能视为完全独立。费用与耗时采用实际记录，四项自动字符串检查属于有限规则覆盖。逐对数据见 [wiki-pairs.json](wiki-pairs.json)。
 
 ## 工程与页面验收
 
@@ -273,7 +282,7 @@ Wiki 知识页面生成使用 DeepSeek V4 Flash，固定供应商路由 `gmiclou
 
 页面截图来自本机两个合成问题的固定演示任务，用于验证界面行为。大规模质量结论来自上述独立数据实验。
 
-文件写入同时检查复制与关闭错误；配置读取拒绝无效展开内容；批量知识访问传播数据库错误并处理空代理；审批订阅退避在接收实际消息后复位。对应回归测试和本轮增量静态检查通过。项目全量根模块静态扫描记录 5,923 项发现，其内容含代码格式、长行、错误处理与静态分析建议；全量扫描状态与本轮增量状态分别保存，不能据增量通过宣称全仓检查通过。
+文件写入同时检查复制与关闭错误；配置读取拒绝无效展开内容；批量知识访问传播数据库错误并处理空代理；审批订阅退避在接收实际消息后复位。对应回归测试通过；增量静态检查覆盖 `80a938a0` 至 `d0535cdf` 的变更，结果为 0 项。项目全量根模块静态扫描记录 5,923 项发现，其内容含代码格式、长行、错误处理与静态分析建议；全量扫描状态与本轮增量状态分别保存，不能据增量通过宣称全仓检查通过。
 
 固定评测门禁、持久化 HTTP 冷热缓存、取消、重复取消、进程终止与执行租约恢复均保留零费用回归证据。[交付变更](https://github.com/Aokiuuz/WeKnora/pull/1)保存持续集成结果；[受控退化变更](https://github.com/Aokiuuz/WeKnora/pull/2)保存召回退化触发必需检查失败及阻断合并的证据。
 
@@ -281,7 +290,7 @@ Wiki 知识页面生成使用 DeepSeek V4 Flash，固定供应商路由 `gmiclou
 
 原始上下文探针源码提交为 `{facts['reader_plan']['source_commit']}`，探针摘要为 `{facts['reader_plan']['binary_sha256']}`。当前个人服务报告的源码提交为 `{facts['personal_build']['commit_id']}`。完整检索任务的构建标识见 [summary.json](summary.json)，各实验保留实际执行二进制的来源，不以报告提交代替实验提交。
 
-Apple M4 工程复现使用提交 `1776aa442a491f1657196ca21da914bab197b17c`。提供的独立证据包汇总记录两次新建数据库运行和 988 项一致性检查通过，证据审阅范围见本机交付索引。当前扩展实验在 Linux amd64 环境执行，M4 记录的适用范围以其提交标识为准。
+Apple M4 工程复现使用提交 `1776aa442a491f1657196ca21da914bab197b17c`。提供的独立证据包汇总记录两次新建数据库运行和 988 项一致性检查通过，证据审阅范围见本机交付索引。当前扩展实验在 Linux 操作系统的 64 位 x86（amd64）环境执行，M4 记录的适用范围以其提交标识为准。
 
 模型累计预算为 20 美元，当前供应商已报告费用 `{budget['reported_usd']}` 美元，未结算调用保守预留 `{budget['unsettled_reserved_usd']}` 美元，共 `{budget['requests']}` 次预算记录。预算覆盖本轮、前次实验和失败重试。每次出站调用先预留成本，已知费用按实际结算，未知费用继续占用预算；文件锁阻止两个付费执行器同时使用该预算文件。
 
@@ -336,7 +345,10 @@ def main():
     held = sum(Decimal(r['reserved_usd']) for r in budget['requests'] if 'actual_usd' not in r)
     assert paid + held < 20
     quality = read(root / 'data/quality.json')
+    cache_recovery = read(root / 'cache-recovery.json')
+    assert sum(r['hit_items'] for r in cache_recovery['first_16_lookups'][8:15]) == 448
     facts = {'data_quality': quality, 'reader': summaries, 'reader_plan': plan, 'http': runs, 'wiki': wiki,
+             'cache_recovery': cache_recovery,
              'browser': browser, 'personal_build': personal['system_info']['data'],
              'budget': {'limit_usd': 20, 'reported_usd': str(paid), 'unsettled_reserved_usd': str(held), 'requests': len(budget['requests'])},
              'human_rating': None}
@@ -345,6 +357,7 @@ def main():
     for name in ['01-evaluation-overview.png', '02-question-evidence.png', '04-model-statistics.png']:
         shutil.copy2(root / 'browser' / name, out / name)
     shutil.copy2(root / 'data/sources.json', out / 'sources.json')
+    shutil.copy2(root / 'cache-recovery.json', out / 'cache-recovery.json')
     write(out / 'artifact-sha256.json', {p.name: sha(p) for p in sorted(out.iterdir()) if p.is_file() and p.name != 'artifact-sha256.json'})
     print(json.dumps({'status': 'passed', 'reader_outputs': 1200, 'http_outputs': 200, 'wiki_pairs': 90, 'reported_usd': str(paid)}))
 
