@@ -31,6 +31,7 @@ node_modules/
 /artifacts/evaluation-rag-http/
 /artifacts/evaluation-demo/
 /artifacts/public-datasets/
+/artifacts/parser-benchmark/
 *.log
 
 # 临时文件
