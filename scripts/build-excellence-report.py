@@ -189,6 +189,8 @@ def render_report(facts):
         f"{s['latency_p50_ratio']:.3f} | {s['stable-prefix']['checks_passed']}/30 / {s['page-first']['checks_passed']}/30 |"
         for s in facts['wiki'])
     budget = facts['budget']
+    cost_ratios = '、'.join(f"{s['cost_ratio']:.1%}" for s in facts['wiki'])
+    latency_ratios = '、'.join(f"{s['latency_p50_ratio']:.2f}" for s in facts['wiki'])
     return f'''# 扩展验收实测报告
 
 系统提供固定数据评测、逐题证据、供应商用量账本、持久化向量缓存、页面生成和一键启动。验收证据包括 1,200 份原始上下文回答、200 条完整检索流程结果、90 组页面生成配对数据及 12 项真实浏览器检查。人工评分字段为空。
@@ -262,7 +264,7 @@ DeepSeek V4 Flash 正确拒答 43/100，Kimi K2.5 正确拒答 29/100。证据�
 
 ## 页面生成缓存、费用与耗时
 
-Wiki 知识页面生成使用 DeepSeek V4 Flash，固定供应商路由 `gmicloud/fp8`。每批 30 对请求交替安排稳定前缀与页面优先两种布局；批次 A、B、C 使用独立的前缀命名空间。四项自动字符串检查覆盖座位数、目录项、开放时间和每日开放措辞；否定语境也可能触发字符串匹配，这些检查不能替代语义核验。
+Wiki 知识页面生成使用 DeepSeek V4 Flash，固定供应商路由 `gmicloud/fp8`。每批 30 对请求交替安排稳定前缀与页面优先两种布局；批次 B、C 通过不同批次标识区分共享前缀，批次 A 的原始前缀保存在其固定方案中。四项自动字符串检查覆盖座位数、目录项、开放时间和每日开放措辞；否定语境也可能触发字符串匹配，这些检查不能替代语义核验。
 
 | 批次 | 配对数 | 缓存读取令牌平均差 | 总费用比 | 中位耗时比 | 四项全通过：稳定 / 页面 |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -272,7 +274,7 @@ Wiki 知识页面生成使用 DeepSeek V4 Flash，固定供应商路由 `gmiclou
 
 ![页面生成配对结果](wiki-batches.png)
 
-缓存收益随批次变化；同批请求共享供应商缓存状态，配对样本不能视为完全独立。费用与耗时采用实际记录，四项自动字符串检查属于有限规则覆盖。逐对数据见 [wiki-pairs.json](wiki-pairs.json)。
+三批稳定前缀总费用分别为对照的 {cost_ratios}，中位耗时比分别为 {latency_ratios}。固定路由下三批均观察到成本下降，第三批的中位耗时增加。同批请求共享供应商缓存状态，配对样本不能视为完全独立。四项自动字符串检查属于有限规则覆盖。逐对数据见 [wiki-pairs.json](wiki-pairs.json)。
 
 ## 工程与页面验收
 
