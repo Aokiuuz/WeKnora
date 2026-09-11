@@ -1,6 +1,6 @@
 # 解析引擎测评运行说明
 
-当前测评工作区为 `D:\XINIUNIAO\integrations\WeKnora-parser-benchmark`，主应用工作区为 `D:\XINIUNIAO\integrations\WeKnora-topic3-0.8`。测评包含八个解析引擎，共用固定的 100 页公开文档清单。文档来源、抽样、参考标注与评分定义见 [公开基准子集说明](parser-benchmark-dataset.md)。正式执行进度以逐页证据及报告页面为准；PaddleOCR-VL 已完成单页验证，100 页正式批次尚未完成。
+当前测评工作区为 `D:\XINIUNIAO\integrations\WeKnora-parser-benchmark`，主应用工作区为 `D:\XINIUNIAO\integrations\WeKnora-topic3-0.8`。测评包含八个解析引擎，共用固定的 100 页公开文档清单。文档来源、抽样、参考标注与评分定义见 [公开基准子集说明](parser-benchmark-dataset.md)。正式执行进度以逐页证据及报告页面为准；PaddleOCR-VL 已完成单页验证，100 页正式批次正在后台执行，完成后自动生成评分与报告。
 
 ## 服务与浏览器入口
 
@@ -19,7 +19,7 @@
 
 2026 年 9 月 11 日的只读检查确认：后端 `http://127.0.0.1:18080/health/ready` 返回超文本传输协议（Hypertext Transfer Protocol，HTTP）状态码 `200`；通过前端访问 `/api/v1/models` 的未登录请求返回 `401`，表示请求已到达鉴权接口；报告的 `/status-summary.json` 返回 `200`。文档解析成功另由真实文件验证记录确认。
 
-主前端评测工作台具备可选报告入口，其地址由构建配置 `VITE_PARSER_BENCHMARK_URL` 控制，例如 `http://127.0.0.1:18090`。入口接受 HTTP 或 HTTPS 地址，未配置时隐藏。源代码已具备该入口，部署验证待完成；构建时设置此变量后需要部署对应静态文件。
+主前端评测工作台具备可选报告入口，其地址由构建配置 `VITE_PARSER_BENCHMARK_URL` 控制，例如 `http://127.0.0.1:18090`。入口接受 HTTP 或 HTTPS 地址，未配置时隐藏。个人服务已部署该入口，登录工作台后的实际点击可打开八引擎、100 页报告。部署证据保存在 artifacts/parser-benchmark/deployment.json，登录导航证据保存在 artifacts/parser-benchmark/entry-check/checks.json。
 
 ## 启动与现有配置
 
