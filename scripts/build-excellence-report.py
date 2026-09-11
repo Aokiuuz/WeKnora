@@ -288,7 +288,7 @@ Wiki 知识页面生成使用 DeepSeek V4 Flash，固定供应商路由 `gmiclou
 
 ## 版本、预算与复现
 
-原始上下文探针源码提交为 `{facts['reader_plan']['source_commit']}`，探针摘要为 `{facts['reader_plan']['binary_sha256']}`。当前个人服务报告的源码提交为 `{facts['personal_build']['commit_id']}`。完整检索任务的构建标识见 [summary.json](summary.json)，各实验保留实际执行二进制的来源，不以报告提交代替实验提交。
+原始上下文探针源码提交为 `{facts['reader_plan']['source_commit']}`，探针摘要为 `{facts['reader_plan']['binary_sha256']}`。个人服务验收快照记录的源码提交为 `{facts['personal_build']['commit_id']}`。完整检索任务的构建标识见 [summary.json](summary.json)，各实验保留实际执行二进制的来源，不以报告提交代替实验提交。
 
 Apple M4 工程复现使用提交 `1776aa442a491f1657196ca21da914bab197b17c`。提供的独立证据包汇总记录两次新建数据库运行和 988 项一致性检查通过，证据审阅范围见本机交付索引。当前扩展实验在 Linux 操作系统的 64 位 x86（amd64）环境执行，M4 记录的适用范围以其提交标识为准。
 
