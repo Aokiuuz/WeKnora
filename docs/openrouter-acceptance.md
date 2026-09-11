@@ -43,7 +43,10 @@ python3 -B scripts/test_evaluation_openrouter_budget.py
 真实验收脚本在独立 Linux 容器中使用 SQLite 数据库，API 密钥经标准输入传递。应用仅持有本地代理占位凭据，所有付费请求经过预算代理。运行前准备带 `sqlite_fts5` 构建标记的后端二进制，并配置 Jieba 词典路径。
 
 ```sh
-go build -buildvcs=false -tags sqlite_fts5 -o /private/bin/WeKnora ./cmd/server
+BUILD_REVISION="$(git rev-parse HEAD)"
+go build -buildvcs=false -tags sqlite_fts5 \
+  -ldflags "-X github.com/Tencent/WeKnora/internal/buildinfo.CommitID=$BUILD_REVISION" \
+  -o /private/bin/WeKnora ./cmd/server
 python3 scripts/evaluation-openrouter-acceptance.py \
   --output /private/evidence/run-01 \
   --budget-file /private/evidence/budget.json \
@@ -62,6 +65,7 @@ python3 scripts/evaluation-openrouter-acceptance.py \
 
 ```sh
 go build -buildvcs=false -tags sqlite_fts5 \
+  -ldflags "-X github.com/Tencent/WeKnora/internal/buildinfo.CommitID=$BUILD_REVISION" \
   -o .local-service/bin/evaluation-provider-probe ./cmd/evaluation-provider-probe
 ```
 
