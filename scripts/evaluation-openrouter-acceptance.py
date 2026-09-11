@@ -70,10 +70,14 @@ class BudgetRelay:
         self.server = http.server.ThreadingHTTPServer(('127.0.0.1', port), Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
     def start(self): self.thread.start()
+    def request_round(self, payload):
+        """Capture attribution before network I/O; concurrent runners override this."""
+        return self.round
     def close(self):
         self.server.shutdown(); self.server.server_close(); self.thread.join()
         self.budget_guard.close()
     def forward(self, path, payload):
+        request_round = self.request_round(payload)
         assert path in ('/v1/chat/completions', '/v1/embeddings')
         model = payload['model']
         assert model in ALLOW and not payload.get('tools') and not payload.get('stream')
@@ -91,7 +95,7 @@ class BudgetRelay:
         with self.lock:
             used = sum(Decimal(str(r.get('actual_usd', r['reserved_usd']))) for r in self.budget['requests'])
             assert used + reserve < Decimal('20'), 'Cumulative USD budget exhausted'
-            assert len(self.budget['requests']) < 1500, 'Request count ceiling reached'
+            assert len(self.budget['requests']) < 5000, 'Request count ceiling reached'
             reservation = {'sequence': len(self.budget['requests']) + 1, 'model': model, 'reserved_usd': str(reserve), 'state': 'reserved'}
             self.budget['requests'].append(reservation)
             save(self.budget_path, self.budget)
@@ -105,7 +109,7 @@ class BudgetRelay:
         encoded = response.read()
         data = json.loads(encoded)
         usage = data.get('usage', {})
-        record = {'sequence': reservation['sequence'], 'round': self.round, 'model': model, 'path': path,
+        record = {'sequence': reservation['sequence'], 'round': request_round, 'model': model, 'path': path,
                   'status': response.status, 'provider_request_id': data.get('id'), 'provider': data.get('provider'),
                   'request_sha256': offline.digest(raw), 'usage': usage, 'elapsed_ms': round((time.monotonic()-start)*1000)}
         if path.endswith('embeddings') and data.get('data'):

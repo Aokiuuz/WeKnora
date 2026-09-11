@@ -33,6 +33,16 @@ class BudgetTest(unittest.TestCase):
         self.relay.forward('/v1/chat/completions',self.payload)
         record=json.loads((self.root/'budget.json').read_text())['requests'][0]
         self.assertEqual(record['actual_usd'],'0')
+    def test_round_is_captured_before_network_dispatch(self):
+        relay = self.relay
+        class ChangingOpener:
+            def open(self, *args, **kwargs):
+                relay.round = 'next-request'
+                return Response({'usage': {'cost': 0}})
+        relay.round = 'original-request'
+        relay.opener = ChangingOpener()
+        relay.forward('/v1/chat/completions', self.payload)
+        self.assertEqual(relay.records[0]['round'], 'original-request')
     def test_unknown_transport_keeps_full_reservation(self):
         self.relay.opener=Opener(TimeoutError('fixture timeout'))
         with self.assertRaises(TimeoutError): self.relay.forward('/v1/chat/completions',self.payload)

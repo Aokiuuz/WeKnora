@@ -13,6 +13,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/application/repository"
 	"github.com/Tencent/WeKnora/internal/application/service"
+	"github.com/Tencent/WeKnora/internal/buildinfo"
 	"github.com/Tencent/WeKnora/internal/modelcache"
 	"github.com/Tencent/WeKnora/internal/modelobs"
 	"github.com/Tencent/WeKnora/internal/models/chat"
@@ -74,7 +75,8 @@ func run(r request) error {
 	if r.ChatModel == "" {
 		r.ChatModel = "deepseek/deepseek-v4-flash"
 	}
-	if r.ChatModel != "deepseek/deepseek-v4-flash" && r.ChatModel != "deepseek/deepseek-v4-pro" {
+	if r.ChatModel != "deepseek/deepseek-v4-flash" && r.ChatModel != "deepseek/deepseek-v4-pro" &&
+		r.ChatModel != "moonshotai/kimi-k2.5" {
 		return errors.New("unsupported probe model")
 	}
 	if r.BaseURL != "http://127.0.0.1:18810/v1" || r.Step == "" {
@@ -178,7 +180,9 @@ func run(r request) error {
 	if err := db.Where("evaluation_task_id = ?", r.Step).Find(&ledger).Error; err != nil {
 		return err
 	}
-	return json.NewEncoder(os.Stdout).Encode(map[string]any{"step": r.Step, "result": result, "ledger": ledger})
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{
+		"step": r.Step, "result": result, "ledger": ledger, "build": buildinfo.Get(),
+	})
 }
 
 func main() {
