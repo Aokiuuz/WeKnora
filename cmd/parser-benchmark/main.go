@@ -24,9 +24,11 @@ import (
 	"github.com/Tencent/WeKnora/internal/utils"
 )
 
-var commitID = "unknown"
-var validID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$`)
-var signedURL = regexp.MustCompile(`(https?://[^\s"<>?]+)\?[^\s"<>]+`)
+var (
+	commitID  = "unknown"
+	validID   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$`)
+	signedURL = regexp.MustCompile(`(https?://[^\s"<>?]+)\?[^\s"<>]+`)
+)
 
 type sample struct {
 	ID       string `json:"id"`
@@ -71,11 +73,12 @@ func writeJSON(path string, value any) error {
 	if err != nil {
 		return err
 	}
-	if err = os.WriteFile(path+".tmp", append(b, '\n'), 0600); err != nil {
+	if err = os.WriteFile(path+".tmp", append(b, '\n'), 0o600); err != nil {
 		return err
 	}
 	return os.Rename(path+".tmp", path)
 }
+
 func redact(s string, secretValues []string) string {
 	for _, secret := range secretValues {
 		if len(secret) > 3 {
@@ -102,7 +105,8 @@ func validateResume(old, expected record, markdown []byte) error {
 	wantConfig, _ := json.Marshal(expected.Config)
 	if old.Engine != expected.Engine || old.SampleID != expected.SampleID || old.InputSHA256 != expected.InputSHA256 ||
 		old.ManifestSHA256 != expected.ManifestSHA256 || old.SourceCommit != expected.SourceCommit ||
-		old.BinarySHA256 == "" || old.BinarySHA256 != expected.BinarySHA256 || string(oldConfig) != string(wantConfig) ||
+		old.BinarySHA256 == "" || old.BinarySHA256 != expected.BinarySHA256 ||
+		string(oldConfig) != string(wantConfig) ||
 		old.MarkdownSHA256 != hash(markdown) {
 		return errors.New("resume identity mismatch; preserve existing evidence and choose a new output directory")
 	}
@@ -113,6 +117,7 @@ func validateResume(old, expected record, markdown []byte) error {
 		return errors.New("stored result has an unknown status")
 	}
 }
+
 func engineOverrides(engine string, c *types.ParserEngineConfig, language string) map[string]string {
 	all := c.ToOverridesMap()
 	out := map[string]string{}
@@ -154,17 +159,27 @@ func engineOverrides(engine string, c *types.ParserEngineConfig, language string
 	}
 	return out
 }
+
 func run() error {
 	manifestPath := flag.String("manifest", "", "frozen sample manifest")
 	root := flag.String("root", ".", "repository root for relative PDF paths")
 	output := flag.String("output", "", "new or resumable output directory")
 	engine := flag.String("engine", "", "one of the eight benchmark engines")
-	docreaderAddr := flag.String("docreader", "weknora-personal-docreader-1:50051", "DocReader gRPC address")
+	docreaderAddr := flag.String("docreader", "127.0.0.1:50051", "DocReader gRPC address")
 	maxSamples := flag.Int("max-samples", 100, "hard cap on submissions; 1 to 100")
 	timeout := flag.Duration("timeout", 10*time.Minute, "deadline for each PDF")
 	execute := flag.Bool("execute", false, "submit documents to selected engine")
 	flag.Parse()
-	allowed := map[string]bool{"builtin": true, "markitdown": true, "opendataloader": true, "weknoracloud": true, "mineru": true, "mineru_cloud": true, "paddleocr_vl": true, "paddleocr_vl_cloud": true}
+	allowed := map[string]bool{
+		"builtin":            true,
+		"markitdown":         true,
+		"opendataloader":     true,
+		"weknoracloud":       true,
+		"mineru":             true,
+		"mineru_cloud":       true,
+		"paddleocr_vl":       true,
+		"paddleocr_vl_cloud": true,
+	}
 	if !allowed[*engine] || *manifestPath == "" || *output == "" || *maxSamples < 1 || *maxSamples > 100 {
 		return errors.New("manifest, output, known engine and max-samples 1..100 are required")
 	}
@@ -201,7 +216,10 @@ func run() error {
 		}
 	}
 	if !*execute {
-		return json.NewEncoder(os.Stdout).Encode(map[string]any{"preflight": "passed", "engine": *engine, "samples": len(m.Samples), "network_calls": 0})
+		return json.NewEncoder(os.Stdout).
+			Encode(map[string]any{
+				"preflight": "passed", "engine": *engine, "samples": len(m.Samples), "network_calls": 0,
+			})
 	}
 	var creds credentials
 	if err = json.NewDecoder(io.LimitReader(os.Stdin, 1<<20)).Decode(&creds); err != nil {
@@ -244,9 +262,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer remote.Close()
+	defer func() { _ = remote.Close() }()
 	dir := filepath.Join(*output, *engine)
-	if err = os.MkdirAll(dir, 0755); err != nil {
+	if err = os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	manifestHash := hash(data)
@@ -264,7 +282,20 @@ func run() error {
 		resultPath := filepath.Join(dir, s.ID+".json")
 		overrides := engineOverrides(*engine, creds.ParserConfig, s.Language)
 		publicConfig := publicOverrides(overrides, secrets)
-		r := record{SchemaVersion: 2, Engine: *engine, SampleID: s.ID, InputSHA256: s.SHA256, ManifestSHA256: manifestHash, SourceCommit: commitID, BinarySHA256: binaryHash, StartedAt: time.Now().UTC().Format(time.RFC3339), Config: publicConfig, FallbackStatus: "not_reported_by_adapter", CostBasis: "provider_invoice_not_available", OutputScope: "production_reader_adapter_markdown_before_chunking_and_image_OCR"}
+		r := record{
+			SchemaVersion:  2,
+			Engine:         *engine,
+			SampleID:       s.ID,
+			InputSHA256:    s.SHA256,
+			ManifestSHA256: manifestHash,
+			SourceCommit:   commitID,
+			BinarySHA256:   binaryHash,
+			StartedAt:      time.Now().UTC().Format(time.RFC3339),
+			Config:         publicConfig,
+			FallbackStatus: "not_reported_by_adapter",
+			CostBasis:      "provider_invoice_not_available",
+			OutputScope:    "production_reader_adapter_markdown_before_chunking_and_image_OCR",
+		}
 		if old, e := os.ReadFile(resultPath); e == nil {
 			var saved record
 			if json.Unmarshal(old, &saved) != nil {
@@ -291,17 +322,38 @@ func run() error {
 		if e != nil {
 			return e
 		}
-		if *engine == "builtin" || *engine == "markitdown" || *engine == "opendataloader" || *engine == "mineru" || *engine == "paddleocr_vl" {
+		if *engine == "builtin" || *engine == "markitdown" || *engine == "opendataloader" || *engine == "mineru" ||
+			*engine == "paddleocr_vl" {
 			zero := 0.0
 			r.CostUSD = &zero
 			r.CostBasis = "local_execution_no_API_fee_excludes_hardware_and_energy"
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 		start := time.Now()
-		reader, e := docparser.NewReader(ctx, *engine, "pdf", false, docparser.ReaderDeps{Overrides: overrides, Remote: remote, WeKnoraCloudCredentials: func(context.Context) *types.WeKnoraCloudCredentials { return creds.Cloud }})
+		reader, e := docparser.NewReader(
+			ctx,
+			*engine,
+			"pdf",
+			false,
+			docparser.ReaderDeps{
+				Overrides:               overrides,
+				Remote:                  remote,
+				WeKnoraCloudCredentials: func(context.Context) *types.WeKnoraCloudCredentials { return creds.Cloud },
+			},
+		)
 		var result *types.ReadResult
 		if e == nil {
-			result, e = reader.Read(ctx, &types.ReadRequest{FileContent: content, FileName: s.ID + ".pdf", FileType: "pdf", ParserEngine: *engine, RequestID: "parser-benchmark-" + s.ID, ParserEngineOverrides: overrides})
+			result, e = reader.Read(
+				ctx,
+				&types.ReadRequest{
+					FileContent:           content,
+					FileName:              s.ID + ".pdf",
+					FileType:              "pdf",
+					ParserEngine:          *engine,
+					RequestID:             "parser-benchmark-" + s.ID,
+					ParserEngineOverrides: overrides,
+				},
+			)
 		}
 		r.DurationMS = time.Since(start).Milliseconds()
 		r.Status = "success"
@@ -334,7 +386,7 @@ func run() error {
 		}
 		r.MarkdownSHA256 = hash([]byte(md))
 		r.MarkdownChars = utf8.RuneCountInString(md)
-		if err = os.WriteFile(filepath.Join(dir, s.ID+".md"), []byte(md), 0644); err != nil {
+		if err = os.WriteFile(filepath.Join(dir, s.ID+".md"), []byte(md), 0o644); err != nil {
 			return err
 		}
 		if err = writeJSON(resultPath, r); err != nil {
@@ -343,15 +395,26 @@ func run() error {
 		if r.Status != "success" {
 			failures++
 		}
-		fmt.Printf("engine=%s sample=%s status=%s chars=%d duration_ms=%d\n", *engine, s.ID, r.Status, r.MarkdownChars, r.DurationMS)
+		fmt.Printf(
+			"engine=%s sample=%s status=%s chars=%d duration_ms=%d\n",
+			*engine,
+			s.ID,
+			r.Status,
+			r.MarkdownChars,
+			r.DurationMS,
+		)
 		// Authorization errors are not transient; do not submit the remaining PDFs.
 		lower := strings.ToLower(r.Error)
-		if strings.Contains(lower, "401") || strings.Contains(lower, "403") || strings.Contains(lower, "insufficient") || strings.Contains(lower, "quota") {
+		if strings.Contains(lower, "401") || strings.Contains(lower, "403") ||
+			strings.Contains(lower, "insufficient") ||
+			strings.Contains(lower, "quota") {
 			return fmt.Errorf("engine unavailable; remaining submissions stopped: %s", r.Error)
 		}
 	}
-	return json.NewEncoder(os.Stdout).Encode(map[string]any{"engine": *engine, "samples": len(m.Samples), "non_success": failures})
+	return json.NewEncoder(os.Stdout).
+		Encode(map[string]any{"engine": *engine, "samples": len(m.Samples), "non_success": failures})
 }
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

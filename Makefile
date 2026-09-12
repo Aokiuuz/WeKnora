@@ -1,4 +1,4 @@
-.PHONY: help build run test evaluation-reproduce evaluation-benchmark clean docker-build-app docker-build-docreader docker-build-frontend docker-build-all docker-run migrate-up migrate-inspect migrate-plan migrate-build migrate-version migrate-create docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-docreader build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend docs install-swagger build-lite run-lite package-lite anydoc-lib build-anydoc
+.PHONY: help build run test evaluation-reproduce evaluation-verify evaluation-benchmark clean docker-build-app docker-build-docreader docker-build-frontend docker-build-all docker-run migrate-up migrate-inspect migrate-plan migrate-build migrate-version migrate-create docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-docreader build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend docs install-swagger build-lite run-lite package-lite anydoc-lib build-anydoc
 
 # Show help
 help:
@@ -117,6 +117,10 @@ evaluation-reproduce:
 		--thresholds evaluation/regression/thresholds.json \
 		--output-dir "$(EVALUATION_REPORT_DIR)"
 
+# Run the complete isolated, keyless acceptance pipeline.
+evaluation-verify:
+	bash scripts/evaluation-verify.sh
+
 EVALUATION_PERFORMANCE_DIR ?= artifacts/evaluation-performance
 
 # Run the isolated keyless performance matrix; results are informational.
@@ -147,10 +151,12 @@ docker-build-app:
 docker-build-docreader:
 	docker build --platform $(PLATFORM) -f docker/Dockerfile.docreader -t wechatopenai/weknora-docreader:latest .
 
-# Build frontend Docker image
+# Build frontend Docker image (multi-stage: npm runs inside the builder stage)
 docker-build-frontend:
-	./scripts/build_frontend_dist.sh
-	docker build --platform $(PLATFORM) -f frontend/Dockerfile -t wechatopenai/weknora-ui:latest frontend/
+	@eval $$(./scripts/get_version.sh env); \
+	docker build --platform $(PLATFORM) \
+		--build-arg VITE_FRONTEND_COMMIT="$$COMMIT_ID" \
+		-f frontend/Dockerfile -t wechatopenai/weknora-ui:latest frontend/
 
 # Build all Docker images
 docker-build-all: docker-build-app docker-build-docreader docker-build-frontend

@@ -6,7 +6,6 @@ import { createRequire } from 'node:module'
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
-import { lucideInternalIcons } from './lucide-icons-plugin'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
@@ -118,19 +117,16 @@ export default defineConfig({
     },
   },
   plugins: [
-    lucideInternalIcons(),
     vue(),
     vueJsx(),
     embedHtmlDevFallback(),
   ],
   resolve: {
-    alias: [
-      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
-      { find: /^tdesign-icons-vue-next$/, replacement: fileURLToPath(new URL('./src/components/icons/lucide-compat.ts', import.meta.url)) },
-      { find: '@vue-office/pptx', replacement: resolveVueOfficePptxEntry() },
-    ],
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@vue-office/pptx': resolveVueOfficePptxEntry(),
+    },
   },
-  optimizeDeps: { exclude: ['tdesign-vue-next'] },
   server: {
     port: 5173,
     host: true,
@@ -140,6 +136,9 @@ export default defineConfig({
         target: DEV_PROXY_TARGET,
         changeOrigin: true,
         secure: false,
+        // 沙箱终端等 WebSocket 升级请求也走 /api，必须开启 WS 转发，
+        // 否则浏览器侧握手失败、前端表现为"一直正在连接"。
+        ws: true,
       },
       '/files': {
         target: DEV_PROXY_TARGET,
@@ -159,6 +158,7 @@ export default defineConfig({
         target: DEV_PROXY_TARGET,
         changeOrigin: true,
         secure: false,
+        ws: true,
       },
       '/files': {
         target: DEV_PROXY_TARGET,

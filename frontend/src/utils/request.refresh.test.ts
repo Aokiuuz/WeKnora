@@ -6,19 +6,7 @@ import test, { beforeEach } from 'node:test'
 import { build, type Plugin } from 'esbuild'
 
 interface RequestModule {
-  createTokenRefreshCoordinator: () => {
-    begin: () => boolean
-    wait: () => Promise<string>
-    resolve: (token: string) => void
-    reject: (error: unknown) => void
-    finish: () => void
-    isRefreshing: () => boolean
-    pendingCount: () => number
-  }
-  coordinateTokenRefresh: (
-    coordinator: ReturnType<RequestModule['createTokenRefreshCoordinator']>,
-    refresh: () => Promise<string>,
-  ) => Promise<string>
+  refreshAccessTokenShared: (options?: {refresh?: (token: string) => Promise<{success: boolean; data?: {token: string; refreshToken: string}}>}) => Promise<string>
   getDown: (
     url: string,
     config?: { signal?: AbortSignal; timeout?: number; headers?: Record<string, string> },
@@ -90,59 +78,37 @@ async function loadRequestModule(): Promise<RequestModule> {
   return import(url) as Promise<RequestModule>
 }
 
-test('missing refresh token rejects every concurrent waiter and releases the refresh lock', async () => {
-  const { createTokenRefreshCoordinator, coordinateTokenRefresh } = await loadRequestModule()
-  const coordinator = createTokenRefreshCoordinator()
-  const missingToken = { message: 'please re-login' }
-  let refreshAttempts = 0
-
-  const refreshWithoutToken = async (): Promise<string> => {
-    refreshAttempts += 1
-    throw missingToken
-  }
-
-  const requests = Array.from({ length: 4 }, () => (
-    coordinateTokenRefresh(coordinator, refreshWithoutToken)
-  ))
-  const settled = await Promise.allSettled(requests)
-
-  assert.equal(refreshAttempts, 1)
-  assert.equal(coordinator.pendingCount(), 0)
-  assert.equal(coordinator.isRefreshing(), false)
-  assert.deepEqual(
-    settled.map(result => result.status),
-    ['rejected', 'rejected', 'rejected', 'rejected'],
-  )
-  settled.forEach(result => {
-    assert.equal(result.status, 'rejected')
-    if (result.status === 'rejected') assert.equal(result.reason, missingToken)
-  })
-
-  assert.equal(coordinator.begin(), true, 'the next 401 can start a new refresh cycle')
-  coordinator.finish()
+test('Axios and SSE consumers share one refresh and settle after provider failure', async () => {
+  const { refreshAccessTokenShared } = await loadRequestModule()
+  storage.set('weknora_refresh_token', 'refresh')
+  let release!: () => void
+  const ready = new Promise<void>(resolve => { release = resolve })
+  state.__requestRefresh = async () => { await ready; throw new Error('provider unavailable') }
+  const axiosWaiter = state.__requestFailure(httpError(401))
+  const streamWaiter = refreshAccessTokenShared()
+  release()
+  const results = await Promise.allSettled([axiosWaiter, streamWaiter])
+  assert.equal(state.__requestRefreshCalls, 1)
+  assert.ok(results.every(result => result.status === 'rejected'))
+  assert.equal(storage.size, 0)
+  storage.set('weknora_refresh_token', 'replacement')
+  state.__requestRefresh = async () => ({success: true, data: {token: 'fresh', refreshToken: 'next'}})
+  assert.equal(await refreshAccessTokenShared(), 'fresh', 'a failed cycle releases the shared lock')
 })
 
-test('one successful refresh resolves all concurrent waiters with the same token', async () => {
-  const { createTokenRefreshCoordinator, coordinateTokenRefresh } = await loadRequestModule()
-  const coordinator = createTokenRefreshCoordinator()
-  let release!: (token: string) => void
-  const token = new Promise<string>(resolve => {
-    release = resolve
-  })
-  let refreshAttempts = 0
-
-  const refresh = () => {
-    refreshAttempts += 1
-    return token
-  }
-  const first = coordinateTokenRefresh(coordinator, refresh)
-  const second = coordinateTokenRefresh(coordinator, refresh)
-  assert.equal(coordinator.pendingCount(), 1)
-
-  release('fresh-token')
-  assert.deepEqual(await Promise.all([first, second]), ['fresh-token', 'fresh-token'])
-  assert.equal(refreshAttempts, 1)
-  assert.equal(coordinator.isRefreshing(), false)
+test('Axios and SSE consumers reuse the same rotated access token', async () => {
+  const { refreshAccessTokenShared } = await loadRequestModule()
+  storage.set('weknora_refresh_token', 'refresh')
+  let release!: () => void
+  const ready = new Promise<void>(resolve => { release = resolve })
+  state.__requestRefresh = async () => { await ready; return {success: true, data: {token: 'fresh', refreshToken: 'next'}} }
+  const axiosWaiter = state.__requestFailure(httpError(401))
+  const streamWaiter = refreshAccessTokenShared()
+  release()
+  const [, token] = await Promise.all([axiosWaiter, streamWaiter])
+  assert.equal(token, 'fresh')
+  assert.equal(state.__requestRefreshCalls, 1)
+  assert.equal(state.__requestRetries[0].headers.Authorization, 'Bearer fresh')
 })
 
 test('blob downloads override the client default with caller timeout and AbortSignal', async () => {

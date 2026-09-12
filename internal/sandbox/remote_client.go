@@ -297,6 +297,10 @@ type RemoteListFilter struct {
 // RemoteExecRequest describes a single command invocation. See the
 // RemoteSandboxClient.Exec contract for how Shell interacts with Args.
 type RemoteExecRequest struct {
+	// OnOutput receives stdout/stderr chunks while the command runs. It is an
+	// observation hook only; callers must not retain the supplied bytes.
+	OnOutput func(stream string, chunk []byte) `json:"-"`
+
 	// Command is the executable name (Shell=false) or the shell expression
 	// (Shell=true).
 	Command string
@@ -428,6 +432,12 @@ type RemoteSandboxCapabilities struct {
 	// use this to tell an operator up front that a backend cannot serve
 	// volume-based features, instead of failing later at first use.
 	SupportsVolumes bool
+
+	// SupportsTerminals is true when the provider can open interactive PTYs
+	// inside a running sandbox (RemoteTerminalManager). Callers use this to
+	// reject terminal features with an unsupported-backend error instead of
+	// failing after the WebSocket is upgraded.
+	SupportsTerminals bool
 }
 
 // RemoteSandboxClient is the contract SessionBoundManager talks to. All

@@ -4,15 +4,19 @@
     :style="avatarStyle"
     :class="{ 'agent-avatar-small': size === 'small', 'agent-avatar-large': size === 'large' }"
   >
-    <Sparkles class="agent-sparkles" aria-hidden="true" />
+    <!-- 星星装饰 - 融入背景 -->
+    <svg class="agent-sparkles" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- 右上角小星星 -->
+      <path d="M24 5L24.4 6.6C24.45 6.85 24.65 7.05 24.9 7.1L26.5 7.5L24.9 7.9C24.65 7.95 24.45 8.15 24.4 8.4L24 10L23.6 8.4C23.55 8.15 23.35 7.95 23.1 7.9L21.5 7.5L23.1 7.1C23.35 7.05 23.55 6.85 23.6 6.6L24 5Z" fill="rgba(255,255,255,0.6)"/>
+      <!-- 左下角小星星 -->
+      <path d="M7 22L7.4 23.6C7.45 23.85 7.65 24.05 7.9 24.1L9.5 24.5L7.9 24.9C7.65 24.95 7.45 25.15 7.4 25.4L7 27L6.6 25.4C6.55 25.15 6.35 24.95 6.1 24.9L4.5 24.5L6.1 24.1C6.35 24.05 6.55 23.85 6.6 23.6L7 22Z" fill="rgba(255,255,255,0.5)"/>
+    </svg>
     <span class="agent-avatar-letter" :style="letterStyle">{{ letter }}</span>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Sparkles } from '@lucide/vue';
-import { avatarInitial } from '@/utils/avatarInitial';
 
 const props = withDefaults(defineProps<{
   name: string;
@@ -53,7 +57,21 @@ const hashCode = (str: string): number => {
 };
 
 // 获取首字母（支持中文）
-const letter = computed(() => avatarInitial(props.name));
+const letter = computed(() => {
+  const name = props.name?.trim() || '';
+  if (!name) return '?';
+  
+  // 获取第一个字符
+  const firstChar = name.charAt(0);
+  
+  // 如果是英文字母，转大写
+  if (/[a-zA-Z]/.test(firstChar)) {
+    return firstChar.toUpperCase();
+  }
+  
+  // 中文或其他字符直接返回
+  return firstChar;
+});
 
 // 根据名称选择渐变色
 const gradient = computed(() => {

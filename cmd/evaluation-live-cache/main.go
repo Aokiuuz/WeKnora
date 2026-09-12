@@ -28,7 +28,11 @@ func main() {
 	keyEnv := flag.String("key-env", "X08_DASHSCOPE_API_KEY",
 		"credential environment variable, read only after execute confirmation")
 	keyStdin := flag.Bool("key-stdin", false, "read the credential from standard input after execute confirmation")
-	keysJSONStdin := flag.Bool("keys-json-stdin", false, "read separate chat and embedding credentials as JSON from standard input after confirmation")
+	keysJSONStdin := flag.Bool(
+		"keys-json-stdin",
+		false,
+		"read separate chat and embedding credentials as JSON from standard input after confirmation",
+	)
 	flag.Parse()
 	if *keyStdin && *keysJSONStdin {
 		fmt.Fprintln(os.Stderr, "choose one standard-input credential format")

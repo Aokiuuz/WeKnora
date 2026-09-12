@@ -22,7 +22,6 @@ import (
 // tosFileService implements the FileService interface for Volcengine TOS.
 type tosFileService struct {
 	client         *tos.ClientV2
-	tempClient     *tos.ClientV2
 	pathPrefix     string
 	bucketName     string
 	tempBucketName string
@@ -57,13 +56,12 @@ func NewTosFileServiceWithTempBucket(endpoint, region, accessKey, secretKey, buc
 		return nil, err
 	}
 
-	var tempClient *tos.ClientV2
 	if tempBucketName != "" {
 		if tempRegion == "" {
 			tempRegion = region
 		}
 		// Temporary bucket may belong to another region, so probe with a short-lived client.
-		tempClient, err = tos.NewClientV2(
+		tempClient, err := tos.NewClientV2(
 			endpoint,
 			tos.WithRegion(tempRegion),
 			tos.WithCredentials(tos.NewStaticCredentials(accessKey, secretKey)),
@@ -81,7 +79,6 @@ func NewTosFileServiceWithTempBucket(endpoint, region, accessKey, secretKey, buc
 
 	return &tosFileService{
 		client:         client,
-		tempClient:     tempClient,
 		pathPrefix:     strings.Trim(pathPrefix, "/"),
 		bucketName:     bucketName,
 		tempBucketName: tempBucketName,
@@ -171,30 +168,6 @@ func parseTOSFilePath(filePath string) (bucketName string, objectKey string, err
 	return parts[0], parts[1], nil
 }
 
-func (s *tosFileService) parseTOSPath(
-	filePath string,
-) (bucketName string, objectKey string, client *tos.ClientV2, err error) {
-	bucketName, objectKey, err = parseTOSFilePath(filePath)
-	if err != nil {
-		return "", "", nil, err
-	}
-	switch bucketName {
-	case s.bucketName:
-		client = s.client
-	case s.tempBucketName:
-		if s.tempBucketName == "" || s.tempClient == nil {
-			return "", "", nil, fmt.Errorf("TOS bucket mismatch in path")
-		}
-		client = s.tempClient
-	default:
-		return "", "", nil, fmt.Errorf("TOS bucket mismatch in path")
-	}
-	if err := utils.SafeObjectKey(objectKey); err != nil {
-		return "", "", nil, fmt.Errorf("invalid file path: %w", err)
-	}
-	return bucketName, objectKey, client, nil
-}
-
 func (s *tosFileService) SaveFile(ctx context.Context, file *multipart.FileHeader, tenantID uint64, knowledgeID string) (string, error) {
 	ext := filepath.Ext(file.Filename)
 	objectName := joinTOSObjectKey(
@@ -238,7 +211,6 @@ func (s *tosFileService) SaveBytes(ctx context.Context, data []byte, tenantID ui
 	reader := bytes.NewReader(data)
 
 	targetBucket := s.bucketName
-	targetClient := s.client
 	objectName := joinTOSObjectKey(
 		s.pathPrefix,
 		fmt.Sprintf("%d", tenantID),
@@ -248,7 +220,6 @@ func (s *tosFileService) SaveBytes(ctx context.Context, data []byte, tenantID ui
 
 	if temp && s.tempBucketName != "" {
 		targetBucket = s.tempBucketName
-		targetClient = s.tempClient
 		objectName = joinTOSObjectKey(
 			"exports",
 			fmt.Sprintf("%d", tenantID),
@@ -256,7 +227,7 @@ func (s *tosFileService) SaveBytes(ctx context.Context, data []byte, tenantID ui
 		)
 	}
 
-	_, err = targetClient.PutObjectV2(ctx, &tos.PutObjectV2Input{
+	_, err = s.client.PutObjectV2(ctx, &tos.PutObjectV2Input{
 		PutObjectBasicInput: tos.PutObjectBasicInput{
 			Bucket:      targetBucket,
 			Key:         objectName,
@@ -277,9 +248,12 @@ func (s *tosFileService) SaveBytes(ctx context.Context, data []byte, tenantID ui
 func (s *tosFileService) CopyFile(ctx context.Context,
 	srcPath string, tenantID uint64, knowledgeID string,
 ) (string, error) {
-	srcBucket, srcKey, _, err := s.parseTOSPath(srcPath)
+	srcBucket, srcKey, err := parseTOSFilePath(srcPath)
 	if err != nil {
 		return "", fmt.Errorf("tos copy rejected source %q: %w", srcPath, ErrCrossBackendCopy)
+	}
+	if err := utils.SafeObjectKey(srcKey); err != nil {
+		return "", fmt.Errorf("invalid source path: %w", err)
 	}
 
 	ext := filepath.Ext(srcPath)
@@ -306,11 +280,15 @@ func (s *tosFileService) CopyFile(ctx context.Context,
 }
 
 func (s *tosFileService) GetFile(ctx context.Context, filePath string) (io.ReadCloser, error) {
-	bucketName, objectName, client, err := s.parseTOSPath(filePath)
+	bucketName, objectName, err := parseTOSFilePath(filePath)
 	if err != nil {
 		return nil, err
 	}
-	output, err := client.GetObjectV2(ctx, &tos.GetObjectV2Input{
+	if err := utils.SafeObjectKey(objectName); err != nil {
+		return nil, fmt.Errorf("invalid file path: %w", err)
+	}
+
+	output, err := s.client.GetObjectV2(ctx, &tos.GetObjectV2Input{
 		Bucket: bucketName,
 		Key:    objectName,
 	})
@@ -321,11 +299,15 @@ func (s *tosFileService) GetFile(ctx context.Context, filePath string) (io.ReadC
 }
 
 func (s *tosFileService) DeleteFile(ctx context.Context, filePath string) error {
-	bucketName, objectName, client, err := s.parseTOSPath(filePath)
+	bucketName, objectName, err := parseTOSFilePath(filePath)
 	if err != nil {
 		return err
 	}
-	_, err = client.DeleteObjectV2(ctx, &tos.DeleteObjectV2Input{
+	if err := utils.SafeObjectKey(objectName); err != nil {
+		return fmt.Errorf("invalid file path: %w", err)
+	}
+
+	_, err = s.client.DeleteObjectV2(ctx, &tos.DeleteObjectV2Input{
 		Bucket: bucketName,
 		Key:    objectName,
 	})
@@ -336,11 +318,15 @@ func (s *tosFileService) DeleteFile(ctx context.Context, filePath string) error 
 }
 
 func (s *tosFileService) GetFileURL(ctx context.Context, filePath string) (string, error) {
-	bucketName, objectName, client, err := s.parseTOSPath(filePath)
+	bucketName, objectName, err := parseTOSFilePath(filePath)
 	if err != nil {
 		return "", err
 	}
-	output, err := client.PreSignedURL(&tos.PreSignedURLInput{
+	if err := utils.SafeObjectKey(objectName); err != nil {
+		return "", fmt.Errorf("invalid file path: %w", err)
+	}
+
+	output, err := s.client.PreSignedURL(&tos.PreSignedURLInput{
 		HTTPMethod: enum.HttpMethodGet,
 		Bucket:     bucketName,
 		Key:        objectName,

@@ -50,7 +50,7 @@ if ($Action -eq 'Start') {
     Assert-Docker
     if ($existing) { docker start $reader | Out-Null; Assert-Docker }
     else {
-        docker run -d --name $reader --network weknora-personal_default --memory 2g --cpus 2 `
+        docker run -d --name $reader --network weknora-parser-benchmark --memory 2g --cpus 2 `
             -e JAVA_TOOL_OPTIONS=-Xmx768m -e DOCREADER_ODL_MAX_WORKERS=1 `
             --mount "type=bind,source=$repository/docreader,target=/app/docreader,readonly" `
             --entrypoint /app/.venv/bin/python `

@@ -101,7 +101,7 @@ def initialize_official_olm():
     try:
         from olmocr.bench.tests import load_single_test
     except ImportError as exc:
-        raise RuntimeError("Official olmOCR dependencies are missing or use a different Python ABI. This workspace's target is installed by C:/Users/liuwe/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe (3.12). See docs/parser-benchmark-dataset.md.") from exc
+        raise RuntimeError("Official olmOCR dependencies are missing or use a different Python ABI. Install requirements-score.txt with the intended Python interpreter into a fresh runtime-deps directory. See docs/parser-benchmark-dataset.md.") from exc
     return load_single_test
 
 

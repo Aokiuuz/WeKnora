@@ -40,7 +40,8 @@ func TestX04TerminalConflictAndCachePricePersistence(t *testing.T) {
 	)
 	completion := types.ModelCallCompletion{
 		ModelSnapshot: types.JSON("{\"billing_usage\":{\"prompt_tokens\":0,\"cache_write_5m_tokens\":0," +
-			"\"cache_write_1h_tokens\":0,\"reported_cost\":\"0.00001721\",\"cost_source\":\"openrouter_usage_cost\",\"price_estimate_microunits\":18}}"),
+			"\"cache_write_1h_tokens\":0,\"reported_cost\":\"0.00001721\",\"cost_source\":\"openrouter_usage_cost\"," +
+			"\"price_estimate_microunits\":18}}"),
 		ID: "x04-call", EndedAt: now.Add(time.Second), DurationMs: 1000, Status: "success",
 	}
 	require.NoError(t, r.CompleteModelCall(context.Background(), completion))

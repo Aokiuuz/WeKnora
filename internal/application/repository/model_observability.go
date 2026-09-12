@@ -18,7 +18,8 @@ import (
 	"gorm.io/gorm"
 )
 
-type modelObservabilityRepository struct{ db *gorm.DB }
+// ModelObservabilityRepository persists call accounting and versioned model prices.
+type ModelObservabilityRepository struct{ db *gorm.DB }
 
 type modelPriceScopeLock struct {
 	mutex sync.Mutex
@@ -31,8 +32,8 @@ var modelPriceScopeLocks = struct {
 }{values: make(map[string]*modelPriceScopeLock)}
 
 // NewModelObservabilityRepository creates the model call ledger and pricing store.
-func NewModelObservabilityRepository(db *gorm.DB) *modelObservabilityRepository {
-	return &modelObservabilityRepository{db: db}
+func NewModelObservabilityRepository(db *gorm.DB) *ModelObservabilityRepository {
+	return &ModelObservabilityRepository{db: db}
 }
 
 type evaluationCostCountRow struct {
@@ -49,7 +50,7 @@ type evaluationCostTotalRow struct {
 }
 
 // EvaluationCost returns task-scoped cost completeness and currency totals.
-func (r *modelObservabilityRepository) EvaluationCost(
+func (r *ModelObservabilityRepository) EvaluationCost(
 	ctx context.Context,
 	tenantID uint64,
 	taskID string,
@@ -61,8 +62,10 @@ func (r *modelObservabilityRepository) EvaluationCost(
 	if err := base.Select(`
 		COUNT(*) AS call_count,
 		COALESCE(SUM(CASE WHEN accounting_complete THEN 1 ELSE 0 END), 0) AS accounting_complete_calls,
-		COALESCE(SUM(CASE WHEN status <> 'started' AND total_tokens IS NOT NULL AND cost_microunits IS NULL THEN 1 ELSE 0 END), 0) AS unpriced_calls,
-		COALESCE(SUM(CASE WHEN status <> 'started' AND total_tokens IS NULL THEN 1 ELSE 0 END), 0) AS usage_unreported_calls,
+		COALESCE(SUM(CASE WHEN status <> 'started' AND total_tokens IS NOT NULL
+			AND cost_microunits IS NULL THEN 1 ELSE 0 END), 0) AS unpriced_calls,
+		COALESCE(SUM(CASE WHEN status <> 'started' AND total_tokens IS NULL
+			THEN 1 ELSE 0 END), 0) AS usage_unreported_calls,
 		COALESCE(SUM(CASE WHEN status = 'started' THEN 1 ELSE 0 END), 0) AS started_calls`).
 		Scan(&counts).Error; err != nil {
 		return nil, fmt.Errorf("query evaluation cost counts: %w", err)
@@ -87,7 +90,8 @@ func (r *modelObservabilityRepository) EvaluationCost(
 	}, nil
 }
 
-func (r *modelObservabilityRepository) StartModelCall(ctx context.Context, record *types.ModelCallRecord) error {
+// StartModelCall persists the initial call record after validating its identity.
+func (r *ModelObservabilityRepository) StartModelCall(ctx context.Context, record *types.ModelCallRecord) error {
 	if record == nil || record.ID == "" || record.TenantID == 0 || record.ModelID == "" ||
 		record.Purpose == "" || record.Operation == "" || record.StartedAt.IsZero() {
 		return errors.New("start model call: id, tenant, model, purpose, operation, and started_at are required")
@@ -107,7 +111,8 @@ func (r *modelObservabilityRepository) StartModelCall(ctx context.Context, recor
 	return nil
 }
 
-func (r *modelObservabilityRepository) CompleteModelCall(
+// CompleteModelCall atomically records one terminal accounting result.
+func (r *ModelObservabilityRepository) CompleteModelCall(
 	ctx context.Context,
 	completion types.ModelCallCompletion,
 ) error {
@@ -245,7 +250,8 @@ func (r *modelObservabilityRepository) CompleteModelCall(
 	return nil
 }
 
-func (r *modelObservabilityRepository) EffectiveModelPrice(
+// EffectiveModelPrice resolves the applicable tenant and model price at the call time.
+func (r *ModelObservabilityRepository) EffectiveModelPrice(
 	ctx context.Context,
 	tenantID uint64,
 	modelID string,
@@ -276,7 +282,8 @@ func (r *modelObservabilityRepository) EffectiveModelPrice(
 	return &price, nil
 }
 
-func (r *modelObservabilityRepository) CreateModelPrice(
+// CreateModelPrice stores a non-overlapping effective price interval.
+func (r *ModelObservabilityRepository) CreateModelPrice(
 	ctx context.Context,
 	price *types.ModelPriceVersion,
 ) error {
@@ -392,7 +399,8 @@ func isCurrencyCode(value string) bool {
 	return true
 }
 
-func (r *modelObservabilityRepository) ListModelPrices(
+// ListModelPrices returns the price history for a tenant and model.
+func (r *ModelObservabilityRepository) ListModelPrices(
 	ctx context.Context,
 	tenantID uint64,
 	modelID string,
@@ -418,6 +426,6 @@ func (r *modelObservabilityRepository) ListModelPrices(
 }
 
 var (
-	_ modelobs.Store               = (*modelObservabilityRepository)(nil)
-	_ modelobs.EvaluationCostStore = (*modelObservabilityRepository)(nil)
+	_ modelobs.Store               = (*ModelObservabilityRepository)(nil)
+	_ modelobs.EvaluationCostStore = (*ModelObservabilityRepository)(nil)
 )

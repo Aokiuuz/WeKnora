@@ -94,7 +94,6 @@ app:
     STORAGE_TYPE: local
     LOCAL_STORAGE_BASE_DIR: /data/files
     AUTO_RECOVER_DIRTY: "true"
-    # -- Stream backend when redis.enabled is true; redis.enabled=false uses memory
     STREAM_MANAGER_TYPE: redis
     CONCURRENCY_POOL_SIZE: "5"
     TZ: UTC
@@ -116,7 +115,7 @@ app:
   # -- Liveness probe configuration
   livenessProbe:
     httpGet:
-      path: /health/live
+      path: /health
       port: http
     initialDelaySeconds: 30
     periodSeconds: 10
@@ -126,7 +125,7 @@ app:
   # -- Readiness probe configuration
   readinessProbe:
     httpGet:
-      path: /health/ready
+      path: /health
       port: http
     initialDelaySeconds: 10
     periodSeconds: 5
@@ -155,8 +154,8 @@ frontend:
   image:
     # -- Image repository
     repository: wechatopenai/weknora-ui
-    # -- Image tag (defaults to Chart.appVersion if empty)
-    tag: ""
+    # -- Image tag
+    tag: latest
     # -- Image pull policy
     pullPolicy: IfNotPresent
 
@@ -202,8 +201,8 @@ docreader:
   image:
     # -- Image repository
     repository: wechatopenai/weknora-docreader
-    # -- Image tag (defaults to Chart.appVersion if empty)
-    tag: ""
+    # -- Image tag
+    tag: latest
     # -- Image pull policy
     pullPolicy: IfNotPresent
 
@@ -289,8 +288,7 @@ postgresql:
 # Redis (Stream & Task Queue)
 # -----------------------------------------------------------------------------
 redis:
-  # -- Deploy bundled Redis and configure the app to require it
-  # When false, streams are kept in process memory and are not shared by replicas.
+  # -- Enable Redis
   enabled: true
 
   image:
@@ -413,8 +411,7 @@ secrets:
   systemAesKey: ""
 
   # -- Use existing secret instead of creating one
-  # The secret must contain DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET, and SYSTEM_AES_KEY.
-  # REDIS_USERNAME and REDIS_PASSWORD are also required when redis.enabled=true.
+  # The secret must contain keys: DB_USER, DB_PASSWORD, DB_NAME, REDIS_USERNAME, REDIS_PASSWORD, JWT_SECRET, SYSTEM_AES_KEY
   existingSecret: ""
 
 # -----------------------------------------------------------------------------

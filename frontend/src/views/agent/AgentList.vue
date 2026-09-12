@@ -13,7 +13,21 @@
                 data-guide="agent-list-create" style="--wails-draggable: no-drag" @click="handleCreateAgent">
                 <template #icon>
                   <span class="btn-icon-wrapper">
-                    <t-icon name="sparkles" size="19px" class="sparkles-icon" width="19" height="19" />
+                    <svg class="sparkles-icon" width="19" height="19" viewBox="0 0 20 20" fill="none"
+                      xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
+                        fill="currentColor" stroke="currentColor" stroke-width="0.8" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                      <path
+                        d="M15.5 4L15.8 5.2C15.85 5.45 16.05 5.65 16.3 5.7L17.5 6L16.3 6.3C16.05 6.35 15.85 6.55 15.8 6.8L15.5 8L15.2 6.8C15.15 6.55 14.95 6.35 14.7 6.3L13.5 6L14.7 5.7C14.95 5.65 15.15 5.45 15.2 5.2L15.5 4Z"
+                        fill="currentColor" stroke="currentColor" stroke-width="0.6" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                      <path
+                        d="M4.5 13L4.8 14.2C4.85 14.45 5.05 14.65 5.3 14.7L6.5 15L5.3 15.3C5.05 15.35 4.85 15.55 4.8 15.8L4.5 17L4.2 15.8C4.15 15.55 3.95 15.35 3.7 15.3L2.5 15L3.7 14.7C3.95 14.65 4.15 14.45 4.2 14.2L4.5 13Z"
+                        fill="currentColor" stroke="currentColor" stroke-width="0.6" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    </svg>
                   </span>
                 </template>
               </t-button>
@@ -147,8 +161,20 @@
             }" @click="handleCardClick(agent)">
               <!-- 装饰星星 -->
               <div class="card-decoration">
-                <t-icon name="sparkles" size="24px" class="star-icon" width="24" height="24" />
-                <t-icon name="sparkles" size="14px" class="star-icon small" width="14" height="14" />
+                <svg class="star-icon" width="24" height="24" viewBox="0 0 20 20" fill="none"
+                  xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
+                    stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"
+                    fill="currentColor" fill-opacity="0.15" />
+                </svg>
+                <svg class="star-icon small" width="14" height="14" viewBox="0 0 20 20" fill="none"
+                  xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
+                    stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"
+                    fill="currentColor" fill-opacity="0.15" />
+                </svg>
               </div>
               <!-- 收藏按钮：浮在卡片右上角；.card-header padding-right 已为
                    "更多"按钮腾出空间，避免重叠。 -->
@@ -164,7 +190,7 @@
                     <t-icon :name="agent.config?.agent_mode === 'smart-reasoning' ? 'control-platform' : 'chat'"
                       size="18px" />
                   </div>
-                  <AgentAvatar v-else-if="agent.avatar" :name="agent.name" size="small" />
+                  <div v-else-if="agent.avatar" class="builtin-avatar agent-emoji">{{ agent.avatar }}</div>
                   <AgentAvatar v-else :name="agent.name" size="small" />
                   <span class="card-title" :title="agent.name">{{ agent.name }}</span>
                 </div>
@@ -237,7 +263,12 @@
                     <t-tooltip v-if="agent.config?.web_search_enabled" :content="$t('agent.features.webSearch')"
                       placement="top">
                       <div class="feature-badge web-search">
-                        <t-icon name="internet" size="16px" width="16" height="16" />
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2" fill="none" />
+                          <ellipse cx="8" cy="8" rx="2.5" ry="6" stroke="currentColor" stroke-width="1.2" fill="none" />
+                          <line x1="2" y1="6" x2="14" y2="6" stroke="currentColor" stroke-width="1.2" />
+                          <line x1="2" y1="10" x2="14" y2="10" stroke="currentColor" stroke-width="1.2" />
+                        </svg>
                       </div>
                     </t-tooltip>
                     <t-tooltip v-if="agent.config?.knowledge_bases?.length || agent.config?.kb_selection_mode === 'all'"
@@ -331,8 +362,20 @@
             }" @click="handleCardClick(agent)">
               <!-- 装饰星星 -->
               <div class="card-decoration">
-                <t-icon name="sparkles" size="24px" class="star-icon" width="24" height="24" />
-                <t-icon name="sparkles" size="14px" class="star-icon small" width="14" height="14" />
+                <svg class="star-icon" width="24" height="24" viewBox="0 0 20 20" fill="none"
+                  xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
+                    stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"
+                    fill="currentColor" fill-opacity="0.15" />
+                </svg>
+                <svg class="star-icon small" width="14" height="14" viewBox="0 0 20 20" fill="none"
+                  xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
+                    stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"
+                    fill="currentColor" fill-opacity="0.15" />
+                </svg>
               </div>
 
               <button type="button" class="agent-favorite-star"
@@ -349,7 +392,7 @@
                     <t-icon :name="agent.config?.agent_mode === 'smart-reasoning' ? 'control-platform' : 'chat'"
                       size="18px" />
                   </div>
-                  <AgentAvatar v-else-if="agent.avatar" :name="agent.name" size="small" />
+                  <div v-else-if="agent.avatar" class="builtin-avatar agent-emoji">{{ agent.avatar }}</div>
                   <AgentAvatar v-else :name="agent.name" size="small" />
                   <span class="card-title" :title="agent.name">{{ agent.name }}</span>
                 </div>
@@ -411,7 +454,12 @@
                     <t-tooltip v-if="agent.config?.web_search_enabled" :content="$t('agent.features.webSearch')"
                       placement="top">
                       <div class="feature-badge web-search">
-                        <t-icon name="internet" size="16px" width="16" height="16" />
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2" fill="none" />
+                          <ellipse cx="8" cy="8" rx="2.5" ry="6" stroke="currentColor" stroke-width="1.2" fill="none" />
+                          <line x1="2" y1="6" x2="14" y2="6" stroke="currentColor" stroke-width="1.2" />
+                          <line x1="2" y1="10" x2="14" y2="10" stroke="currentColor" stroke-width="1.2" />
+                        </svg>
                       </div>
                     </t-tooltip>
                     <t-tooltip v-if="agent.config?.knowledge_bases?.length || agent.config?.kb_selection_mode === 'all'"
@@ -500,12 +548,24 @@
               'agent-mode-agent': shared.agent?.config?.agent_mode === 'smart-reasoning'
             }" @click="handleSpaceAgentCardClick(shared)">
               <div class="card-decoration">
-                <t-icon name="sparkles" size="24px" class="star-icon" width="24" height="24" />
-                <t-icon name="sparkles" size="14px" class="star-icon small" width="14" height="14" />
+                <svg class="star-icon" width="24" height="24" viewBox="0 0 20 20" fill="none"
+                  xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
+                    stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"
+                    fill="currentColor" fill-opacity="0.15" />
+                </svg>
+                <svg class="star-icon small" width="14" height="14" viewBox="0 0 20 20" fill="none"
+                  xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
+                    stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"
+                    fill="currentColor" fill-opacity="0.15" />
+                </svg>
               </div>
               <div class="card-header">
                 <div class="card-header-left">
-                  <AgentAvatar v-if="shared.agent?.avatar" :name="shared.agent.name" size="small" />
+                  <div v-if="shared.agent?.avatar" class="builtin-avatar agent-emoji">{{ shared.agent.avatar }}</div>
                   <AgentAvatar v-else :name="shared.agent?.name" size="small" />
                   <span class="card-title" :title="shared.agent?.name">{{ shared.agent?.name }}</span>
                 </div>
@@ -547,7 +607,13 @@
                     </t-tooltip>
                     <t-tooltip v-if="shared.agent?.config?.web_search_enabled" :content="$t('agent.features.webSearch')"
                       placement="top">
-                      <div class="feature-badge web-search"><t-icon name="internet" size="16px" width="16" height="16" /></div>
+                      <div class="feature-badge web-search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+                          xmlns="http://www.w3.org/2000/svg">
+                          <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2" fill="none" />
+                          <ellipse cx="8" cy="8" rx="2.5" ry="6" stroke="currentColor" stroke-width="1.2" fill="none" />
+                          <line x1="2" y1="6" x2="14" y2="6" stroke="currentColor" stroke-width="1.2" />
+                          <line x1="2" y1="10" x2="14" y2="10" stroke="currentColor" stroke-width="1.2" />
+                        </svg></div>
                     </t-tooltip>
                     <t-tooltip
                       v-if="shared.agent?.config?.knowledge_bases?.length || shared.agent?.config?.kb_selection_mode === 'all'"
@@ -579,7 +645,21 @@
             data-guide="agent-list-create" @click="handleCreateAgent">
             <template #icon>
               <span class="btn-icon-wrapper">
-                <t-icon name="sparkles" size="18px" class="sparkles-icon" width="18" height="18" />
+                <svg class="sparkles-icon" width="18" height="18" viewBox="0 0 20 20" fill="none"
+                  xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
+                    fill="currentColor" stroke="currentColor" stroke-width="0.8" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                  <path
+                    d="M15.5 4L15.8 5.2C15.85 5.45 16.05 5.65 16.3 5.7L17.5 6L16.3 6.3C16.05 6.35 15.85 6.55 15.8 6.8L15.5 8L15.2 6.8C15.15 6.55 14.95 6.35 14.7 6.3L13.5 6L14.7 5.7C14.95 5.65 15.15 5.45 15.2 5.2L15.5 4Z"
+                    fill="currentColor" stroke="currentColor" stroke-width="0.6" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                  <path
+                    d="M4.5 13L4.8 14.2C4.85 14.45 5.05 14.65 5.3 14.7L6.5 15L5.3 15.3C5.05 15.35 4.85 15.55 4.8 15.8L4.5 17L4.2 15.8C4.15 15.55 3.95 15.35 3.7 15.3L2.5 15L3.7 14.7C3.95 14.65 4.15 14.45 4.2 14.2L4.5 13Z"
+                    fill="currentColor" stroke="currentColor" stroke-width="0.6" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                </svg>
               </span>
             </template>
             <span>{{ $t('agent.createAgent') }}</span>
@@ -606,7 +686,21 @@
             @click="handleCreateAgent">
             <template #icon>
               <span class="btn-icon-wrapper">
-                <t-icon name="sparkles" size="18px" class="sparkles-icon" width="18" height="18" />
+                <svg class="sparkles-icon" width="18" height="18" viewBox="0 0 20 20" fill="none"
+                  xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M10 3L10.8 6.2C10.9 6.7 11.3 7.1 11.8 7.2L15 8L11.8 8.8C11.3 8.9 10.9 9.3 10.8 9.8L10 13L9.2 9.8C9.1 9.3 8.7 8.9 8.2 8.8L5 8L8.2 7.2C8.7 7.1 9.1 6.7 9.2 6.2L10 3Z"
+                    fill="currentColor" stroke="currentColor" stroke-width="0.8" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                  <path
+                    d="M15.5 4L15.8 5.2C15.85 5.45 16.05 5.65 16.3 5.7L17.5 6L16.3 6.3C16.05 6.35 15.85 6.55 15.8 6.8L15.5 8L15.2 6.8C15.15 6.55 14.95 6.35 14.7 6.3L13.5 6L14.7 5.7C14.95 5.65 15.15 5.45 15.2 5.2L15.5 4Z"
+                    fill="currentColor" stroke="currentColor" stroke-width="0.6" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                  <path
+                    d="M4.5 13L4.8 14.2C4.85 14.45 5.05 14.65 5.3 14.7L6.5 15L5.3 15.3C5.05 15.35 4.85 15.55 4.8 15.8L4.5 17L4.2 15.8C4.15 15.55 3.95 15.35 3.7 15.3L2.5 15L3.7 14.7C3.95 14.65 4.15 14.45 4.2 14.2L4.5 13Z"
+                    fill="currentColor" stroke="currentColor" stroke-width="0.6" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                </svg>
               </span>
             </template>
             <span>{{ $t('agent.createAgent') }}</span>

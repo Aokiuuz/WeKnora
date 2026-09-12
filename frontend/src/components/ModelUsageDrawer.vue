@@ -11,7 +11,7 @@
     storage-key="setting-drawer:width:model-usage"
     hide-footer
   >
-    <template #headerIcon><ChartNoAxesCombined :size="22" :stroke-width="1.7" aria-hidden="true" /></template>
+    <template #headerIcon><ChartNoAxesCombined size="22px" aria-hidden="true" /></template>
     <div class="usage-toolbar">
       <label class="usage-field usage-model-filter">
         <span>{{ t('modelSettings.observability.selectModel') }}</span>
@@ -27,7 +27,7 @@
         <t-radio-button :value="0">{{ t('modelSettings.observability.customRange') }}</t-radio-button>
       </t-radio-group>
       <t-button variant="outline" :disabled="loading" @click="loadUsage">
-        <template #icon><RefreshCw :size="16" :class="{ 'icon-spinning': loading }" aria-hidden="true" /></template>
+        <template #icon><RefreshCw size="16px" :class="{ 'icon-spinning': loading }" aria-hidden="true" /></template>
         {{ t('common.refresh') }}
       </t-button>
     </div>
@@ -45,9 +45,9 @@
     <p v-if="usageError" class="usage-error" role="alert">{{ usageError }}</p>
 
     <div :aria-busy="loading">
-      <div v-if="loading" class="usage-loading" role="status"><LoaderCircle :size="22" class="icon-spinning" aria-hidden="true" /><span>{{ t('evaluation.loading') }}</span></div>
+      <div v-if="loading" class="usage-loading" role="status"><LoaderCircle size="22px" class="icon-spinning" aria-hidden="true" /><span>{{ t('evaluation.loading') }}</span></div>
       <div v-if="!loading && !usageError && rows.length === 0" class="usage-empty">
-        <ChartNoAxesCombined :size="40" :stroke-width="1.2" aria-hidden="true" />
+        <ChartNoAxesCombined size="40px" aria-hidden="true" />
         <p>{{ t('modelSettings.observability.empty') }}</p>
       </div>
       <div v-else class="usage-list">
@@ -76,13 +76,13 @@
           </dl>
           <div class="cache-grid">
             <section>
-              <h5><Layers3 :size="15" aria-hidden="true" />{{ t('modelSettings.observability.providerCache') }}</h5>
+              <h5><Layers3 size="15px" aria-hidden="true" />{{ t('modelSettings.observability.providerCache') }}</h5>
               <strong>{{ percent(row.provider_cache.hit_rate) }}</strong>
               <progress v-if="row.provider_cache.hit_rate != null" :value="row.provider_cache.hit_rate" :max="1" :aria-label="t('modelSettings.observability.providerCache')" />
               <p>{{ t('modelSettings.observability.providerDenominator', { value: integer(row.provider_cache.observed_tokens) }) }}</p>
             </section>
             <section>
-              <h5><Database :size="15" aria-hidden="true" />{{ t('modelSettings.observability.applicationCache') }}</h5>
+              <h5><Database size="15px" aria-hidden="true" />{{ t('modelSettings.observability.applicationCache') }}</h5>
               <strong>{{ percent(row.application_cache.hit_rate) }}</strong>
               <progress v-if="row.application_cache.hit_rate != null" :value="row.application_cache.hit_rate" :max="1" :aria-label="t('modelSettings.observability.applicationCache')" />
               <p>{{ t('modelSettings.observability.applicationDenominator', { value: integer(row.application_cache.observed_items), bypass: integer(row.application_cache.bypass_items) }) }}</p>
@@ -121,12 +121,12 @@
       <p v-if="priceValidationError" class="usage-error" role="alert">{{ priceValidationError }}</p>
       <div class="pricing-actions">
         <t-button theme="primary" :disabled="!canSavePrice" @click="savePrice">
-          <template #icon><LoaderCircle v-if="savingPrice" :size="16" class="icon-spinning" aria-hidden="true" /><Plus v-else :size="16" aria-hidden="true" /></template>
+          <template #icon><LoaderCircle v-if="savingPrice" size="16px" class="icon-spinning" aria-hidden="true" /><Plus v-else size="16px" aria-hidden="true" /></template>
           {{ t('modelSettings.observability.addPrice') }}
         </t-button>
       </div>
       <p v-if="priceError" class="usage-error" role="alert">{{ priceError }}</p>
-      <LoaderCircle v-if="priceLoading" :size="20" class="icon-spinning" role="status" :aria-label="t('evaluation.loading')" />
+      <LoaderCircle v-if="priceLoading" size="20px" class="icon-spinning" role="status" :aria-label="t('evaluation.loading')" />
       <div v-else-if="prices.length" class="price-history">
         <div v-for="price in prices" :key="price.id" class="price-version">
           <span>{{ new Date(price.valid_from).toLocaleString() }} → {{ price.valid_to ? new Date(price.valid_to).toLocaleString() : t('modelSettings.observability.openEnded') }}</span>
@@ -142,7 +142,7 @@
 
 <script setup lang="ts">
 import { computed, h, onBeforeUnmount, ref, watch } from 'vue'
-import { ChartNoAxesCombined, Database, Layers3, LoaderCircle, Plus, RefreshCw, X } from '@lucide/vue'
+import { ChartAnalyticsIcon as ChartNoAxesCombined, ServerIcon as Database, LayersIcon as Layers3, LoadingIcon as LoaderCircle, AddIcon as Plus, RefreshIcon as RefreshCw, CloseIcon as X } from 'tdesign-icons-vue-next'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
@@ -159,7 +159,7 @@ import {
 const props = defineProps<{ visible: boolean; models: ModelConfig[]; canEditPricing: boolean }>()
 const emit = defineEmits<{ (e: 'update:visible', value: boolean): void }>()
 const { t } = useI18n()
-const renderCloseIcon = () => h(X, { size: 20, 'aria-hidden': 'true' })
+const renderCloseIcon = () => h(X, { size: '20px', 'aria-hidden': 'true' })
 
 const drawerVisible = computed({ get: () => props.visible, set: value => emit('update:visible', value) })
 const loading = ref(false)
@@ -332,46 +332,46 @@ const formatCosts = (costs: ModelCostTotal[]) => costs?.length
 .usage-toolbar, .pricing-section__heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .usage-toolbar { margin-bottom: 12px; flex-wrap: wrap; align-items: flex-end; }
 .usage-model-filter { flex: 1; min-width: 180px; }
-.usage-field { display: grid; gap: 6px; min-width: 0; color: var(--td-text-color-secondary); font-size: 12px; }
+.usage-field { display: grid; gap: 6px; min-width: 0; color: var(--td-text-color-secondary); font-size: '12px'px; }
 .usage-field input, .usage-field select { box-sizing: border-box; width: 100%; min-width: 0; height: 34px; padding: 0 10px; border: 1px solid var(--td-component-border); border-radius: 6px; color: var(--td-text-color-primary); background: var(--td-bg-color-container); font: inherit; }
 .usage-field input:focus-visible, .usage-field select:focus-visible, summary:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
 .usage-range { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.usage-hint { margin: 10px 0 18px; color: var(--td-text-color-secondary); font-size: 12px; }
-.usage-error { padding: 10px 12px; border-radius: 6px; color: var(--td-error-color); background: var(--td-error-color-1); font-size: 12px; }
+.usage-hint { margin: 10px 0 18px; color: var(--td-text-color-secondary); font-size: '12px'px; }
+.usage-error { padding: 10px 12px; border-radius: 6px; color: var(--td-error-color); background: var(--td-error-color-1); font-size: '12px'px; }
 .usage-empty { padding: 44px 0; }
 .usage-list { display: grid; gap: 14px; }
 .usage-card { border: 1px solid var(--td-component-border); border-radius: 16px; padding: 22px; background: var(--td-bg-color-container); box-shadow: 0 6px 24px rgba(16, 46, 36, .035); animation: usage-enter .45s cubic-bezier(.22, 1, .36, 1) both; }
 .usage-card__header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
-.usage-card__header h4, .pricing-section h4 { margin: 0; font-size: 15px; }
-.usage-card__header span, .pricing-section p, .cache-grid p { color: var(--td-text-color-secondary); font-size: 12px; margin: 4px 0 0; }
+.usage-card__header h4, .pricing-section h4 { margin: 0; font-size: '15px'px; }
+.usage-card__header span, .pricing-section p, .cache-grid p { color: var(--td-text-color-secondary); font-size: '12px'px; margin: 4px 0 0; }
 .usage-card__header h4 { overflow-wrap: anywhere; }
 .usage-card__cost { display: grid; gap: 4px; text-align: right; }
-.usage-card__cost strong { color: var(--td-brand-color); font-size: 22px; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
-.usage-card__cost small { font-size: 11px; color: var(--td-text-color-secondary); }
+.usage-card__cost strong { color: var(--td-brand-color); font-size: '22px'px; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.usage-card__cost small { font-size: '11px'px; color: var(--td-text-color-secondary); }
 .usage-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
 .usage-metrics div, .cache-grid section { padding: 10px 12px; border-radius: 8px; background: var(--td-bg-color-secondarycontainer); }
-.usage-metrics span { display: block; color: var(--td-text-color-secondary); font-size: 12px; }
-.usage-metrics strong { display: block; margin-top: 5px; font-size: 20px; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.usage-metrics span { display: block; color: var(--td-text-color-secondary); font-size: '12px'px; }
+.usage-metrics strong { display: block; margin-top: 5px; font-size: '20px'px; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
 .cache-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-.cache-grid h5 { display: flex; align-items: center; gap: 7px; margin: 0 0 12px; font-size: 12px; color: var(--td-text-color-secondary); }
-.cache-grid strong { font-size: 20px; }
+.cache-grid h5 { display: flex; align-items: center; gap: 7px; margin: 0 0 12px; font-size: '12px'px; color: var(--td-text-color-secondary); }
+.cache-grid strong { font-size: '20px'px; }
 .cache-grid progress { display: block; width: 100%; height: 6px; margin-top: 10px; accent-color: var(--td-brand-color); }
 .pricing-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--td-component-stroke); }
-.pricing-section summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.pricing-section summary { cursor: pointer; font-weight: 600; font-size: '14px'px; }
 .pricing-form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
 .pricing-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
 .price-history { margin-top: 12px; border-top: 1px solid var(--td-component-stroke); }
-.price-version { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 9px 0; font-size: 12px; border-bottom: 1px solid var(--td-component-stroke); }
-.call-status { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 16px 0 0; padding: 0; font-size: 12px; }
+.price-version { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 9px 0; font-size: '12px'px; border-bottom: 1px solid var(--td-component-stroke); }
+.call-status { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 16px 0 0; padding: 0; font-size: '12px'px; }
 .call-status > div { display: flex; gap: 7px; }
 .call-status dt { color: var(--td-text-color-secondary); }
 .call-status dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
 .cache-pricing-fields { margin: 22px 0 0; padding: 16px; border: 1px solid var(--td-component-stroke); border-radius: 10px; }
-.cache-pricing-fields legend { padding: 0 6px; font-size: 13px; font-weight: 600; }
+.cache-pricing-fields legend { padding: 0 6px; font-size: '13px'px; font-weight: 600; }
 .cache-price-history { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex-basis: 100%; gap: 10px; margin: 0; color: var(--td-text-color-secondary); }
 .cache-price-history dd { margin: 4px 0 0; font-variant-numeric: tabular-nums; color: var(--td-text-color-primary); }
 @media (max-width: 540px) { .usage-card { padding: 16px; } .cache-price-history { grid-template-columns: 1fr; } }
-.usage-empty, .usage-loading { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 120px; color: var(--td-text-color-secondary); font-size: 13px; }
+.usage-empty, .usage-loading { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 120px; color: var(--td-text-color-secondary); font-size: '13px'px; }
 .usage-empty { flex-direction: column; }
 .icon-spinning { animation: icon-spin 1s linear infinite; }
 @keyframes icon-spin { to { transform: rotate(360deg); } }
@@ -385,8 +385,8 @@ const formatCosts = (costs: ModelCostTotal[]) => costs?.length
 .model-usage-drawer .t-drawer__content-wrapper { max-width: 100vw; }
 .model-usage-drawer { --td-brand-color: #087b59; --td-brand-color-1: #e9f5ef; }
 .model-usage-drawer .setting-drawer__header-block { padding: 6px 0; }
-.model-usage-drawer .setting-drawer__title { font-size: 25px; letter-spacing: -.04em; }
+.model-usage-drawer .setting-drawer__title { font-size: '25px'px; letter-spacing: -.04em; }
 .model-usage-drawer .setting-drawer__header-icon { background: #e9f5ef; color: #087b59; }
-@media (max-width: 540px) { .model-usage-drawer .setting-drawer__title { font-size: 20px; } }
+@media (max-width: 540px) { .model-usage-drawer .setting-drawer__title { font-size: '20px'px; } }
 @media (prefers-reduced-motion: reduce) { .model-usage-drawer .t-drawer__content-wrapper, .model-usage-drawer .t-drawer__mask { transition: none !important; animation: none !important; } }
 </style>

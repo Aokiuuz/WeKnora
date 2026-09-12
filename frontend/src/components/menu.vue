@@ -20,7 +20,12 @@
                     </div>
                 </t-tooltip>
                 <div class="sidebar-toggle" @click="uiStore.toggleSidebar" :title="t('menu.collapseSidebar')">
-                    <t-icon name="panel-left" size="18px" width="18" height="18" />
+                    <svg viewBox="0 0 20 20" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="1.5" y="1.5" width="17" height="17" rx="3" stroke="currentColor" stroke-width="1.2" />
+                        <line x1="7.5" y1="1.5" x2="7.5" y2="18.5" stroke="currentColor" stroke-width="1.2" />
+                        <line x1="4" y1="7.5" x2="4" y2="12.5" stroke="currentColor" stroke-width="1.2"
+                            stroke-linecap="round" />
+                    </svg>
                 </div>
             </div>
         </div>
@@ -29,7 +34,16 @@
             <div class="menu_item sidebar-toggle-item" @click="uiStore.toggleSidebar">
                 <div class="menu_item-box">
                     <div class="menu_icon">
-                        <t-icon name="panel-left" size="20px" class="icon" width="20" height="20" />
+                        <svg class="icon" viewBox="0 0 20 20" width="20" height="20" fill="none"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <rect x="1.5" y="1.5" width="17" height="17" rx="3" stroke="currentColor"
+                                stroke-width="1.2" />
+                            <line x1="7.5" y1="1.5" x2="7.5" y2="18.5" stroke="currentColor" stroke-width="1.2" />
+                            <line x1="5" y1="10" x2="3" y2="8" stroke="currentColor" stroke-width="1.2"
+                                stroke-linecap="round" />
+                            <line x1="5" y1="10" x2="3" y2="12" stroke="currentColor" stroke-width="1.2"
+                                stroke-linecap="round" />
+                        </svg>
                     </div>
                 </div>
             </div>
@@ -70,7 +84,7 @@
                         :class="['menu_item', item.childrenPath && item.childrenPath == currentpath ? 'menu_item_c_active' : isMenuItemActive(item.path) ? 'menu_item_active' : '']">
                         <div class="menu_item-box">
                             <div class="menu_icon">
-                                    <img class="icon"
+                                <img class="icon"
                                     :src="getImgSrc(item.icon == 'zhishiku' ? knowledgeIcon : item.icon == 'agent' ? agentIcon : item.icon == 'evaluation' ? evaluationIcon : item.icon == 'organization' ? organizationIcon : item.icon == 'logout' ? logoutIcon : item.icon == 'setting' ? settingIcon : prefixIcon)"
                                     alt="">
                             </div>

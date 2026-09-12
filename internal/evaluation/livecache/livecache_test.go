@@ -33,7 +33,7 @@ func TestPlanIsDeterministicAndPaired(t *testing.T) {
 	second, err := BuildPlan()
 	require.NoError(t, err)
 	require.Equal(t, p.SHA256, second.SHA256)
-	require.Equal(t, "aef4af0e29508383951d1d08aa8090389a40054bc346ed4ce0f8930809aa7634", p.SHA256)
+	require.Equal(t, "c2ce8945891a4513987e1e0d160c0d8eb262558e6eb902034923c725643bca78", p.SHA256)
 	require.Len(t, p.Steps, 20)
 	require.Less(t, p.OriginalPriceUpperBoundMicrounits, int64(1000000))
 	require.Greater(t, p.SharedPrefixApproxTokens, 2048)
@@ -92,8 +92,8 @@ func TestWireRejectsOutputThinkingAndPayloadDrift(t *testing.T) {
 	require.NoError(t, err)
 	step := p.Steps[4]
 	base := map[string]any{
-		"model": ChatModel, "messages": step.Messages, "max_tokens": 256,
-		"max_completion_tokens": 256, "enable_thinking": false, "temperature": 0.3,
+		"model": ChatModel, "messages": step.Messages, "max_completion_tokens": 256,
+		"enable_thinking": false, "temperature": 0.3,
 	}
 	b, _ := json.Marshal(base)
 	require.NoError(t, validateWire("/compatible-mode/v1/chat/completions", b, step))
@@ -101,10 +101,12 @@ func TestWireRejectsOutputThinkingAndPayloadDrift(t *testing.T) {
 		key   string
 		value any
 	}{
-		{"max_tokens", 257},
-		{"max_tokens", 128},
+		{"max_completion_tokens", 257},
 		{"max_completion_tokens", 128},
+		{"max_tokens", 256},
+		{"max_tokens", 128},
 		{"max_completion_tokens", nil},
+		{"max_tokens", nil},
 		{"top_p", 0.5},
 		{"top_p", 0},
 		{"enable_thinking", true},

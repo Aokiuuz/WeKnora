@@ -1,12 +1,12 @@
 <template>
   <SettingDrawer :visible="visible" :title="t('evaluationFlow.datasets')" :description="t('evaluationFlow.importHint')" width="680px" :min-width="320" :resizable="false" :close-on-esc-keydown="!submitting" hide-footer @update:visible="close">
-    <template #headerIcon><Database :size="18" aria-hidden="true" /></template>
-    <template #header-actions><t-button theme="default" variant="text" shape="square" :aria-label="t('common.close')" :disabled="submitting" @click="close(false)"><X :size="18" aria-hidden="true" /></t-button></template>
+    <template #headerIcon><Database size="18px" aria-hidden="true" /></template>
+    <template #header-actions><t-button theme="default" variant="text" shape="square" :aria-label="t('common.close')" :disabled="submitting" @click="close(false)"><X size="18px" aria-hidden="true" /></t-button></template>
     <div class="evaluation-flow">
       <nav class="flow-tabs" :aria-label="t('evaluationFlow.datasets')">
         <button v-for="tab in tabs" :key="tab.id" type="button" :aria-pressed="mode === tab.id" :disabled="submitting" @click="mode = tab.id">{{ tab.label }}</button>
       </nav>
-      <div v-if="loading" class="flow-notice" role="status"><LoaderCircle :size="16" class="spin" />{{ t('evaluation.loading') }}</div>
+      <div v-if="loading" class="flow-notice" role="status"><LoaderCircle size="16px" class="spin" />{{ t('evaluation.loading') }}</div>
       <div v-if="loadError" class="flow-error" role="alert">{{ loadError }}<button type="button" class="flow-link" @click="loadResources">{{ t('evaluation.refresh') }}</button></div>
       <div v-if="mode === 'library'" class="flow-stack">
         <p v-if="!datasets.length && !loading" class="flow-muted">{{ t('evaluationFlow.noDatasets') }}</p>
@@ -15,8 +15,8 @@
           <p>{{ dataset.description }}</p>
           <div class="flow-actions">
             <button type="button" class="flow-link" @click="inspectVersions(dataset)">{{ t('evaluationFlow.versions') }}</button>
-            <button v-if="canManage && dataset.scope === 'tenant'" type="button" class="flow-link" @click="addVersion(dataset)"><Plus :size="14" />{{ t('evaluationFlow.addVersion') }}</button>
-            <button v-if="canManage && dataset.current_version_id" type="button" class="flow-link" @click="emit('create', dataset.id, dataset.current_version_id)">{{ t('evaluationFlow.newRun') }}<ArrowRight :size="14" /></button>
+            <button v-if="canManage && dataset.scope === 'tenant'" type="button" class="flow-link" @click="addVersion(dataset)"><Plus size="14px" />{{ t('evaluationFlow.addVersion') }}</button>
+            <button v-if="canManage && dataset.current_version_id" type="button" class="flow-link" @click="emit('create', dataset.id, dataset.current_version_id)">{{ t('evaluationFlow.newRun') }}<ArrowRight size="14px" /></button>
           </div>
           <div v-if="inspectedId === dataset.id" class="version-list">
             <p v-if="versionsLoading" role="status">{{ t('evaluation.loading') }}</p>
@@ -32,23 +32,23 @@
           <article v-for="item in catalog" :key="item.id" class="flow-card">
             <div class="flow-row"><h3>{{ item.name }}</h3><span class="flow-badge">{{ item.language }}</span></div>
             <p>{{ item.description }}</p>
-            <div class="flow-actions"><span class="flow-badge">{{ item.license }}</span><a v-if="safeSource(item.source_url)" :href="safeSource(item.source_url)" target="_blank" rel="noopener noreferrer" class="flow-link">{{ t('evaluationFlow.source') }}<ExternalLink :size="13" /></a></div>
+            <div class="flow-actions"><span class="flow-badge">{{ item.license }}</span><a v-if="safeSource(item.source_url)" :href="safeSource(item.source_url)" target="_blank" rel="noopener noreferrer" class="flow-link">{{ t('evaluationFlow.source') }}<ExternalLink size="13px" /></a></div>
             <small>{{ t('evaluationFlow.runScale', { passages: item.counts.passages ?? '—', questions: item.counts.questions ?? '—' }) }}</small>
             <p class="flow-muted">{{ t('evaluationFlow.sampleNotice') }}</p>
             <details v-if="item.limitations?.length" class="flow-usage"><summary>{{ t('evaluationFlow.usageNotes') }}</summary><ul class="flow-limitations"><li v-for="limit in item.limitations" :key="limit">{{ limit }}</li></ul></details>
-            <button type="button" class="flow-button" :disabled="reading || !limits" @click="previewPublic(item)">{{ t('evaluationFlow.preview') }}<ArrowRight :size="14" /></button>
+            <button type="button" class="flow-button" :disabled="reading || !limits" @click="previewPublic(item)">{{ t('evaluationFlow.preview') }}<ArrowRight size="14px" /></button>
           </article>
         </div>
         <div v-if="mode === 'file' && !content" class="flow-stack">
           <div class="file-drop" :class="{ 'file-drop--over': dragging }" @dragover.prevent="dragging = true" @dragleave.prevent="dragging = false" @drop.prevent="dropFile">
-            <FileJson :size="32" :stroke-width="1.2" aria-hidden="true" />
+            <FileJson size="32px" aria-hidden="true" />
             <h3>{{ t('evaluationFlow.dropFile') }}</h3><p>{{ t('evaluationFlow.fileHint') }}</p>
             <label class="flow-button file-picker">{{ t('evaluationFlow.chooseFile') }}<input type="file" accept=".json,application/json" :disabled="reading || !limits" @change="pickFile" /></label>
           </div>
-          <div class="flow-row"><button type="button" class="flow-link" @click="downloadTemplate"><Download :size="14" />{{ t('evaluationFlow.template') }}</button><small v-if="limits">{{ t('evaluationFlow.sizeLimit', { size: (limits.max_request_body_bytes / 1048576).toFixed(1) }) }}</small></div>
+          <div class="flow-row"><button type="button" class="flow-link" @click="downloadTemplate"><Download size="14px" />{{ t('evaluationFlow.template') }}</button><small v-if="limits">{{ t('evaluationFlow.sizeLimit', { size: (limits.max_request_body_bytes / 1048576).toFixed(1) }) }}</small></div>
           <p class="flow-notice">{{ t('evaluationFlow.documentHint') }} <RouterLink to="/platform/knowledge-bases" @click="close(false)">{{ t('evaluationFlow.goKnowledge') }}</RouterLink></p>
         </div>
-        <p v-if="reading" class="flow-notice" role="status"><LoaderCircle :size="16" class="spin" />{{ t('evaluationFlow.reading') }}</p>
+        <p v-if="reading" class="flow-notice" role="status"><LoaderCircle size="16px" class="spin" />{{ t('evaluationFlow.reading') }}</p>
         <div v-if="error" class="flow-error" role="alert">{{ error }}</div>
         <section v-if="content" class="flow-stack">
           <div class="flow-row"><h3>{{ t('evaluationFlow.preview') }}</h3><button v-if="!locked" class="flow-link" type="button" @click="resetDraft">{{ t('evaluationFlow.changeSource') }}</button></div>
@@ -59,14 +59,14 @@
             <label class="flow-field"><span>{{ t('evaluationFlow.importTarget') }}</span><select v-model="targetId" :disabled="locked"><option value="">{{ t('evaluationFlow.newDataset') }}</option><option v-for="dataset in tenantDatasets" :key="dataset.id" :value="dataset.id">{{ dataset.name }} · {{ t('evaluationFlow.addVersion') }}</option></select></label>
             <label v-if="!targetId" class="flow-field"><span>{{ t('evaluationFlow.name') }}</span><input v-model="name" :disabled="locked" :maxlength="limits?.max_name_chars" autocomplete="off" /></label>
             <label v-if="!targetId" class="flow-field"><span>{{ t('evaluationFlow.description') }}</span><textarea v-model="description" :disabled="locked" rows="2" /></label>
-            <p class="flow-notice"><ShieldCheck :size="18" aria-hidden="true" />{{ t(targetId ? 'evaluationFlow.versionHint' : 'evaluationFlow.noModelCost') }}</p>
+            <p class="flow-notice"><ShieldCheck size="18px" aria-hidden="true" />{{ t(targetId ? 'evaluationFlow.versionHint' : 'evaluationFlow.noModelCost') }}</p>
             <p v-if="attempted && error" class="flow-muted">{{ t(targetId ? 'evaluationFlow.versionRetryHint' : 'evaluationFlow.retryHint') }}</p>
             <div class="flow-actions">
-              <button v-if="canManage" type="button" class="flow-button flow-button--primary" :disabled="submitting || !limits || (!targetId && !name.trim()) || (Boolean(targetId) && attempted)" @click="submitImport"><Upload :size="15" />{{ t(submitting ? 'evaluationFlow.importing' : attempted ? 'evaluationFlow.retryImport' : 'evaluationFlow.confirmImport') }}</button>
+              <button v-if="canManage" type="button" class="flow-button flow-button--primary" :disabled="submitting || !limits || (!targetId && !name.trim()) || (Boolean(targetId) && attempted)" @click="submitImport"><Upload size="15px" />{{ t(submitting ? 'evaluationFlow.importing' : attempted ? 'evaluationFlow.retryImport' : 'evaluationFlow.confirmImport') }}</button>
               <button v-if="attempted && !submitting" type="button" class="flow-link" @click="resetDraft">{{ t('evaluationFlow.startOver') }}</button>
             </div>
           </template>
-          <div v-else class="flow-success" role="status"><CheckCircle2 :size="20" /><h3>{{ t('evaluationFlow.imported') }}</h3><p>{{ imported.dataset.name }} · v{{ imported.version.version_number }}</p><button type="button" class="flow-button flow-button--primary" @click="emit('create', imported.dataset.id, imported.version.id)">{{ t('evaluationFlow.newRun') }}<ArrowRight :size="15" /></button><button type="button" class="flow-link" @click="resetDraft">{{ t('evaluationFlow.importAnother') }}</button></div>
+          <div v-else class="flow-success" role="status"><CheckCircle2 size="20px" /><h3>{{ t('evaluationFlow.imported') }}</h3><p>{{ imported.dataset.name }} · v{{ imported.version.version_number }}</p><button type="button" class="flow-button flow-button--primary" @click="emit('create', imported.dataset.id, imported.version.id)">{{ t('evaluationFlow.newRun') }}<ArrowRight size="15px" /></button><button type="button" class="flow-link" @click="resetDraft">{{ t('evaluationFlow.importAnother') }}</button></div>
         </section>
       </template>
     </div>
@@ -77,7 +77,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
-import { ArrowRight, CheckCircle2, Database, Download, ExternalLink, FileJson, LoaderCircle, Plus, ShieldCheck, Upload, X } from '@lucide/vue'
+import { ArrowRightIcon as ArrowRight, CheckCircleIcon as CheckCircle2, ServerIcon as Database, DownloadIcon as Download, LinkIcon as ExternalLink, FileCodeIcon as FileJson, LoadingIcon as LoaderCircle, AddIcon as Plus, SecuredIcon as ShieldCheck, UploadIcon as Upload, CloseIcon as X } from 'tdesign-icons-vue-next'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 import { createDatasetVersion, getPublicDataset, getPublicDatasetCatalog, importEvaluationDataset, listDatasetVersions, listEvaluationDatasets, type DatasetContent, type DatasetImportResult, type DatasetLimits, type DatasetVersion, type EvaluationDataset, type PublicDataset } from '@/api/evaluation/datasets'
 import { createEvaluationRequestGate } from '@/api/evaluation/requestGate'

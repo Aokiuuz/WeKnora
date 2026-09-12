@@ -5,7 +5,9 @@
         <div class="settings-modal">
           <!-- 关闭按钮 -->
           <button class="close-btn" @click="handleClose" :aria-label="$t('general.close')">
-            <t-icon name="close" size="20px" width="20" height="20" />
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
           </button>
 
           <div class="settings-container">
@@ -24,7 +26,16 @@
                       'expanded': expandedMenus.includes(item.key)
                     }]" @click="handleNavClick(item)">
                       <!-- 网络搜索使用自定义 SVG 图标 -->
-                      <t-icon name="internet" size="17px" v-if="item.key === 'websearch'" width="17" height="17" class="nav-icon" />
+                      <svg v-if="item.key === 'websearch'" width="17" height="17" viewBox="0 0 18 18" fill="none"
+                        xmlns="http://www.w3.org/2000/svg" class="nav-icon">
+                        <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.2" fill="none" />
+                        <path d="M 9 2 A 3.5 7 0 0 0 9 16" stroke="currentColor" stroke-width="1.2" fill="none" />
+                        <path d="M 9 2 A 3.5 7 0 0 1 9 16" stroke="currentColor" stroke-width="1.2" fill="none" />
+                        <line x1="2.94" y1="5.5" x2="15.06" y2="5.5" stroke="currentColor" stroke-width="1.2"
+                          stroke-linecap="round" />
+                        <line x1="2.94" y1="12.5" x2="15.06" y2="12.5" stroke="currentColor" stroke-width="1.2"
+                          stroke-linecap="round" />
+                      </svg>
                       <!-- WeKnora Cloud 使用自定义 W 图标 -->
                       <svg v-else-if="item.key === 'weknoracloud'" width="17" height="17" viewBox="0 0 18 18"
                         fill="none" xmlns="http://www.w3.org/2000/svg" class="nav-icon">
@@ -34,7 +45,16 @@
                           stroke-linecap="round" stroke-linejoin="round" fill="none" />
                       </svg>
                       <!-- 沙箱：隔离运行窗口，避免和 Ollama / 系统设置共用 server -->
-                      <t-icon name="terminal" size="17px" v-else-if="item.key === 'sandbox'" width="17" height="17" class="nav-icon" />
+                      <svg v-else-if="item.key === 'sandbox'" width="17" height="17" viewBox="0 0 18 18" fill="none"
+                        xmlns="http://www.w3.org/2000/svg" class="nav-icon">
+                        <rect x="2.5" y="3" width="13" height="12" rx="2" stroke="currentColor" stroke-width="1.2"
+                          fill="none" />
+                        <path d="M2.5 6.5h13" stroke="currentColor" stroke-width="1.2" />
+                        <path d="M5.5 10h4M5.5 12.5h2.5" stroke="currentColor" stroke-width="1.2"
+                          stroke-linecap="round" />
+                      </svg>
+                      <BrowserIcon v-else-if="item.key === 'browserconnection'" class="nav-icon" width="17" height="17" />
+                      <span v-else-if="item.emoji" class="nav-icon nav-icon-emoji">{{ item.emoji }}</span>
                       <t-icon v-else :name="item.icon" class="nav-icon" />
                       <span class="nav-label">{{ item.label }}</span>
                       <t-icon v-if="item.children && item.children.length > 0"
@@ -173,6 +193,8 @@
                     <UserProfile />
                   </div>
 
+                  <div v-if="currentSection === 'browserconnection'" class="section"><BrowserConnectionSettings /></div>
+
                   <!-- 空间信息 -->
                   <div v-if="currentSection === 'tenant'" class="section">
                     <TenantInfo />
@@ -215,6 +237,8 @@ import SystemInfo from './SystemInfo.vue'
 import TenantInfo from './TenantInfo.vue'
 import UserProfile from './UserProfile.vue'
 import GeneralSettings from './GeneralSettings.vue'
+import BrowserConnectionSettings from './BrowserConnectionSettings.vue'
+import BrowserIcon from '@/components/icons/BrowserIcon.vue'
 import ModelSettings from './ModelSettings.vue'
 import OllamaSettings from './OllamaSettings.vue'
 import McpSettings from './McpSettings.vue'
@@ -270,6 +294,7 @@ type NavItem = {
   key: string
   icon: string
   label: string
+  emoji?: string
   children?: Array<{ key: string; label: string }>
 }
 
@@ -342,7 +367,8 @@ const navItems = computed(() => {
   // 否露入口；改动入口规则请同步更新 settingsAccess.ts 和对应后端路由。
   const integrationItems: NavItem[] = INTEGRATION_PREVIEW_ITEMS.map((item) => ({
     key: integrationSectionKey(item.key),
-    icon: item.icon.name,
+    icon: item.icon.type === 'icon' ? item.icon.name : 'integration',
+    emoji: item.icon.type === 'emoji' ? item.icon.value : undefined,
     label: t(`integrations.tabs.${item.key}`),
   }))
   const all: NavItem[] = [
@@ -365,6 +391,7 @@ const navItems = computed(() => {
     { key: 'platform-api-keys', icon: 'secured', label: t('platformApiKeys.title') },
     { key: 'system-audit-log', icon: 'history', label: t('system.globalSettings.audit.tabLabel') },
     { key: 'userprofile', icon: 'user', label: t('userProfile.title') },
+    { key: 'browserconnection', icon: 'laptop', label: t('localBrowser.settingsTitle') },
     { key: 'mymemory', icon: 'bookmark', label: t('memorySettings.title') },
     { key: 'envvars', icon: 'key', label: t('envVarSettings.title') },
     { key: 'tenant', icon: 'user-circle', label: t('settings.tenantInfo') },
@@ -391,7 +418,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'account',
       label: t('settings.navGroups.account'),
-      items: pickItems(['general', 'userprofile', 'mymemory', 'envvars']),
+      items: pickItems(['general', 'userprofile', 'browserconnection', 'mymemory', 'envvars']),
     },
     {
       key: 'workspace',
@@ -406,13 +433,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'integrations',
       label: t('integrations.title'),
-      items: pickItems([
-        integrationSectionKey('im'),
-        integrationSectionKey('embed'),
-        integrationSectionKey('api'),
-        integrationSectionKey('chrome'),
-        integrationSectionKey('claw'),
-      ]),
+      items: pickItems(INTEGRATION_PREVIEW_ITEMS.map((item) => integrationSectionKey(item.key))),
     },
     {
       key: 'data_extensions',

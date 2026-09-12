@@ -275,7 +275,7 @@ func evaluationGenerationPIDOrder(ranked []types.EvaluationRankedResult, rerankT
 // entry appended by the immediately preceding recordFinish.
 func (h *HookMetric) questionResultInput(
 	index int,
-	plan *types.EvaluationMetricPlanSnapshot,
+	_ *types.EvaluationMetricPlanSnapshot,
 	rerankTopK int,
 ) *types.EvaluationQuestionResultInput {
 	tracked := h.qaPairMetricList[index]

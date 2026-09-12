@@ -200,14 +200,3 @@ select:-webkit-autofill {
     border-color: var(--td-brand-color);
     box-shadow: none;
 }
-/* Lucide adapters preserve component classes and inherit the surrounding text color. */
-.t-icon[data-icon-library="lucide"] { fill: none !important; flex-shrink: 0; vertical-align: middle; }
-.app-icon-spin { animation: app-icon-spin 1s linear infinite; }
-@keyframes app-icon-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .app-icon-spin { animation: none !important; } }
-.avatar-icon-btn:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
-.avatar-trigger-wrap { padding: 0; border: 0; background: transparent; font: inherit; }
-.avatar-trigger-wrap:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 3px; border-radius: 8px; }
-.app-select-arrow { transition: transform 160ms ease; }
-.app-select-arrow--active { transform: rotate(180deg); }
-@media (prefers-reduced-motion: reduce) { .app-select-arrow { transition: none; } }

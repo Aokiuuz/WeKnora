@@ -29,7 +29,6 @@ spec:
     spec:
       {{- include "weknora.imagePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "weknora.serviceAccountName" . }}
-      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       {{- with .Values.app.podSecurityContext | default .Values.global.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -74,8 +73,7 @@ spec:
                 secretKeyRef:
                   name: {{ include "weknora.secretName" . }}
                   key: DB_NAME
-            {{- if .Values.redis.enabled }}
-            # Redis configuration (bundled Redis enabled)
+            # Redis configuration
             - name: REDIS_ADDR
               value: "redis:6379"
             - name: REDIS_USERNAME
@@ -95,12 +93,6 @@ spec:
               value: "stream:"
             - name: STREAM_MANAGER_TYPE
               value: {{ .Values.app.env.STREAM_MANAGER_TYPE | quote }}
-            {{- else }}
-            # Redis is optional; memory streams keep the app operational when
-            # the bundled Redis component is disabled.
-            - name: STREAM_MANAGER_TYPE
-              value: "memory"
-            {{- end }}
             # Security
             - name: JWT_SECRET
               valueFrom:

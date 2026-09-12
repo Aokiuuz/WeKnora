@@ -1112,18 +1112,18 @@ const attemptTabs = computed<AttemptTab[]>(() => {
   return out
 })
 
-function attemptGlyph(status: string): { icon: string; cls: string } {
+function attemptGlyph(status: string): { ch: string; cls: string } {
   switch (status) {
     case 'done':
-      return { icon: 'check', cls: 'kp-glyph-done' }
+      return { ch: '✓', cls: 'kp-glyph-done' }
     case 'failed':
-      return { icon: 'close', cls: 'kp-glyph-failed' }
+      return { ch: '✗', cls: 'kp-glyph-failed' }
     case 'running':
     case 'pending':
     case 'processing':
-      return { icon: 'loading', cls: 'kp-glyph-running' }
+      return { ch: '●', cls: 'kp-glyph-running' }
     default:
-      return { icon: 'remove', cls: 'kp-glyph-unknown' }
+      return { ch: '–', cls: 'kp-glyph-unknown' }
   }
 }
 
@@ -1498,7 +1498,8 @@ const processConfigLines = computed<string[]>(() => {
             <button v-for="tab in attemptTabs" :key="tab.n" type="button" class="kp-attempt"
               :class="{ 'kp-attempt-active': tab.active }" @click="onAttemptChange(tab.n)">
               <span class="kp-attempt-num kp-mono">#{{ tab.n }}</span>
-              <t-icon class="kp-attempt-glyph" :class="attemptGlyph(tab.status).cls" :name="attemptGlyph(tab.status).icon" />
+              <span class="kp-attempt-glyph" :class="attemptGlyph(tab.status).cls">{{ attemptGlyph(tab.status).ch
+                }}</span>
             </button>
           </div>
 

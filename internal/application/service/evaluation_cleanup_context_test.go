@@ -98,6 +98,10 @@ func (s *evaluationCleanupContextKnowledgeStub) CreateKnowledgeFromPassageSync(
 }
 
 func (s *evaluationCleanupContextKnowledgeStub) DeleteKnowledge(ctx context.Context, id string) error {
+	scope, ok := ctx.Value(knowledgeCleanupKey{}).(knowledgeCleanupScope)
+	if !ok || scope.tenant != 7 || scope.bindings[id] != "evaluation-kb" {
+		return errors.New("evaluation cleanup lost exact tenant/KB/knowledge scope")
+	}
 	s.recorder.record(ctx, "knowledge:"+id)
 	return s.deleteErr
 }
@@ -165,7 +169,10 @@ func TestEvaluationCleanupUsesBoundedDetachedContexts(t *testing.T) {
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
 	canceledCtx, cancel := context.WithCancel(ctx)
 	cancel()
-	if err := service.deleteEvaluationKnowledge(canceledCtx, "evaluation-knowledge"); !errors.Is(err, cleanupErr) {
+	if err := service.deleteEvaluationKnowledge(canceledCtx, "evaluation-kb", "evaluation-knowledge"); !errors.Is(
+		err,
+		cleanupErr,
+	) {
 		t.Fatalf("deleteEvaluationKnowledge() error = %v, want cleanupErr", err)
 	}
 	if err := service.deleteEvaluationKnowledgeBase(canceledCtx, "evaluation-kb"); err != nil {

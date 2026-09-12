@@ -1,2 +1,5 @@
-<!-- Generated from @lucide/vue (ISC). Run node scripts/generate-lucide-assets.mjs. -->
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" data-icon-library="lucide" class="lucide lucide-minimize2-icon lucide-minimize-2"><path d="m14 10 7-7"></path><path d="M20 10h-6V4"></path><path d="m3 21 7-7"></path><path d="M4 14h6v6"></path></svg>
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 16 16" width="128" height="128">
+  <path fill-rule="evenodd" clip-rule="evenodd" d="M2 7.5H14V8.5H2V7.5Z" fill="#07C05F"/>
+  <path fill-rule="evenodd" clip-rule="evenodd" d="M8 1L11.1213 4.12132L10.4142 4.82843L8.5 2.91421V6H7.5V2.91421L5.58579 4.82843L4.87868 4.12132L8 1Z" fill="#07C05F"/>
+  <path fill-rule="evenodd" clip-rule="evenodd" d="M8 15L4.87868 11.8787L5.58579 11.1716L7.5 13.0858V10H8.5V13.0858L10.4142 11.1716L11.1213 11.8787L8 15Z" fill="#07C05F"/>
+</svg>

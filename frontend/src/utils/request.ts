@@ -4,6 +4,13 @@ import { generateRandomString, MAX_FILE_SIZE_MB, MAX_SKILL_BUNDLE_SIZE_MB } from
 import i18n from '@/i18n'
 import { getApiBaseUrl } from './api-base';
 import { isSkillBundleUploadUrl } from './uploadLimit';
+import {
+  forceReloginRedirect,
+  isEmbedPage,
+  refreshAccessTokenShared,
+} from './authRefresh';
+
+export { forceReloginRedirect, refreshAccessTokenShared };
 
 const t = (key: string) => i18n.global.t(key)
 
@@ -101,74 +108,6 @@ instance.interceptors.request.use(
   }
 );
 
-interface RefreshWaiter {
-  resolve: (token: string) => void;
-  reject: (error: unknown) => void;
-}
-
-export interface TokenRefreshCoordinator {
-  begin: () => boolean;
-  wait: () => Promise<string>;
-  resolve: (token: string) => void;
-  reject: (error: unknown) => void;
-  finish: () => void;
-  isRefreshing: () => boolean;
-  pendingCount: () => number;
-}
-
-// A single coordinator owns both the refresh state and every request waiting
-// for it, so every terminal path can settle the queue before releasing the lock.
-export function createTokenRefreshCoordinator(): TokenRefreshCoordinator {
-  let refreshing = false;
-  let waiters: RefreshWaiter[] = [];
-
-  const takeWaiters = () => {
-    const pending = waiters;
-    waiters = [];
-    return pending;
-  };
-
-  return {
-    begin: () => {
-      if (refreshing) return false;
-      refreshing = true;
-      return true;
-    },
-    wait: () => new Promise<string>((resolve, reject) => {
-      waiters.push({ resolve, reject });
-    }),
-    resolve: (token: string) => {
-      takeWaiters().forEach(waiter => waiter.resolve(token));
-    },
-    reject: (error: unknown) => {
-      takeWaiters().forEach(waiter => waiter.reject(error));
-    },
-    finish: () => {
-      refreshing = false;
-    },
-    isRefreshing: () => refreshing,
-    pendingCount: () => waiters.length,
-  };
-}
-
-export async function coordinateTokenRefresh(
-  coordinator: TokenRefreshCoordinator,
-  refresh: () => Promise<string>,
-): Promise<string> {
-  if (!coordinator.begin()) return coordinator.wait();
-
-  try {
-    const token = await refresh();
-    coordinator.resolve(token);
-    return token;
-  } catch (error) {
-    coordinator.reject(error);
-    throw error;
-  } finally {
-    coordinator.finish();
-  }
-}
-
 // Cancellation settles only this caller; a shared refresh can still serve other requests.
 function waitForRefresh<T>(refresh: Promise<T>, signal?: AxiosRequestConfig['signal']): Promise<T> {
   if (!signal) return refresh;
@@ -183,8 +122,6 @@ function waitForRefresh<T>(refresh: Promise<T>, signal?: AxiosRequestConfig['sig
   });
 }
 
-const tokenRefresh = createTokenRefreshCoordinator();
-
 // Share-link endpoints (/auth/invitations/lookup, /auth/register-by-invite)
 // are reachable by anonymous users opening an invite link. A 401 from these
 // must surface to the page (e.g. expired token), not trigger the
@@ -195,19 +132,6 @@ const PUBLIC_AUTH_PATHS = ['/auth/auto-setup', '/auth/login', '/auth/register', 
 function isPublicAuthRequest(url?: string): boolean {
   if (!url) return false;
   return PUBLIC_AUTH_PATHS.some(p => url.includes(p));
-}
-
-function isEmbedPage(): boolean {
-  if (typeof window === 'undefined') return false;
-  return window.location.pathname.startsWith('/embed/');
-}
-
-function redirectToLogin() {
-  if (typeof window === 'undefined') return;
-  if (window.location.pathname === '/login') return;
-  // Embed 渠道用 Embed token 鉴权，匿名访问不应被踢到登录页
-  if (isEmbedPage()) return;
-  window.location.href = '/login';
 }
 
 instance.interceptors.response.use(
@@ -255,42 +179,18 @@ instance.interceptors.response.use(
     // 如果是401错误且不是刷新token的请求，尝试刷新token
     if (error.response.status === 401 && originalRequest && !originalRequest._retry && !originalRequest.url?.includes('/auth/refresh')) {
       originalRequest._retry = true;
-
       try {
-        const token = await waitForRefresh(coordinateTokenRefresh(tokenRefresh, async () => {
-          const refreshToken = localStorage.getItem('weknora_refresh_token');
-          if (!refreshToken) throw { message: t('error.pleaseRelogin') };
-
-          // 动态导入refresh token API
-          const { refreshToken: refreshTokenAPI } = await import('../api/auth/index');
-          const response = await refreshTokenAPI(refreshToken);
-
-          if (response.success && response.data) {
-            const { token, refreshToken: newRefreshToken } = response.data;
-
-            // 更新localStorage中的token
-            localStorage.setItem('weknora_token', token);
-            localStorage.setItem('weknora_refresh_token', newRefreshToken);
-
-            return token;
-          }
-
-          throw new Error(response.message || t('error.tokenRefreshFailed'));
+        const token = await waitForRefresh(refreshAccessTokenShared({
+          messages: {
+            pleaseRelogin: t('error.pleaseRelogin'),
+            tokenRefreshFailed: t('error.tokenRefreshFailed'),
+          },
         }), originalRequest.signal);
-
         originalRequest.headers ??= {};
         originalRequest.headers['Authorization'] = 'Bearer ' + token;
         return instance(originalRequest);
       } catch (refreshError) {
-        if (axios.isCancel(refreshError)) return Promise.reject(refreshError);
-        // 刷新失败或缺少 refresh token 时，清除凭据并拒绝所有等待请求。
-        localStorage.removeItem('weknora_token');
-        localStorage.removeItem('weknora_refresh_token');
-        localStorage.removeItem('weknora_user');
-        localStorage.removeItem('weknora_tenant');
-
-        redirectToLogin();
-
+        // refreshAccessTokenShared already cleared credentials and redirected.
         return Promise.reject(refreshError);
       }
     }

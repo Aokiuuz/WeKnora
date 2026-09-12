@@ -123,9 +123,9 @@ func (f *bridgeFixture) exec(t *testing.T, query string, args ...any) {
 
 func TestMigrationBridgeSourceMatrix(t *testing.T) {
 	for _, dialect := range []string{"sqlite", "postgres"} {
-		baseline, target := 12, 13
+		baseline, target := 12, 14
 		if dialect == "postgres" {
-			baseline, target = 89, 91
+			baseline, target = 89, 93
 		}
 		cases := []struct {
 			name            string
@@ -154,7 +154,8 @@ func TestMigrationBridgeSourceMatrix(t *testing.T) {
 				require.NoError(t, err)
 				require.False(t, before.Ready)
 				state := f.apply(t)
-				require.Equal(t, target, state.Official.Version)
+				officialChain := f.files.chain(dialect, "official")
+				require.Equal(t, officialChain[len(officialChain)-1].Version, state.Official.Version)
 				if test.official >= 0 {
 					var name string
 					require.NoError(

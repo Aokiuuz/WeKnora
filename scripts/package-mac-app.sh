@@ -77,6 +77,8 @@ cp -R "cmd/desktop/build/bin/${APP_BUNDLE}" "dist/"
 # 将配置文件和初始数据库迁移脚本塞进 .app 内部资源里
 RESOURCES_DIR="${DIST_DIR}/Contents/Resources"
 mkdir -p "${RESOURCES_DIR}/config"
+mkdir -p "${RESOURCES_DIR}/migrations/sqlite"
+bash ./scripts/copy-licenses.sh "${RESOURCES_DIR}"
 go build -tags "sqlite_fts5" -o "${RESOURCES_DIR}/weknora-migrate" ./cmd/migrate-runner
 
 if [ -f .env.lite.example ]; then

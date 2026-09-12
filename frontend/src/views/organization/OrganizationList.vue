@@ -76,7 +76,17 @@
             :class="{ 'joined-org': !org.is_owner }" @click="handleCardClick(org)">
             <!-- 装饰：协作网络感图形 -->
             <div class="card-decoration">
-              <t-icon name="relation" size="56px" class="card-deco-svg" width="56" height="40" aria-hidden="true" />
+              <svg class="card-deco-svg" width="56" height="40" viewBox="0 0 56 40" fill="none"
+                xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <circle cx="10" cy="12" r="4" stroke="currentColor" stroke-width="1.5" fill="none" opacity="0.5" />
+                <circle cx="28" cy="8" r="5" stroke="currentColor" stroke-width="1.8" fill="none" opacity="0.7" />
+                <circle cx="46" cy="14" r="4" stroke="currentColor" stroke-width="1.5" fill="none" opacity="0.5" />
+                <path d="M14 13 L24 10 M32 10 L42 13" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"
+                  opacity="0.4" />
+                <circle cx="28" cy="28" r="6" stroke="currentColor" stroke-width="1.2" fill="none" opacity="0.35" />
+                <path d="M28 14 L28 22 M20 18 L26 24 M36 18 L30 24" stroke="currentColor" stroke-width="1"
+                  stroke-linecap="round" opacity="0.3" />
+              </svg>
             </div>
 
             <!-- 卡片头部 -->
@@ -245,7 +255,9 @@
               <h2 class="invite-preview-title">{{ invitePreviewData ? $t('organization.invite.previewTitle') :
                 $t('organization.joinOrg') }}</h2>
               <button class="invite-preview-close" @click="closeInvitePreview" :aria-label="$t('common.close')">
-                <t-icon name="close" size="20px" width="20" height="20" />
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
               </button>
             </div>
 

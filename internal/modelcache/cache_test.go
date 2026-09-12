@@ -126,9 +126,19 @@ func TestEmbeddingCachePersistFailuresLogSanitizedWarningAndStayFailOpen(t *test
 			require.NoError(t, err)
 			require.Len(t, result, 1)
 			logs := logBuffer.String()
-			assert.Contains(t, logs, "Embedding cache persist failed (vectors still returned): entries 1, error_kind "+tc.putKind)
-			assert.Contains(t, logs, "Embedding cache lookup record persist failed: status miss, error_kind "+tc.recordKind)
-			for _, sensitive := range []string{"alpha", "vector=[", "synthetic-secret", "private-model-id", "tenant 7"} {
+			assert.Contains(
+				t,
+				logs,
+				"Embedding cache persist failed (vectors still returned): entries 1, error_kind "+tc.putKind,
+			)
+			assert.Contains(
+				t,
+				logs,
+				"Embedding cache lookup record persist failed: status miss, error_kind "+tc.recordKind,
+			)
+			for _, sensitive := range []string{
+				"alpha", "vector=[", "synthetic-secret", "private-model-id", "tenant 7",
+			} {
 				assert.NotContains(t, logs, sensitive)
 			}
 
@@ -140,6 +150,7 @@ func TestEmbeddingCachePersistFailuresLogSanitizedWarningAndStayFailOpen(t *test
 		})
 	}
 }
+
 func TestEmbeddingCacheRejectsNonFiniteProviderVector(t *testing.T) {
 	provider := &invalidEmbedder{}
 	wrapped := NewCoordinator(&cacheStore{}).Wrap(&types.Model{ID: "embedding-1", TenantID: 7}, provider)

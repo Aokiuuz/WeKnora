@@ -38,7 +38,7 @@
 | 调用位置 | 服务地址 |
 | --- | --- |
 | Windows 主机 | `http://127.0.0.1:18082` |
-| `weknora-personal_default` Docker 网络 | `http://weknora-parser-paddle:8080` |
+| `weknora-parser-benchmark` Docker 网络 | `http://weknora-parser-paddle:8080` |
 
 端口仅绑定主机回环地址。容器服务需要完整的版式分析入口 `/layout-parsing`。WeKnora 的自建端点字段填写上表中的基础地址。
 

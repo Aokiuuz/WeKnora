@@ -21,7 +21,7 @@ switch ($Action) {
         if ($existing -eq $containerName) {
             docker start $containerName
         } else {
-            docker run -d --name $containerName --network weknora-personal_default --memory 9g --cpus 6 --shm-size 1g -p 127.0.0.1:18082:8080 --mount "type=bind,source=$runtimePath,target=/runtime" $imageName
+            docker run -d --name $containerName --network weknora-parser-benchmark --memory 9g --cpus 6 --shm-size 1g -p 127.0.0.1:18082:8080 --mount "type=bind,source=$runtimePath,target=/runtime" $imageName
         }
     }
     'stop' { docker stop --timeout 30 $containerName }

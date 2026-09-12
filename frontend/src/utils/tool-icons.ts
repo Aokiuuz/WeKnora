@@ -8,48 +8,48 @@ const t = (key: string) => i18n.global.t(key)
 
 // Tool name to icon mapping
 export const toolIcons: Record<string, string> = {
-    multi_kb_search: 'search',
-    knowledge_search: 'book',
-    grep_chunks: 'search',
-    get_chunk_detail: 'file',
-    list_knowledge_bases: 'folder',
-    list_knowledge_chunks: 'layers',
-    get_document_info: 'info-circle',
-    query_knowledge_graph: 'relation',
-    think: 'ai-search',
-    todo_write: 'task',
+    multi_kb_search: '🔍',
+    knowledge_search: '📚',
+    grep_chunks: '🔎',
+    get_chunk_detail: '📄',
+    list_knowledge_bases: '📂',
+    list_knowledge_chunks: '🧩',
+    get_document_info: 'ℹ️',
+    query_knowledge_graph: '🕸️',
+    think: '💭',
+    todo_write: '📋',
 };
 
 // Match type internal keys for icon mapping
 const matchTypeIconKeys: Record<string, string> = {
-    vector: 'focus',
-    keyword: 'text',
-    adjacent: 'pin',
-    history: 'history',
-    parent: 'arrow-up',
-    relation: 'link',
-    graph: 'relation',
+    vector: '🎯',
+    keyword: '🔤',
+    adjacent: '📌',
+    history: '📜',
+    parent: '⬆️',
+    relation: '🔗',
+    graph: '🕸️',
 };
 
 // Match type to icon mapping (keys match backend API response)
 export const matchTypeIcons: Record<string, string> = {
-    'Vector Match': 'focus',
-    'Keyword Match': 'text',
-    'Adjacent Chunk Match': 'pin',
-    'History Match': 'history',
-    'Parent Chunk Match': 'arrow-up',
-    'Relation Chunk Match': 'link',
-    'Graph Match': 'relation',
+    'Vector Match': '🎯',
+    'Keyword Match': '🔤',
+    'Adjacent Chunk Match': '📌',
+    'History Match': '📜',
+    'Parent Chunk Match': '⬆️',
+    'Relation Chunk Match': '🔗',
+    'Graph Match': '🕸️',
 };
 
 // Get icon for a tool name
 export function getToolIcon(toolName: string): string {
-    return toolIcons[toolName] || 'tools';
+    return toolIcons[toolName] || '🛠️';
 }
 
 // Get icon for a match type
 export function getMatchTypeIcon(matchType: string): string {
-    return matchTypeIcons[matchType] || matchTypeIconKeys[matchType] || 'pin';
+    return matchTypeIcons[matchType] || matchTypeIconKeys[matchType] || '📍';
 }
 
 // Tool name to i18n key mapping

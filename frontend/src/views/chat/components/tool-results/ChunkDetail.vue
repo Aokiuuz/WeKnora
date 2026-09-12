@@ -27,7 +27,7 @@
     <div class="info-section">
       <div class="action-buttons">
         <button class="action-button" @click="copyToClipboard">
-        <t-icon name="copy" aria-hidden="true" /> {{ $t('chat.copyContent') }}
+          📋 {{ $t('chat.copyContent') }}
         </button>
       </div>
     </div>

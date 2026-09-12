@@ -60,7 +60,6 @@ Feishu, GitLab, Tencent IMA, Notion, Yuque 등 외부 플랫폼에서 지식 자
 ## ✨ 최신 업데이트
 
 - **v0.8.0** — **스킬 샌드박스 런타임**(세션 지속 Docker / E2B / Cube 백엔드, 테넌트 단위 네트워크 정책; Local 호스트 프로세스 백엔드 제거; Docker는 옵트인); **테넌트 스킬 카탈로그**(ClawHub / SkillHub / git / zip에서 설치, 샌드박스별 스냅샷, 실시간 진행률, 파일 탐색/편집, 개인·워크스페이스 환경 변수); **크로스 세션 장기 메모리**(profile / preference / fact / task / interest, 확인이 필요한 자동 추출, `search_memory`); 프로세스 내 **anydoc** Office 파서; 공식 **DeepSeek Harness 플러그인** `@wxg-prc-cpg/dsh-weknora`; GitLab 및 Tencent IMA 데이터 소스; LiteLLM; Exa 및 Metaso 웹 검색; XMind 파싱; 채팅 산출물, 질문 개요, 타임스탬프; 컨텍스트 압축 및 프로바이더 Prompt Cache 마커. 또한 OIDC JWKS 검증, 선택적 복잡한 비밀번호, 문서 자동 태깅, 광범위한 샌드박스/보안 강화. 자세한 내용은 [`CHANGELOG.md`](./CHANGELOG.md).
-- **v0.7.3** — 워크스페이스 간 권한 검사와 객체 스토리지 서명 경로를 강화하고 재현 가능한 MAP/NDCG v2 평가 및 결과 무결성 검증을 추가했습니다. 모델 스트림 종단과 호출 원장을 원자적으로 확정하며, 평가 화면의 동시 요청 상태·준비 상태 프로브·Helm 이미지·릴리스 산출물·의존성 잠금을 일치시켰습니다.
 - **v0.7.2** — **공식 제품 문서 사이트** 공개(VitePress, 6개 섹션 약 50편으로 약 360개 API 엔드포인트와 약 150개 환경 변수를 다루며, 독립 Docker/Nginx 배포·빠른 시작 샘플 데이터·로컬 MCP 데모 포함); **지식베이스 폴더 트리**(업로드 경로를 독립 데이터로 저장하여 파일 관리자처럼 탐색·이름 변경·문서 재배치); **청크 편집 및 버전 이력**(UI에서 검색 청크 직접 편집, 버전별 diff와 롤백, 편집 후 인덱스 자동 재구축, 문서 커스텀 메타데이터); **Wiki 페이지 버전 이력**(스냅샷 + 라인 단위 diff + 원클릭 롤백 + 브라우저 내 수동 편집); **파일 직접 링크 모드** `resource_urls=public` / `RESOURCE_URL_MODE`(서드파티 앱이 인증 프록시를 다시 호출하지 않고 이미지와 파일을 렌더링); **Feishu 클라우드 드라이브 데이터 소스** 및 docx blocks API 동기화; 문서 일괄 태깅; **MCP Server 1.1.x**(mcp 2.x 고수준 API로 마이그레이션, 공식 PyPI 패키지 `tencent-weknora-mcp`, `create_knowledge_from_text`와 `list_shared_knowledge_bases` 추가로 총 29개 도구); AWS S3 기본 자격 증명 체인(IAM Role / IRSA); 로컬 HTML 업로드 파싱; QQBot Markdown 응답; app / frontend / docreader / mcp-server PR CI 검사 추가. 또한 router와 `modelcontext` 대규모 리팩터링, 리랭크·청킹 품질 개선 및 광범위한 안정성 수정. 자세한 내용은 [`CHANGELOG.md`](./CHANGELOG.md).
 - **v0.7.1** — 새로운 **Yunzhijia(云之家) IM 통합**(WebSocket + 이미지 메시지 + Markdown 응답); **Volcengine Rerank** 제공자(요청 자동 분할)와 **Zhipu AI 웹 검색** 제공자; 컨트롤 플레인 자동화를 위한 **플랫폼 범위 API 키**(테넌트 관리, 시스템 설정, 런타임 큐, 감사 로그); **KB 단위 활동 감사 추적**; FAQ 관리 강화(필터링, 태깅, 내보내기, 가져오기 결과 추적); **Langfuse OTLP/OTel 트레이싱** 마이그레이션 및 W3C traceparent 전파; 채팅 헤더 액션을 통한 원클릭 **Markdown 내보내기** 및 참조 드로어의 Wiki 도구 결과 표시; 프롬프트 캐시 가시성; 세션 채널 거버넌스(IM/임베드/API 세션을 관리자 범위로 분리); Feishu 대규모 Wiki 동기화 견고화; 레거시 Neo4j 대화 메모리 의존성 제거. 또한 광범위한 slug 무결성, SSRF 전송, 상태 동기화 강화. 자세한 내용은 [`CHANGELOG.md`](./CHANGELOG.md).
 - **v0.7.0** — 세분화된 **범위 지정 API 키 및 Principal 모델**(능력 단위 권한 + KB 단위 제한 + API 통합 플레이그라운드); **런타임 작업 큐 가시성 대시보드 및 Worker 풀 거버넌스**(단계별 풀 + 모델별 동시성 거버너 + 실패 작업 조사/재시도); **다중 인스턴스 스토리지 백엔드**(워크스페이스당 여러 스토리지 인스턴스, KB 단위 바인딩, 기본 인스턴스); **세션 범위 임시 첨부**(이미지/문서 비동기 파싱 + 통합 한도); 추천 질문 및 후속 질문; 안정적인 리소스 레지스트리 및 LLM 컨텍스트 별칭 압축; `@Skill / @MCP` 멘션 기반 범위 지정 Agent 런타임; 대화 중 MCP OAuth; QQBot 및 Lark(Feishu 국제판) IM 통합; Redis TLS; Requesty 모델 제공자 + Keenable 웹 검색; 테넌트리스 프로비저닝 및 제어된 셀프서비스 워크스페이스; 관리자 비밀번호 재설정; 지식 베이스 복제 플로우; `weknora` CLI v0.10. 또한 대규모 보안 강화(SSRF, 비밀 마스킹, SQL 검증, IDOR). 자세한 내용은 [`CHANGELOG.md`](./CHANGELOG.md).
@@ -231,7 +230,7 @@ docker compose up -d    # 코어 서비스 시작
 기존 배포가 있고 새 release를 다운로드한 경우:
 
 ```bash
-# .env에서 WEKNORA_VERSION을 대상 버전(예: v0.7.0)으로 설정하거나 latest 유지
+# .env에서 WEKNORA_VERSION을 대상 버전(예: 0.7.0)으로 설정하거나 latest 유지
 docker compose pull     # WEKNORA_VERSION에 맞는 이미지 가져오기
 docker compose up -d    # 새 이미지로 컨테이너 재생성
 ```

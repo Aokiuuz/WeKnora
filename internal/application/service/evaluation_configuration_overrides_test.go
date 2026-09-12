@@ -110,3 +110,16 @@ func TestEvaluationConfigurationPartialAndResolvedRequestsFreezeIdentically(t *t
 	assert.Equal(t, fullSnapshot.Configuration, partialSnapshot.Configuration)
 	assert.Equal(t, fullHash, partialHash)
 }
+
+func TestEvaluationOutputOverrideReplacesInheritedCompletionBudget(t *testing.T) {
+	input := evaluationExperimentInputFixture()
+	input.Params.SummaryConfig.MaxCompletionTokens = 2048
+	requested := 256
+	require.NoError(t, applyEvaluationConfigurationOverrides(input.Params, &types.EvaluationConfigurationOverrides{
+		Generation: &types.EvaluationGenerationOverrides{MaxTokens: &requested},
+	}))
+	snapshot, _, err := BuildEvaluationExperimentSnapshot(input)
+	require.NoError(t, err)
+	assert.Equal(t, requested, snapshot.Configuration.Generation.MaxTokens)
+	assert.Equal(t, requested, snapshot.Configuration.Generation.MaxCompletionTokens)
+}

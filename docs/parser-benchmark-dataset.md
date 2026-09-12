@@ -59,10 +59,10 @@ OmniDocBench 评分输入由 `score-parser-benchmark.py` 导出。导出的 `gro
 
 ## 复现命令
 
-准备程序适用 Python 3.12，包装库版本记录在 `dataset/parser-benchmark/requirements-prepare.txt`。当前 Windows 工作区明确使用 Codex 随附的 Python 3.12；系统 PATH 中的 Python 3.11 与 `runtime-deps` 的二进制扩展不兼容。其他机器使用自己的 Python 3.12 重新安装依赖，禁止复制 Windows 依赖到 macOS 或 Linux。执行以下命令下载输入、参考标注及冻结的官方评测源码。
+准备程序适用 Python 3.12，包装库版本记录在 `dataset/parser-benchmark/requirements-prepare.txt`。数据准备与宿主评分使用 Python 3.12。依赖中的二进制扩展绑定解释器版本和操作系统，应在目标机器的独立环境中安装。执行以下命令下载输入、参考标注及冻结的官方评测源码。
 
 ```powershell
-$benchmarkPython = 'C:/Users/liuwe/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
+$benchmarkPython = (Get-Command python3).Source
 & $benchmarkPython -m pip install -r dataset/parser-benchmark/requirements-prepare.txt
 & $benchmarkPython scripts/prepare-parser-benchmark.py --restore-evaluators --verify-wrappers
 & $benchmarkPython -m unittest discover -s scripts -p test_parser_benchmark.py -v
@@ -73,7 +73,7 @@ $benchmarkPython = 'C:/Users/liuwe/.cache/codex-runtimes/codex-primary-runtime/d
 以下命令安装官方 olmOCR 测试需要的小型运行依赖，并生成审计、评分和人工清单。Chromium 只承担公式渲染，不调用付费模型。
 
 ```powershell
-$benchmarkPython = 'C:/Users/liuwe/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
+$benchmarkPython = (Get-Command python3).Source
 & $benchmarkPython -m pip install --target artifacts/parser-benchmark/data/runtime-deps -r dataset/parser-benchmark/requirements-score.txt
 $env:PYTHONPATH = (Resolve-Path artifacts/parser-benchmark/data/runtime-deps).Path
 $env:PLAYWRIGHT_BROWSERS_PATH = (Join-Path (Resolve-Path artifacts/parser-benchmark/data).Path chromium)
@@ -98,7 +98,7 @@ docker exec weknora-parser-official-eval /opt/omni-venv/bin/python -m pip instal
 官方评测环境准备完成后，以下命令执行普通审计、olmOCR 官方断言和 OmniDocBench 标准指标。解析已完成且完整性核对通过的引擎进入正式评分，未完成引擎保留待运行状态。
 
 ```powershell
-$benchmarkPython = 'C:/Users/liuwe/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
+$benchmarkPython = (Get-Command python3).Source
 & $benchmarkPython scripts/score-parser-benchmark.py --manifest dataset/parser-benchmark/manifest-full.json --runs artifacts/parser-benchmark/runs/baseline-v1 --official-container weknora-parser-official-eval
 ```
 

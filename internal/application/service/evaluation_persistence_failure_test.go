@@ -57,7 +57,11 @@ func TestRunEvaluationLoadFailureKeepsRecoverablePendingTaskAndResources(t *test
 	detail, err := evaluationEntityToDetail(entity)
 	require.NoError(t, err)
 
-	runErr := service.runEvaluation(context.Background(), detail, "caller-kb")
+	runErr := service.runEvaluation(
+		types.WithExecutionTenant(context.Background(), detail.Task.TenantID),
+		detail,
+		"caller-kb",
+	)
 	require.Error(t, runErr)
 	assert.ErrorIs(t, runErr, loadErr)
 	assert.Empty(t, recorder.snapshot(), "Pending recovery resources must remain intact")
@@ -81,7 +85,11 @@ func TestRunEvaluationStartConflictKeepsRecoverablePendingTaskAndResources(t *te
 	detail, err := evaluationEntityToDetail(entity)
 	require.NoError(t, err)
 
-	runErr := service.runEvaluation(context.Background(), detail, "caller-kb")
+	runErr := service.runEvaluation(
+		types.WithExecutionTenant(context.Background(), detail.Task.TenantID),
+		detail,
+		"caller-kb",
+	)
 	require.Error(t, runErr)
 	assert.ErrorIs(t, runErr, interfaces.ErrEvaluationTaskVersionConflict)
 	assert.Empty(t, recorder.snapshot(), "A failed ownership transition must not delete recovery resources")
@@ -105,7 +113,11 @@ func TestRunEvaluationUsesPersistedTemporaryKnowledgeBaseID(t *testing.T) {
 	detail, err := evaluationEntityToDetail(entity)
 	require.NoError(t, err)
 
-	runErr := service.runEvaluation(context.Background(), detail, "caller-kb")
+	runErr := service.runEvaluation(
+		types.WithExecutionTenant(context.Background(), detail.Task.TenantID),
+		detail,
+		"caller-kb",
+	)
 	require.NoError(t, runErr)
 	assert.Equal(t, []string{"persisted-evaluation-kb"}, knowledge.createdInKnowledgeBases())
 	assert.Equal(t, []string{
@@ -126,7 +138,7 @@ func TestRunEvaluationMarksTimedOutWhenInitialTotalPersistenceHitsTaskDeadline(t
 	detail, err := evaluationEntityToDetail(entity)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(types.WithExecutionTenant(context.Background(), detail.Task.TenantID))
 	cancel(errEvaluationTaskTimeout)
 	runErr := service.runEvaluation(ctx, detail, entity.TemporaryKnowledgeBaseID)
 	require.Error(t, runErr)
@@ -150,7 +162,11 @@ func TestEvalDatasetRejectsEmptyPersistedTemporaryKnowledgeBaseID(t *testing.T) 
 	detail, err := evaluationEntityToDetail(entity)
 	require.NoError(t, err)
 
-	runErr := service.EvalDataset(context.Background(), detail, "caller-kb")
+	runErr := service.EvalDataset(
+		types.WithExecutionTenant(context.Background(), detail.Task.TenantID),
+		detail,
+		"caller-kb",
+	)
 	require.Error(t, runErr)
 	assert.ErrorContains(t, runErr, "persisted temporary knowledge base ID is required")
 	assert.Equal(t, 0, knowledge.createCallCount())
@@ -175,7 +191,11 @@ func TestRunEvaluationPublishesFailedWhenInitialTotalPersistenceFails(t *testing
 	detail, err := evaluationEntityToDetail(entity)
 	require.NoError(t, err)
 
-	runErr := service.runEvaluation(context.Background(), detail, entity.TemporaryKnowledgeBaseID)
+	runErr := service.runEvaluation(
+		types.WithExecutionTenant(context.Background(), detail.Task.TenantID),
+		detail,
+		entity.TemporaryKnowledgeBaseID,
+	)
 	require.Error(t, runErr)
 	assert.ErrorIs(t, runErr, publishErr)
 	assert.Equal(t, 0, knowledge.createCallCount(), "Knowledge must not be created before total is durable")
@@ -207,7 +227,11 @@ func TestRunEvaluationCleansKnowledgeBeforeBaseWhenKnowledgePersistenceFails(t *
 	detail, err := evaluationEntityToDetail(entity)
 	require.NoError(t, err)
 
-	runErr := service.runEvaluation(context.Background(), detail, entity.TemporaryKnowledgeBaseID)
+	runErr := service.runEvaluation(
+		types.WithExecutionTenant(context.Background(), detail.Task.TenantID),
+		detail,
+		entity.TemporaryKnowledgeBaseID,
+	)
 	require.Error(t, runErr)
 	assert.ErrorIs(t, runErr, recordErr)
 	assert.Equal(t, 1, knowledge.createCallCount())
@@ -242,7 +266,11 @@ func TestRunEvaluationJoinsWorkerAndTerminalPublicationErrors(t *testing.T) {
 	detail, err := evaluationEntityToDetail(entity)
 	require.NoError(t, err)
 
-	runErr := service.runEvaluation(context.Background(), detail, entity.TemporaryKnowledgeBaseID)
+	runErr := service.runEvaluation(
+		types.WithExecutionTenant(context.Background(), detail.Task.TenantID),
+		detail,
+		entity.TemporaryKnowledgeBaseID,
+	)
 	require.Error(t, runErr)
 	assert.ErrorIs(t, runErr, workerErr)
 	assert.ErrorIs(t, runErr, publicationErr)
@@ -271,7 +299,11 @@ func TestRunEvaluationSuccessRetainsRecoveryStateAndClearsLease(t *testing.T) {
 	detail, err := evaluationEntityToDetail(entity)
 	require.NoError(t, err)
 
-	runErr := service.runEvaluation(context.Background(), detail, entity.TemporaryKnowledgeBaseID)
+	runErr := service.runEvaluation(
+		types.WithExecutionTenant(context.Background(), detail.Task.TenantID),
+		detail,
+		entity.TemporaryKnowledgeBaseID,
+	)
 	require.NoError(t, runErr)
 	assert.Equal(t, []string{
 		"knowledge:evaluation-knowledge",

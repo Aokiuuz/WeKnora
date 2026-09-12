@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory=$true)][string]$PdfPath,
-    [string]$OutputDirectory = 'D:\XINIUNIAO\.cache\parser-benchmark\mineru\smoke',
+    [string]$OutputDirectory = (Join-Path $PSScriptRoot '../artifacts/parser-benchmark/mineru-state/smoke'),
     [string]$Endpoint = 'http://127.0.0.1:18081',
     [string]$Language = 'ch'
 )

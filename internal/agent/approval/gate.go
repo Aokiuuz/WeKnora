@@ -219,9 +219,9 @@ func (g *Gate) runSubscriber() {
 	for {
 		sub := g.rdb.Subscribe(ctx, channel)
 		ch := sub.Channel()
+		// Reset backoff once we have an active subscription.
+		backoff = time.Second
 		for msg := range ch {
-			// A delivered message confirms a working subscription.
-			backoff = time.Second
 			var m resolveMessage
 			if err := json.Unmarshal([]byte(msg.Payload), &m); err != nil {
 				logger.GetLogger(ctx).Warnf("mcp approval pubsub: bad payload: %v", err)

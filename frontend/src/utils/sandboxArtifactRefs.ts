@@ -1,4 +1,3 @@
-import { lucideMarkup } from '../components/icons/lucide-markup';
 /**
  * 把回答正文里对「沙箱生成文件」的引用，接到 artifact 下载链路上。
  *
@@ -15,11 +14,12 @@ import { lucideMarkup } from '../components/icons/lucide-markup';
  * 交回默认的受保护图片渲染，而不是显示「文件不可用」。
  *
  * 图片类产物内联显示（带鉴权拉取后换成 blob），其余类型（HTML 图表、CSV、
- * 文档等）渲染成一张卡片，点击后交给 ChatArtifactsDrawer 预览——正文里塞一个
+ * 文档等）渲染成一张卡片，点击后交给右侧沙箱面板的产物页预览——正文里塞一个
  * 1MB 的自包含 HTML iframe 既慢又不安全。
  */
 
 import { escapeHTML } from './security.ts';
+import { renderArtifactFileIcon } from './artifactFileIcon';
 
 /** 与后端 artifactListItem / SSE publicArtifactViews 对齐的最小字段集。 */
 export interface ArtifactRefMeta {
@@ -235,10 +235,6 @@ function blobCacheKey(ctx: ArtifactRefContext, index: number): string {
   return `${ctx.sessionId}\u0000${ctx.messageId}\u0000${index}`;
 }
 
-function fileIconSvg(): string {
-  return lucideMarkup.file;
-}
-
 // 与 chatMarkdownRenderer 的流式图片骨架同一个类名，样式复用。
 const STREAMING_PLACEHOLDER =
   '<span class="streaming-image-loading"><span class="streaming-image-loading__skeleton"></span></span>';
@@ -254,7 +250,7 @@ function renderCard(fileName: string, hint: string, index: number | null): strin
   const state = index === null ? ' artifact-ref-card--pending' : '';
   return (
     `<span class="artifact-ref-card${state}"${interactive} title="${safeName}">`
-    + `<span class="artifact-ref-card__icon" aria-hidden="true">${fileIconSvg()}</span>`
+    + `<span class="artifact-ref-card__icon" aria-hidden="true">${renderArtifactFileIcon(fileName)}</span>`
     + '<span class="artifact-ref-card__text">'
     + `<span class="artifact-ref-card__name">${safeName}</span>`
     + `<span class="artifact-ref-card__hint">${safeHint}</span>`

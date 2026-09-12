@@ -161,7 +161,8 @@ func TestEvalDatasetCancelsBlockedWorkerAfterFirstError(t *testing.T) {
 
 	result := make(chan error, 1)
 	go func() {
-		result <- service.EvalDataset(context.Background(), detail, "evaluation-kb")
+		ctx := types.WithExecutionTenant(context.Background(), detail.Task.TenantID)
+		result <- service.EvalDataset(ctx, detail, "evaluation-kb")
 	}()
 
 	cancellationObserved := false

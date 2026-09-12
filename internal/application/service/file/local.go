@@ -2,7 +2,6 @@ package file
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -81,7 +80,7 @@ func (s *localFileService) SaveFile(ctx context.Context,
 		logger.Errorf(ctx, "Failed to open source file: %v", err)
 		return "", fmt.Errorf("failed to open file: %w", err)
 	}
-	defer func() { _ = src.Close() }()
+	defer src.Close()
 
 	// Create destination file for writing
 	logger.Info(ctx, "Creating destination file")
@@ -90,9 +89,11 @@ func (s *localFileService) SaveFile(ctx context.Context,
 		logger.Errorf(ctx, "Failed to create destination file: %v", err)
 		return "", fmt.Errorf("failed to create file: %w", err)
 	}
+	defer dst.Close()
+
 	// Copy content from source to destination
 	logger.Info(ctx, "Copying file content")
-	if err := copyAndCloseLocalFile(dst, src); err != nil {
+	if _, err := io.Copy(dst, src); err != nil {
 		logger.Errorf(ctx, "Failed to copy file content: %v", err)
 		return "", fmt.Errorf("failed to save file: %w", err)
 	}
@@ -193,13 +194,15 @@ func (s *localFileService) CopyFile(ctx context.Context,
 	if err != nil {
 		return "", fmt.Errorf("failed to open source file: %w", err)
 	}
-	defer func() { _ = src.Close() }()
+	defer src.Close()
 
 	dst, err := os.Create(dstPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to create destination file: %w", err)
 	}
-	if err := copyAndCloseLocalFile(dst, src); err != nil {
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, src); err != nil {
 		return "", fmt.Errorf("failed to copy file content: %w", err)
 	}
 
@@ -207,13 +210,6 @@ func (s *localFileService) CopyFile(ctx context.Context,
 	newPath := localScheme + filepath.ToSlash(relPath)
 	logger.Infof(ctx, "Copied local file %s to %s", srcPath, newPath)
 	return newPath, nil
-}
-
-// A successful copy includes closing the writer: some storage failures are
-// reported only on Close. Always close after a failed copy as well.
-func copyAndCloseLocalFile(dst io.WriteCloser, src io.Reader) error {
-	_, copyErr := io.Copy(dst, src)
-	return errors.Join(copyErr, dst.Close())
 }
 
 // SaveBytes saves bytes data to a file and returns the file path

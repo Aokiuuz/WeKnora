@@ -23,14 +23,16 @@ func TestOpenRouterReportedCostKeepsEstimateAndCurrencyBoundary(t *testing.T) {
 	} {
 		store := &recorderStore{price: &types.ModelPriceVersion{
 			ID: "price", Currency: tc.currency,
-			InputMicrounitsPerMillion: 1_000_000, OutputMicrounitsPerMillion: 1_000_000}}
+			InputMicrounitsPerMillion: 1_000_000, OutputMicrounitsPerMillion: 1_000_000,
+		}}
 		model := &types.Model{ID: "m", TenantID: 1, Parameters: types.ModelParameters{Provider: tc.provider}}
 		ctx := WithPurpose(context.Background(), PurposeEvaluation, true)
 		active, _, err := NewRecorder(store).start(ctx, model, "chat")
 		require.NoError(t, err)
 		u := &types.TokenUsage{
 			UsageReported: true, PromptTokens: 10, CompletionTokens: 5,
-			TotalTokens: 15, ReportedCost: &tc.reported}
+			TotalTokens: 15, ReportedCost: &tc.reported,
+		}
 		require.NoError(t, active.finish(ctx, types.ModelCallStatusSuccess, nil, u))
 		done := store.completions[0]
 		require.Equal(t, tc.want, *done.CostMicrounits)

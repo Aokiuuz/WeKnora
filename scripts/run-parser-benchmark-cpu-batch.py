@@ -211,11 +211,11 @@ def public_config(root: Path) -> dict:
     spec = importlib.util.spec_from_file_location('cpu_batch_launcher', root / LAUNCHER)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    # The existing launcher reads local encrypted configuration. Keep all
-    # credentials in memory; expose only three explicitly public local options.
+    # The launcher reads only an explicitly supplied local configuration file.
+    # Expose only three public options; cloud credentials remain private.
     payload = module.read_credentials()
     config = payload.get('parser_config') or {}
-    output = {'paddleocr_vl_endpoint': 'http://weknora-parser-paddle:8080'}
+    output = {'paddleocr_vl_endpoint': config.get('paddleocr_vl_endpoint', 'http://weknora-parser-paddle:8080')}
     for key in ('paddleocr_vl_use_seal_recognition', 'paddleocr_vl_use_chart_recognition'):
         if config.get(key) is not None:
             if not isinstance(config[key], bool):
@@ -226,7 +226,7 @@ def public_config(root: Path) -> dict:
 
 def public_server_identity(root: Path) -> dict:
     server = json.loads(docker('inspect', SERVER))[0]
-    if server['Name'] != '/' + SERVER or 'weknora-personal_default' not in server['NetworkSettings']['Networks']:
+    if server['Name'] != '/' + SERVER or os.environ.get('PARSER_BENCHMARK_NETWORK', 'weknora-parser-benchmark') not in server['NetworkSettings']['Networks']:
         raise BatchError('paddle_container_or_network_invalid')
     config, host = server['Config'], server['HostConfig']
     environment = dict(item.split('=', 1) for item in config.get('Env', []) if '=' in item)

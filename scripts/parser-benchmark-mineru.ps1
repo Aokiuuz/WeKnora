@@ -1,8 +1,8 @@
 param(
     [ValidateSet('Install','DownloadModels','Start','Stop','Status')]
     [string]$Action = 'Status',
-    [string]$StateDirectory = 'D:\XINIUNIAO\.cache\parser-benchmark\mineru',
-    [string]$Network = 'weknora-personal_default',
+    [string]$StateDirectory = (Join-Path $PSScriptRoot '../artifacts/parser-benchmark/mineru-state'),
+    [string]$Network = 'weknora-parser-benchmark',
     [int]$Port = 18081
 )
 $ErrorActionPreference = 'Stop'

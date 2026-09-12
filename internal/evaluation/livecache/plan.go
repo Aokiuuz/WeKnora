@@ -101,7 +101,7 @@ func models() (*types.Model, *types.Model) {
 func BuildPlan() (*Plan, error) {
 	c, e := models()
 	p := &Plan{
-		Version: 2, Endpoint: Endpoint,
+		Version: 3, Endpoint: Endpoint,
 		ChatIdentity: types.EvaluationModelSnapshotFrom(c), EmbeddingIdentity: types.EvaluationModelSnapshotFrom(e),
 		ChatRequestLimit: MaxChatRequests, EmbeddingRequestLimit: MaxEmbeddingRequests, Currency: "CNY",
 		PrefixEstimator: "cl100k_base (approximation, not the Qwen tokenizer)",
@@ -110,13 +110,13 @@ func BuildPlan() (*Plan, error) {
 		ChatInputPrice: inputPrice, ChatOutputPrice: outputPrice,
 		ChatCacheReadPrice: cacheReadPrice, EmbeddingInputPrice: embeddingPrice,
 		ChatParameters: map[string]any{
-			"temperature": 0.3, "enable_thinking": false, "stream": false, "max_tokens": 256,
-			"max_completion_tokens": 256, "cache_retention": "none", "provider_cache_mode": "implicit",
+			"temperature": 0.3, "enable_thinking": false, "stream": false, "max_completion_tokens": 256,
+			"cache_retention": "none", "provider_cache_mode": "implicit",
 		},
 		EmbeddingParameters: map[string]any{
 			"encoding_format": "float", "dimensions": 1024, "truncate_prompt_tokens": 511,
 		},
-		OmittedChatParameters: []string{"top_p", "seed", "tools"},
+		OmittedChatParameters: []string{"top_p", "seed", "tools", "max_tokens"},
 	}
 	texts := []string{}
 	for i := 0; i < 4; i++ {

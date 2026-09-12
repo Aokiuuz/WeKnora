@@ -13,13 +13,13 @@
 | 容器 | weknora-parser-mineru |
 | 宿主机端点 | http://127.0.0.1:18081 |
 | 容器网络端点 | http://weknora-parser-mineru:8000 |
-| Docker 网络 | weknora-personal_default |
+| Docker 网络 | weknora-parser-benchmark |
 | 资源限制 | 6 个 CPU，8 GiB 内存，内存与交换空间合计 10 GiB |
 | 并发与页窗口 | 1 个请求，1 页处理窗口 |
 | 分批参数 | 虚拟显存参数为 2，用于控制分批；计算设备固定 cpu |
 | 公式与表格 | 请求中启用 |
 | 语言 | ch；en 在上游接口中映射为 ch，覆盖本次中英文样本 |
-| 数据目录 | `D:\XINIUNIAO\.cache\parser-benchmark\mineru` |
+| 数据目录 | `artifacts/parser-benchmark/mineru-state` |
 
 `requirements.lock.txt` 固定实际安装的全部 Python 依赖。基础镜像通过摘要固定，复用项目文档解析镜像内的 Python 和系统库。模型来源为 `OpenDataLab/PDF-Extract-Kit-1.0`，提交版本为 `05eaf85cc4ddab92c2be61e10abec4586d25c1a6`。下载器获取当前中英文配置需要的 15 个文件，共 1,082,446,509 字节，包含 PP-DocLayoutV2、Unimernet、PP-OCRv6 small 检测与识别模型，以及三个表格模型。下载完成后生成 `models-manifest.json`，记录模型文件大小和 SHA-256（安全散列算法 256 位，Secure Hash Algorithm 256-bit）摘要。
 

@@ -127,10 +127,6 @@ func ExampleUsage() {
 		fmt.Printf("Failed to create session: %v\n", err)
 		return
 	}
-	if session == nil {
-		fmt.Println("Session response is empty")
-		return
-	}
 	fmt.Printf("Session created successfully: ID=%s\n", session.ID)
 
 	// 5. Perform knowledge Q&A (using streaming API)

@@ -51,6 +51,7 @@ func applyEvaluationConfigurationOverrides(
 		}
 		if overrides.Generation.MaxTokens != nil {
 			params.SummaryConfig.MaxTokens = *overrides.Generation.MaxTokens
+			params.SummaryConfig.MaxCompletionTokens = *overrides.Generation.MaxTokens
 		}
 	}
 	return nil
@@ -159,12 +160,20 @@ func (e *EvaluationService) buildExperimentForTask(
 	if err != nil {
 		return nil, "", fmt.Errorf("build evaluation experiment: indexing snapshot: %w", err)
 	}
+	// Freeze the effective provider budget in both public input aliases.
+	// An explicit experiment cap takes precedence over inherited defaults.
+	budget := (&chat.ChatOptions{
+		MaxTokens:           detail.Params.SummaryConfig.MaxTokens,
+		MaxCompletionTokens: detail.Params.SummaryConfig.MaxCompletionTokens,
+	}).CompletionBudget()
 	if chatModel != nil {
 		limit := chatModel.Parameters.MaxOutputTokens
-		if limit > 0 && (detail.Params.SummaryConfig.MaxTokens <= 0 || detail.Params.SummaryConfig.MaxTokens > limit) {
-			detail.Params.SummaryConfig.MaxTokens = limit
+		if limit > 0 && (budget <= 0 || budget > limit) {
+			budget = limit
 		}
 	}
+	detail.Params.SummaryConfig.MaxTokens = budget
+	detail.Params.SummaryConfig.MaxCompletionTokens = budget
 	return BuildEvaluationExperimentSnapshot(&EvaluationExperimentInput{
 		Dataset:               datasetSnapshot,
 		SourceKnowledgeBaseID: options.KnowledgeBaseID,

@@ -184,7 +184,8 @@ func TestEvaluationServicePublishesTerminalStateAfterCleanup(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() {
 		defer close(runDone)
-		result <- service.runEvaluation(context.Background(), detail, "evaluation-kb")
+		ctx := types.WithExecutionTenant(context.Background(), detail.Task.TenantID)
+		result <- service.runEvaluation(ctx, detail, "evaluation-kb")
 	}()
 	var releaseOnce sync.Once
 	releaseCleanup := func() {
@@ -275,7 +276,11 @@ func TestEvaluationServicePreservesPrimaryErrorAlongsideCleanupErrors(t *testing
 		ownerID:                  storage.ownerID,
 	}
 
-	runErr := service.runEvaluation(context.Background(), detail, "evaluation-kb")
+	runErr := service.runEvaluation(
+		types.WithExecutionTenant(context.Background(), detail.Task.TenantID),
+		detail,
+		"evaluation-kb",
+	)
 	if !errors.Is(runErr, workerErr) {
 		t.Fatalf("runEvaluation() error = %v, want errors.Is(error, workerErr)", runErr)
 	}

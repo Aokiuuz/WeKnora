@@ -1,9 +1,9 @@
 <template>
   <SettingDrawer :visible="visible" :title="t('evaluationFlow.newRun')" :description="t('evaluationFlow.runHint')" width="600px" :min-width="320" :resizable="false" :close-on-esc-keydown="!submitting" hide-footer @update:visible="close">
-    <template #headerIcon><FlaskConical :size="18" aria-hidden="true" /></template>
-    <template #header-actions><t-button theme="default" variant="text" shape="square" :aria-label="t('common.close')" :disabled="submitting" @click="close(false)"><X :size="18" aria-hidden="true" /></t-button></template>
+    <template #headerIcon><FlaskConical size="18px" aria-hidden="true" /></template>
+    <template #header-actions><t-button theme="default" variant="text" shape="square" :aria-label="t('common.close')" :disabled="submitting" @click="close(false)"><X size="18px" aria-hidden="true" /></t-button></template>
     <form class="evaluation-flow flow-stack" @submit.prevent="submit">
-      <p v-if="loading" class="flow-notice" role="status"><LoaderCircle :size="16" class="spin" />{{ t('evaluation.loading') }}</p>
+      <p v-if="loading" class="flow-notice" role="status"><LoaderCircle size="16px" class="spin" />{{ t('evaluation.loading') }}</p>
       <div v-if="loadError" class="flow-error" role="alert">{{ loadError }}<button type="button" class="flow-link" @click="loadResources">{{ t('evaluation.refresh') }}</button></div>
       <label class="flow-field"><span>{{ t('evaluation.dataset') }}</span><select v-model="draft.datasetId" :disabled="submitting || loading" required @change="selectDataset()"><option value="" disabled>{{ t('evaluationFlow.chooseDataset') }}</option><option v-for="dataset in datasets" :key="dataset.id" :value="dataset.id">{{ dataset.name }}</option></select></label>
       <p v-if="!loading && !datasets.length && !loadError" class="flow-notice">{{ t('evaluationFlow.noDatasets') }}<button type="button" class="flow-link" @click="emit('import')">{{ t('evaluationFlow.openImport') }}</button></p>
@@ -18,11 +18,11 @@
       <p v-if="!loading && !chatModels.length && !loadError" class="flow-notice">{{ t('evaluationFlow.noChatModels') }}</p>
       <label class="flow-field"><span>{{ t('evaluationFlow.rerankModel') }}</span><select v-model="draft.rerankId" :disabled="submitting || loading"><option value="">{{ t('evaluationFlow.autoRerank') }}</option><option v-for="model in rerankModels" :key="model.id" :value="model.id">{{ model.display_name || model.name }}</option></select><small>{{ t('evaluationFlow.autoRerankHint') }}</small></label>
       <details class="flow-card"><summary>{{ t('evaluationFlow.optionalSettings') }}</summary><div class="flow-stack flow-advanced"><label class="flow-field"><span>{{ t('evaluationFlow.topK') }}</span><input v-model="draft.topK" type="number" min="1" max="100" step="1" :disabled="submitting" :placeholder="t('evaluationFlow.serviceDefault')" /></label><label class="flow-field"><span>{{ t('evaluationFlow.seed') }}</span><input v-model="draft.seed" type="number" step="1" :disabled="submitting" :placeholder="t('evaluationFlow.seedDefault')" /><small>{{ t('evaluationFlow.seedHint') }}</small></label></div></details>
-      <div class="flow-cost"><Coins :size="20" aria-hidden="true" /><div><h3>{{ t('evaluationFlow.modelCalls') }}</h3><p>{{ t('evaluationFlow.costNotice') }}</p><small v-if="selectedVersion">{{ t('evaluationFlow.runScale', { passages: selectedVersion.passage_count, questions: selectedVersion.question_count }) }}</small></div></div>
+      <div class="flow-cost"><Coins size="20px" aria-hidden="true" /><div><h3>{{ t('evaluationFlow.modelCalls') }}</h3><p>{{ t('evaluationFlow.costNotice') }}</p><small v-if="selectedVersion">{{ t('evaluationFlow.runScale', { passages: selectedVersion.passage_count, questions: selectedVersion.question_count }) }}</small></div></div>
       <label class="flow-confirm"><input v-model="confirmed" type="checkbox" :disabled="submitting" /><span>{{ t('evaluationFlow.costConfirm') }}</span></label>
       <p v-if="error" class="flow-error" role="alert">{{ error }}</p>
       <p v-if="uncertain" class="flow-notice">{{ t('evaluationFlow.runUncertain') }}<button type="button" class="flow-link" @click="emit('refresh'); close(false)">{{ t('evaluationFlow.checkRuns') }}</button></p>
-      <button type="submit" class="flow-button flow-button--primary" :disabled="!canSubmit"><Play :size="15" aria-hidden="true" />{{ t(submitting ? 'evaluationFlow.creating' : 'evaluationFlow.confirmRun') }}</button>
+      <button type="submit" class="flow-button flow-button--primary" :disabled="!canSubmit"><Play size="15px" aria-hidden="true" />{{ t(submitting ? 'evaluationFlow.creating' : 'evaluationFlow.confirmRun') }}</button>
     </form>
   </SettingDrawer>
 </template>
@@ -31,7 +31,7 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
-import { Coins, FlaskConical, LoaderCircle, Play, X } from '@lucide/vue'
+import { MoneyIcon as Coins, ChartScatterIcon as FlaskConical, LoadingIcon as LoaderCircle, PlayIcon as Play, CloseIcon as X } from 'tdesign-icons-vue-next'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 import { getKnowledgeBaseById, listKnowledgeBases, type KnowledgeBaseConfigurationView } from '@/api/knowledge-base'
 import { listModels, type ModelConfig } from '@/api/model'

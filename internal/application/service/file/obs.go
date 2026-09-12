@@ -137,7 +137,7 @@ func (s *obsFileService) parseObsFilePath(filePath string) (string, error) {
 		}
 		return "", fmt.Errorf("invalid OBS file path: %s", filePath)
 	}
-	return "", fmt.Errorf("OBS path does not belong to the configured bucket or proxy domain")
+	return filePath, nil
 }
 
 func (s *obsFileService) getPrifix() string {
@@ -247,6 +247,8 @@ func (s *obsFileService) CopyFile(ctx context.Context,
 	srcPath string, tenantID uint64, knowledgeID string,
 ) (string, error) {
 	// Reject paths that do not use this service's prefix (proxy domain or obs://).
+	// parseObsFilePath falls back to returning the raw input for unknown prefixes,
+	// so guard explicitly here to detect cross-backend sources.
 	if !strings.HasPrefix(srcPath, s.getPrifix()) {
 		return "", fmt.Errorf("obs copy rejected source %q: %w", srcPath, ErrCrossBackendCopy)
 	}

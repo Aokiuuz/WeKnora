@@ -22,10 +22,7 @@ type fakeChunksSvc struct {
 }
 
 func (f *fakeChunksSvc) HybridSearch(
-	_ context.Context,
-	kbID string,
-	p *sdk.SearchParams,
-	_ ...sdk.ResourceURLOptions,
+	_ context.Context, kbID string, p *sdk.SearchParams, _ ...sdk.ResourceURLOptions,
 ) ([]*sdk.SearchResult, error) {
 	f.gotKB = kbID
 	f.gotQ = p.QueryText
@@ -245,10 +242,7 @@ type capturingChunksSvc struct {
 }
 
 func (c *capturingChunksSvc) HybridSearch(
-	_ context.Context,
-	_ string,
-	p *sdk.SearchParams,
-	_ ...sdk.ResourceURLOptions,
+	_ context.Context, _ string, p *sdk.SearchParams, _ ...sdk.ResourceURLOptions,
 ) ([]*sdk.SearchResult, error) {
 	c.capture(p)
 	return nil, nil

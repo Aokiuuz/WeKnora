@@ -69,6 +69,7 @@ mkdir -p "${DIST_DIR}/web"
 
 go build -tags "sqlite_fts5" -o "${DIST_DIR}/weknora-migrate" ./cmd/migrate-runner
 cp WeKnora-lite "${DIST_DIR}/"
+bash ./scripts/copy-licenses.sh "${DIST_DIR}"
 if [ -d web ] && [ -f web/index.html ]; then
     cp -r web/* "${DIST_DIR}/web/"
 fi

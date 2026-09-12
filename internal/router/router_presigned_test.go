@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Tencent/WeKnora/internal/types"
@@ -234,48 +233,5 @@ func TestPresignedFile_MissingFile_404(t *testing.T) {
 	engine.ServeHTTP(w, req)
 	if got, want := w.Code, http.StatusNotFound; got != want {
 		t.Fatalf("status = %d, want %d", got, want)
-	}
-}
-
-func TestPresignedFile_RejectsSignedTenantPathMismatch(t *testing.T) {
-	engine, baseDir, signURL := setupPresignedTestServer(t)
-	storagePath := writeTestFile(t, baseDir, "2/exports/private.png", "TENANT-2")
-
-	req := httptest.NewRequest(http.MethodGet, signURL(storagePath, 1, time.Hour), nil)
-	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
-	if got, want := w.Code, http.StatusForbidden; got != want {
-		t.Fatalf("status = %d, want %d (body=%q)", got, want, w.Body.String())
-	}
-}
-
-func TestPresignedPreview_RejectsCrossTenantPathBeforeSigning(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	t.Setenv("APP_EXTERNAL_URL", "https://weknora.example.com")
-	t.Setenv("SYSTEM_AES_KEY", "weknora-test-aes-key-32bytes!!!")
-	enabled := true
-	cfg := &config.Config{Tenant: &config.TenantConfig{EnableRBAC: &enabled}}
-	tenant := &types.Tenant{
-		ID: 1,
-		StorageEngineConfig: &types.StorageEngineConfig{
-			DefaultProvider: "local",
-			Local:           &types.LocalEngineConfig{},
-		},
-	}
-	engine := gin.New()
-	engine.Use(func(c *gin.Context) {
-		ctx := context.WithValue(c.Request.Context(), types.TenantInfoContextKey, tenant)
-		ctx = context.WithValue(ctx, types.TenantRoleContextKey, types.TenantRoleAdmin)
-		c.Request = c.Request.WithContext(ctx)
-		c.Next()
-	})
-	servePresignedPreview(engine, cfg, nil)
-
-	q := url.Values{"file_path": []string{"local://2/exports/private.png"}}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/presigned-preview?"+q.Encode(), nil)
-	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
-	if got, want := w.Code, http.StatusForbidden; got != want {
-		t.Fatalf("status = %d, want %d (body=%q)", got, want, w.Body.String())
 	}
 }

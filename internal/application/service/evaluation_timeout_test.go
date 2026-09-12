@@ -296,7 +296,8 @@ func TestEvaluationServiceMarksTaskTimedOutAfterIndependentCleanup(t *testing.T)
 
 	result := make(chan error, 1)
 	go func() {
-		result <- service.runEvaluation(context.Background(), detail, "evaluation-kb")
+		ctx := types.WithExecutionTenant(context.Background(), detail.Task.TenantID)
+		result <- service.runEvaluation(ctx, detail, "evaluation-kb")
 	}()
 	taskObservation := waitForEvaluationObservation(t, taskContextObserved, "task")
 	cleanupObservation := waitForEvaluationObservation(t, cleanupEntered, "cleanup")
@@ -372,7 +373,8 @@ func TestEvaluationServiceKeepsBusinessErrorWhenCleanupCrossesTaskDeadline(t *te
 
 	result := make(chan error, 1)
 	go func() {
-		result <- service.runEvaluation(context.Background(), detail, "evaluation-kb")
+		ctx := types.WithExecutionTenant(context.Background(), detail.Task.TenantID)
+		result <- service.runEvaluation(ctx, detail, "evaluation-kb")
 	}()
 	taskObservation := waitForEvaluationObservation(t, taskContextObserved, "task")
 	cleanupObservation := waitForEvaluationObservation(t, cleanupEntered, "cleanup")
@@ -428,7 +430,8 @@ func TestEvaluationServiceKeepsSuccessWhenCleanupCrossesTaskDeadline(t *testing.
 
 	result := make(chan error, 1)
 	go func() {
-		result <- service.runEvaluation(context.Background(), detail, "evaluation-kb")
+		ctx := types.WithExecutionTenant(context.Background(), detail.Task.TenantID)
+		result <- service.runEvaluation(ctx, detail, "evaluation-kb")
 	}()
 	taskObservation := waitForEvaluationObservation(t, taskContextObserved, "task")
 	cleanupObservation := waitForEvaluationObservation(t, cleanupEntered, "cleanup")
@@ -464,7 +467,11 @@ func TestEvaluationServiceKeepsDownstreamDeadlineFailureFailed(t *testing.T) {
 		ownerID:                  storage.ownerID,
 	}
 
-	runErr := service.runEvaluation(context.Background(), detail, "evaluation-kb")
+	runErr := service.runEvaluation(
+		types.WithExecutionTenant(context.Background(), detail.Task.TenantID),
+		detail,
+		"evaluation-kb",
+	)
 	if !errors.Is(runErr, context.DeadlineExceeded) {
 		t.Fatalf("runEvaluation() error = %v, want context.DeadlineExceeded", runErr)
 	}

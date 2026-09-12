@@ -15,20 +15,19 @@ cli/acceptance/testdata/**/*.json text eol=lf
 # picking either side (task state lives in task.json, not index.md). See
 # .trellis/spec/cli/backend/directory-structure.md for details.
 .trellis/workspace/*/journal-*.md merge=union
-# Public bundle hashes bind original bytes on every operating system.
-dataset/public/** -text
-# Verbatim licensed source files retain upstream whitespace as part of their hash.
-dataset/public/*/v1/LICENSE -whitespace
-dataset/public/*/v1/source_docs/** -whitespace
-# Acceptance manifests hash report bytes consistently across operating systems.
-docs/reports/final-acceptance/*.json text eol=lf
-docs/reports/final-acceptance/*.md text eol=lf
-docs/reports/expanded-acceptance/*.json text eol=lf
-docs/reports/expanded-acceptance/*.md text eol=lf
-# Parser evidence binds the exact manifest, model configuration and runner bytes.
-dataset/parser-benchmark/** -text whitespace=cr-at-eol
-deploy/parser-benchmark/** -text whitespace=cr-at-eol
-# Preserve the exact vendor configuration used by the model validation receipt.
-deploy/parser-benchmark/paddle/pipeline.yaml -whitespace
-scripts/run-parser-benchmark.py -text
-scripts/run-parser-benchmark-cpu-batch.py -text
+
+# Unified diffs use a space to mark empty context lines.
+patches/browserskill/*.patch whitespace=-blank-at-eol
+
+# Evaluation input hashes identify the original bytes on every operating system.
+# Preserve CRLF and whitespace in imported, frozen source documents and licenses.
+dataset/** -text whitespace=cr-at-eol
+dataset/public/weknora-docs/v1/source_docs/** whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+dataset/public/weknora-docs/v1/LICENSE whitespace=cr-at-eol,-blank-at-eol
+
+# Pinned parser runtime inputs and timestamped validation evidence retain their bytes.
+deploy/parser-benchmark/mineru/validation.json -text whitespace=cr-at-eol
+deploy/parser-benchmark/paddle/validation.json -text whitespace=cr-at-eol
+deploy/parser-benchmark/paddle/models.lock.json -text whitespace=cr-at-eol
+deploy/parser-benchmark/paddle/requirements.lock -text whitespace=cr-at-eol
+deploy/parser-benchmark/paddle/pipeline.yaml -text whitespace=cr-at-eol,-blank-at-eol

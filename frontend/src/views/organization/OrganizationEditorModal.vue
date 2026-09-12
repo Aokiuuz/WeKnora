@@ -5,7 +5,9 @@
         <div class="settings-modal" :class="{ 'join-mode': mode === 'join' }">
           <!-- 关闭按钮 -->
           <button class="close-btn" @click="handleClose" :aria-label="$t('common.close')">
-            <t-icon name="close" size="20px" width="20" height="20" />
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
           </button>
 
           <div class="settings-container">

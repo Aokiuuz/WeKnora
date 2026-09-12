@@ -38,9 +38,9 @@
 
 ```powershell
 python scripts/prepare-public-evaluation.py --check --dataset weknora-docs
-python scripts/prepare-public-evaluation.py --dataset weknora-docs --cache-dir D:/XINIUNIAO/.cache/public-datasets
-python scripts/prepare-public-evaluation.py --dataset weknora-docs --cache-dir D:/XINIUNIAO/.cache/public-datasets --download
-python scripts/prepare-public-evaluation.py --check --verify-source --dataset weknora-docs --cache-dir D:/XINIUNIAO/.cache/public-datasets
+python scripts/prepare-public-evaluation.py --dataset weknora-docs --cache-dir artifacts/public-datasets/source-cache
+python scripts/prepare-public-evaluation.py --dataset weknora-docs --cache-dir artifacts/public-datasets/source-cache --download
+python scripts/prepare-public-evaluation.py --check --verify-source --dataset weknora-docs --cache-dir artifacts/public-datasets/source-cache
 ```
 
 `--check` 使用仓库内的精简证据与文件摘要，离线核验结构、引用关系、答案偏移和生成内容。`--verify-source` 进一步读取本地完整源缓存，重跑固定抽样并核对来源。生成命令默认要求已有缓存；`--download` 仅下载缺失的固定版本源文件，任何摘要不匹配均报错。全部命令均无模型调用和业务数据库写入。

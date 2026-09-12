@@ -46,8 +46,8 @@ func TestUpdateBuiltinModel_SystemAdminCreatesRuntimeOverride(t *testing.T) {
 	svc := NewModelService(&stubModelRepoForDelete{
 		model: stored,
 		update: func(model *types.Model) error {
-			copy := *model
-			saved = &copy
+			snapshot := *model
+			saved = &snapshot
 			return nil
 		},
 	}, nil, nil, nil, nil, nil)
@@ -82,8 +82,8 @@ func TestUpdateBuiltinModelCredentials_SystemAdminOnly(t *testing.T) {
 		svc := NewModelService(&stubModelRepoForDelete{
 			model: stored,
 			update: func(model *types.Model) error {
-				copy := *model
-				saved = &copy
+				snapshot := *model
+				saved = &snapshot
 				return nil
 			},
 		}, nil, nil, nil, nil, nil)
@@ -105,8 +105,8 @@ func TestModelWritesMaintainCustomHeaderBehaviorRevision(t *testing.T) {
 		var saved *types.Model
 		svc := NewModelService(&stubModelRepoForDelete{
 			create: func(model *types.Model) error {
-				copy := *model
-				saved = &copy
+				snapshot := *model
+				saved = &snapshot
 				return nil
 			},
 		}, nil, nil, nil, nil, nil)
@@ -132,8 +132,8 @@ func TestModelWritesMaintainCustomHeaderBehaviorRevision(t *testing.T) {
 		svc := NewModelService(&stubModelRepoForDelete{
 			model: stored,
 			update: func(model *types.Model) error {
-				copy := *model
-				saved = &copy
+				snapshot := *model
+				saved = &snapshot
 				return nil
 			},
 		}, nil, nil, nil, nil, nil)

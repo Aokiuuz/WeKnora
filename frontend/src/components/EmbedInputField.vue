@@ -58,7 +58,13 @@
             :aria-label="t('input.webSearch.label')"
             @click="toggleWebSearch"
           >
-            <t-icon name="internet" size="18px" width="18" height="18" aria-hidden="true" />
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.2" fill="none" />
+              <path d="M 9 2 A 3.5 7 0 0 0 9 16" stroke="currentColor" stroke-width="1.2" fill="none" />
+              <path d="M 9 2 A 3.5 7 0 0 1 9 16" stroke="currentColor" stroke-width="1.2" fill="none" />
+              <line x1="2.94" y1="5.5" x2="15.06" y2="5.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+              <line x1="2.94" y1="12.5" x2="15.06" y2="12.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+            </svg>
           </button>
         </t-tooltip>
         <t-tooltip v-if="showFileUploadToggle" placement="top" :content="t('input.imageUpload.tooltip')">
@@ -87,7 +93,9 @@
       <div class="embed-input-box__actions">
         <t-tooltip v-if="isReplying" :content="t('input.stopGeneration')" placement="top">
           <button type="button" class="embed-stop-btn" @click="emit('stop-generation')">
-            <t-icon name="stop" size="16px" width="16" height="16" aria-hidden="true" />
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <rect x="5" y="5" width="6" height="6" rx="1" />
+            </svg>
           </button>
         </t-tooltip>
         <button

@@ -23,6 +23,13 @@ on:
       - "testdata/**"
       - "dataset/**"
       - "docker/Dockerfile.app"
+      - "LICENSE"
+      - "THIRD_PARTY_NOTICES.md"
+      - "licenses/**"
+      - "internal/textconv/data/**"
+      - "scripts/*licenses.sh"
+      - "scripts/check-license-bundle.sh"
+      - "cmd/desktop/build/windows/installer/project.nsi"
       - ".github/workflows/app.yml"
   pull_request:
     paths:
@@ -42,6 +49,13 @@ on:
       - "testdata/**"
       - "dataset/**"
       - "docker/Dockerfile.app"
+      - "LICENSE"
+      - "THIRD_PARTY_NOTICES.md"
+      - "licenses/**"
+      - "internal/textconv/data/**"
+      - "scripts/*licenses.sh"
+      - "scripts/check-license-bundle.sh"
+      - "cmd/desktop/build/windows/installer/project.nsi"
       - ".github/workflows/app.yml"
   workflow_dispatch:
 
@@ -82,6 +96,9 @@ jobs:
 
       - name: Download modules
         run: go mod download
+
+      - name: Verify third-party notices and source bundle
+        run: bash ./scripts/check-license-bundle.sh
 
       - name: Check formatting
         shell: bash

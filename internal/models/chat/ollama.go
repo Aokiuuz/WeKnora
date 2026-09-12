@@ -107,8 +107,8 @@ func (c *OllamaChat) buildChatRequest(messages []Message, opts *ChatOptions, isS
 		if OptionsSeedProvided(opts) {
 			chatReq.Options["seed"] = opts.Seed
 		}
-		if opts.MaxTokens > 0 {
-			chatReq.Options["num_predict"] = opts.MaxTokens
+		if budget := opts.CompletionBudget(); budget > 0 {
+			chatReq.Options["num_predict"] = budget
 		}
 		if opts.Thinking != nil {
 			chatReq.Think = &ollamaapi.ThinkValue{

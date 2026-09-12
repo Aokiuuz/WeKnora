@@ -5,9 +5,9 @@ export const CHROME_EXTENSION_URL =
 
 export const CLAWHUB_SKILL_URL = 'https://clawhub.ai/lyingbug/weknora'
 
-export type IntegrationTab = 'im' | 'embed' | 'api' | 'chrome' | 'claw'
+export type IntegrationTab = 'im' | 'embed' | 'api' | 'cli' | 'chrome' | 'claw'
 
-export const INTEGRATION_TABS: IntegrationTab[] = ['im', 'embed', 'api', 'chrome', 'claw']
+export const INTEGRATION_TABS: IntegrationTab[] = ['im', 'embed', 'api', 'cli', 'chrome', 'claw']
 
 /** Aligns with Settings.vue SECTION_MIN_ROLE.api and router.go g.Owner() on /api-principal-config. */
 export type IntegrationTabRole = 'viewer' | 'contributor' | 'admin' | 'owner'
@@ -22,7 +22,9 @@ export const INTEGRATION_TAB_CAPABILITY: Partial<Record<IntegrationTab, Deployme
   api: 'integrations.api',
 }
 
-export type IntegrationPreviewIcon = { type: 'icon'; name: string }
+export type IntegrationPreviewIcon =
+  | { type: 'icon'; name: string }
+  | { type: 'emoji'; value: string }
 
 /** Sidebar hover preview + Integrations modal nav — add new entries here. */
 export const INTEGRATION_PREVIEW_ITEMS: Array<{
@@ -32,6 +34,7 @@ export const INTEGRATION_PREVIEW_ITEMS: Array<{
   { key: 'im', icon: { type: 'icon', name: 'chat-message' } },
   { key: 'embed', icon: { type: 'icon', name: 'code' } },
   { key: 'api', icon: { type: 'icon', name: 'secured' } },
+  { key: 'cli', icon: { type: 'icon', name: 'code' } },
   { key: 'chrome', icon: { type: 'icon', name: 'extension' } },
-  { key: 'claw', icon: { type: 'icon', name: 'extension' } },
+  { key: 'claw', icon: { type: 'emoji', value: '🦞' } },
 ]

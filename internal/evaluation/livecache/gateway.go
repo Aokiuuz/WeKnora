@@ -235,13 +235,13 @@ func validateWire(path string, b []byte, s Step) error {
 			return errors.New("chat identity")
 		}
 		for _, key := range []string{
-			"messages", "temperature", "max_tokens", "max_completion_tokens", "enable_thinking", "stream",
+			"messages", "temperature", "max_completion_tokens", "enable_thinking", "stream",
 		} {
 			allowed[key] = true
 		}
 		var messages []chat.Message
 		var temperature float64
-		var maxTokens, maxCompletion int
+		var maxTokens int
 		if json.Unmarshal(raw["messages"], &messages) != nil {
 			return errors.New("messages")
 		}
@@ -252,10 +252,9 @@ func validateWire(path string, b []byte, s Step) error {
 			return errors.New("stream must be false")
 		}
 		_ = json.Unmarshal(raw["temperature"], &temperature)
-		_ = json.Unmarshal(raw["max_tokens"], &maxTokens)
-		_ = json.Unmarshal(raw["max_completion_tokens"], &maxCompletion)
+		_ = json.Unmarshal(raw["max_completion_tokens"], &maxTokens)
 		if !reflect.DeepEqual(messages, s.Messages) || temperature != 0.3 ||
-			maxTokens != MaxOutputTokens || maxCompletion != MaxOutputTokens {
+			maxTokens != MaxOutputTokens {
 			return errors.New("chat payload or limits")
 		}
 		// Reject hidden image/tool fields that the neutral message decoder ignores.

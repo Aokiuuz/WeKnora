@@ -57,6 +57,13 @@ jobs:
             --output artifacts/evaluation-fault-http \
             --server-binary artifacts/evaluation-rag-http/weknora-server
 
+      - name: Verify parser provenance and recovery without external services
+        run: |
+          go test -tags sqlite_fts5 ./cmd/parser-benchmark
+          python3 -B scripts/test_parser_benchmark.py ScoringIntegrityTests OfficialDenominatorAuditTests ReviewBindingTests ManifestMetadataTests
+          python3 -B scripts/test_parser_benchmark_launcher.py
+          python3 -B scripts/test_parser_benchmark_cpu_batch.py
+
       - name: Check product version consistency
         run: python3 scripts/check-product-version.py
 

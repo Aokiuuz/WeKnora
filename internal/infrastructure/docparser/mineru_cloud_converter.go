@@ -5,11 +5,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"mime"
-	"net"
 	"net/http"
 	"path/filepath"
 	"regexp"
@@ -330,7 +328,7 @@ func (c *MinerUCloudReader) fetchBatchStatus(ctx context.Context, batchID string
 
 // extractDoneResult extracts markdown and images from a completed batch item.
 // Prefers inline markdown/content fields; falls back to downloading full_zip_url.
-func (c *MinerUCloudReader) extractDoneResult(ctx context.Context, item *extractResultItem) (string, []types.ImageRef, error) {
+func (c *MinerUCloudReader) extractDoneResult(_ context.Context, item *extractResultItem) (string, []types.ImageRef, error) {
 	text := firstNonEmpty(item.Markdown, item.Content, item.Text)
 	if text != "" {
 		logger.Infof(context.Background(), "[MinerUCloud] parsed (inline), length=%d", len(text))
@@ -341,7 +339,7 @@ func (c *MinerUCloudReader) extractDoneResult(ctx context.Context, item *extract
 		return "", nil, fmt.Errorf("MinerU Cloud state=done but no markdown/content or full_zip_url")
 	}
 
-	md, imageRefs, err := downloadAndExtractZip(ctx, item.FullZipURL)
+	md, imageRefs, err := downloadAndExtractZip(item.FullZipURL)
 	if err != nil {
 		return "", nil, fmt.Errorf("extract zip: %w", err)
 	}
@@ -354,59 +352,21 @@ func (c *MinerUCloudReader) extractDoneResult(ctx context.Context, item *extract
 
 var imgRefPattern = regexp.MustCompile(`!\[[^\]]*\]\(([^)]+)\)`)
 
-// downloadMinerUArchive retries one interrupted result download. It never
-// resubmits the paid parsing task, and cancellation covers the entire download.
-func downloadMinerUArchive(ctx context.Context, client *http.Client, zipURL string) ([]byte, error) {
-	var lastErr error
-	for attempt := 0; attempt < 2; attempt++ {
-		if attempt > 0 {
-			timer := time.NewTimer(250 * time.Millisecond)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return nil, ctx.Err()
-			case <-timer.C:
-			}
-		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, zipURL, nil)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := client.Do(req)
-		if err == nil {
-			if resp.StatusCode != http.StatusOK {
-				resp.Body.Close()
-				lastErr = fmt.Errorf("download zip status %d", resp.StatusCode)
-				if resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504 {
-					continue
-				}
-				return nil, lastErr
-			}
-			var data []byte
-			data, err = io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if err == nil {
-				return data, nil
-			}
-		}
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		lastErr = fmt.Errorf("download zip: %w", err)
-		var networkErr net.Error
-		if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.As(err, &networkErr) {
-			return nil, lastErr
-		}
-	}
-	return nil, lastErr
-}
-
-func downloadAndExtractZip(ctx context.Context, zipURL string) (string, []types.ImageRef, error) {
+func downloadAndExtractZip(zipURL string) (string, []types.ImageRef, error) {
 	if err := utils.ValidateURLForSSRF(zipURL); err != nil {
 		return "", nil, fmt.Errorf("zip URL blocked by SSRF check: %v", err)
 	}
 	client := utils.NewSSRFSafeHTTPClient(utils.SSRFSafeHTTPClientConfig{Timeout: 120 * time.Second, MaxRedirects: 5})
-	zipData, err := downloadMinerUArchive(ctx, client, zipURL)
+	resp, err := client.Get(zipURL)
+	if err != nil {
+		return "", nil, fmt.Errorf("download zip: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", nil, fmt.Errorf("download zip status %d", resp.StatusCode)
+	}
+
+	zipData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", nil, fmt.Errorf("read zip body: %w", err)
 	}

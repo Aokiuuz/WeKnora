@@ -179,9 +179,19 @@ func evaluationCleanupContext(parent context.Context) (context.Context, context.
 	}
 }
 
-func (e *EvaluationService) deleteEvaluationKnowledge(ctx context.Context, knowledgeID string) error {
+func (e *EvaluationService) deleteEvaluationKnowledge(ctx context.Context, knowledgeBaseID, knowledgeID string) error {
 	cleanupCtx, cancel := evaluationCleanupContext(ctx)
 	defer cancel()
+	// These bindings come from the evaluation-created knowledge, never user input.
+	// The upstream delete planner verifies the persisted tenant and KB again.
+	tenant, err := writeExecutionTenant(cleanupCtx)
+	if err != nil {
+		return err
+	}
+	if knowledgeBaseID == "" || knowledgeID == "" {
+		return fmt.Errorf("evaluation cleanup requires exact resource bindings")
+	}
+	cleanupCtx = withKnowledgeCleanup(cleanupCtx, tenant, map[string]string{knowledgeID: knowledgeBaseID})
 	return e.knowledgeService.DeleteKnowledge(cleanupCtx, knowledgeID)
 }
 
@@ -898,7 +908,7 @@ func (e *EvaluationService) evalDataset(
 			return
 		}
 		cleanupStart := time.Now()
-		if err := e.deleteEvaluationKnowledge(cleanupCtx, knowledge.ID); err != nil {
+		if err := e.deleteEvaluationKnowledge(cleanupCtx, knowledgeBaseID, knowledge.ID); err != nil {
 			logger.Errorf(ctx, "Failed to delete knowledge: %v, knowledge ID: %s", err, knowledge.ID)
 			appendEvaluationCleanupError(cleanupErrors, "knowledge", knowledge.ID, err)
 		}

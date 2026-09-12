@@ -8,8 +8,16 @@ import (
 )
 
 func TestEngineOverridesDoNotSendOtherProvidersCredentials(t *testing.T) {
-	c := &types.ParserEngineConfig{MinerUAPIKey: "mineru-secret", PaddleOCRVLCloudToken: "paddle-secret", MinerUEndpoint: "http://mineru:8000", PaddleOCRVLEndpoint: "http://paddle:8080"}
-	for _, engine := range []string{"builtin", "markitdown", "opendataloader", "weknoracloud", "mineru", "mineru_cloud", "paddleocr_vl", "paddleocr_vl_cloud"} {
+	c := &types.ParserEngineConfig{
+		MinerUAPIKey:          "mineru-secret",
+		PaddleOCRVLCloudToken: "paddle-secret",
+		MinerUEndpoint:        "http://mineru:8000",
+		PaddleOCRVLEndpoint:   "http://paddle:8080",
+	}
+	for _, engine := range []string{
+		"builtin", "markitdown", "opendataloader", "weknoracloud",
+		"mineru", "mineru_cloud", "paddleocr_vl", "paddleocr_vl_cloud",
+	} {
 		got := engineOverrides(engine, c, "en")
 		if got["mineru_api_key"] != "" && engine != "mineru_cloud" {
 			t.Fatalf("MinerU credential sent to %s", engine)
@@ -19,6 +27,7 @@ func TestEngineOverridesDoNotSendOtherProvidersCredentials(t *testing.T) {
 		}
 	}
 }
+
 func TestRedactSecretsAndSignedDownloads(t *testing.T) {
 	got := redact("failure secret-123 https://example.org/result?access_token=abc", []string{"secret-123"})
 	if strings.Contains(got, "secret-123") || strings.Contains(got, "access_token=abc") {
@@ -28,8 +37,11 @@ func TestRedactSecretsAndSignedDownloads(t *testing.T) {
 
 func TestResumeRejectsChangedEvidenceAndConfiguration(t *testing.T) {
 	md := []byte("actual result")
-	want := record{Engine: "mineru", SampleID: "sample-1", InputSHA256: "pdf", ManifestSHA256: "manifest",
-		SourceCommit: "build-label", BinarySHA256: "binary-1", MarkdownSHA256: hash(md), Status: "success", Config: map[string]string{"model": "pipeline"}}
+	want := record{
+		Engine: "mineru", SampleID: "sample-1", InputSHA256: "pdf", ManifestSHA256: "manifest",
+		SourceCommit: "build-label", BinarySHA256: "binary-1", MarkdownSHA256: hash(md),
+		Status: "success", Config: map[string]string{"model": "pipeline"},
+	}
 	if err := validateResume(want, want, md); err != nil {
 		t.Fatal(err)
 	}

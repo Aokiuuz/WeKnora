@@ -42,5 +42,6 @@ onUnmounted(() => window.removeEventListener(RESOURCE_PREVIEW_EVENT, open))
   overflow-wrap: anywhere;
   text-decoration: none;
 }
+.protected-resource-card::before { content: '↗'; margin-right: 12px; }
 .protected-resource-card:hover { border-color: var(--td-brand-color, #07c160); }
 </style>

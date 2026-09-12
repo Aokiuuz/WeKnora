@@ -133,20 +133,6 @@ func parseKS3FilePath(filePath string) (bucket, objectKey string, err error) {
 	return parts[0], parts[1], nil
 }
 
-func (s *ks3FileService) parseKS3ObjectKey(filePath string) (string, error) {
-	bucket, objectKey, err := parseKS3FilePath(filePath)
-	if err != nil {
-		return "", err
-	}
-	if bucket != s.bucketName {
-		return "", fmt.Errorf("KS3 bucket mismatch in path")
-	}
-	if err := utils.SafeObjectKey(objectKey); err != nil {
-		return "", fmt.Errorf("invalid file path: %w", err)
-	}
-	return objectKey, nil
-}
-
 func (s *ks3FileService) SaveFile(ctx context.Context, file *multipart.FileHeader, tenantID uint64, knowledgeID string) (string, error) {
 	ext := filepath.Ext(file.Filename)
 	objectKey := joinKS3Key(s.pathPrefix, fmt.Sprintf("%d", tenantID), knowledgeID, uuid.New().String()+ext)
@@ -202,9 +188,12 @@ func (s *ks3FileService) SaveBytes(ctx context.Context, data []byte, tenantID ui
 func (s *ks3FileService) CopyFile(ctx context.Context,
 	srcPath string, tenantID uint64, knowledgeID string,
 ) (string, error) {
-	srcKey, err := s.parseKS3ObjectKey(srcPath)
+	srcBucket, srcKey, err := parseKS3FilePath(srcPath)
 	if err != nil {
 		return "", fmt.Errorf("ks3 copy rejected source %q: %w", srcPath, ErrCrossBackendCopy)
+	}
+	if err := utils.SafeObjectKey(srcKey); err != nil {
+		return "", fmt.Errorf("invalid source path: %w", err)
 	}
 
 	ext := filepath.Ext(srcPath)
@@ -213,7 +202,7 @@ func (s *ks3FileService) CopyFile(ctx context.Context,
 	_, err = s.client.CopyObject(&ks3s3.CopyObjectInput{
 		Bucket:       ks3aws.String(s.bucketName),
 		Key:          ks3aws.String(destKey),
-		SourceBucket: ks3aws.String(s.bucketName),
+		SourceBucket: ks3aws.String(srcBucket),
 		SourceKey:    ks3aws.String(srcKey),
 	})
 	if err != nil {
@@ -226,9 +215,12 @@ func (s *ks3FileService) CopyFile(ctx context.Context,
 }
 
 func (s *ks3FileService) GetFile(ctx context.Context, filePath string) (io.ReadCloser, error) {
-	objectKey, err := s.parseKS3ObjectKey(filePath)
+	_, objectKey, err := parseKS3FilePath(filePath)
 	if err != nil {
 		return nil, err
+	}
+	if err := utils.SafeObjectKey(objectKey); err != nil {
+		return nil, fmt.Errorf("invalid file path: %w", err)
 	}
 
 	resp, err := s.client.GetObject(&ks3s3.GetObjectInput{
@@ -243,9 +235,12 @@ func (s *ks3FileService) GetFile(ctx context.Context, filePath string) (io.ReadC
 }
 
 func (s *ks3FileService) DeleteFile(ctx context.Context, filePath string) error {
-	objectKey, err := s.parseKS3ObjectKey(filePath)
+	_, objectKey, err := parseKS3FilePath(filePath)
 	if err != nil {
 		return err
+	}
+	if err := utils.SafeObjectKey(objectKey); err != nil {
+		return fmt.Errorf("invalid file path: %w", err)
 	}
 
 	_, err = s.client.DeleteObject(&ks3s3.DeleteObjectInput{
@@ -275,9 +270,12 @@ func (s *ks3FileService) CheckConnectivity(ctx context.Context) error {
 }
 
 func (s *ks3FileService) GetFileURL(ctx context.Context, filePath string) (string, error) {
-	objectKey, err := s.parseKS3ObjectKey(filePath)
+	_, objectKey, err := parseKS3FilePath(filePath)
 	if err != nil {
 		return "", err
+	}
+	if err := utils.SafeObjectKey(objectKey); err != nil {
+		return "", fmt.Errorf("invalid file path: %w", err)
 	}
 
 	url, err := s.client.GeneratePresignedUrl(&ks3s3.GeneratePresignedUrlInput{

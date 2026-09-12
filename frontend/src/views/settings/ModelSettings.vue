@@ -14,7 +14,7 @@
           size="medium"
           @click="showUsageDrawer = true"
         >
-          <template #icon><ChartNoAxesCombined :size="17" aria-hidden="true" /></template>
+          <template #icon><chart-analytics-icon aria-hidden="true" /></template>
           {{ $t('modelSettings.actions.usage') }}
         </t-button>
         <t-button
@@ -26,7 +26,7 @@
           class="model-test-trigger"
           @click="showDebugDrawer = true"
         >
-          <template #icon><CirclePlay :size="17" aria-hidden="true" /></template>
+          <template #icon><play-circle-icon /></template>
           {{ $t('modelSettings.actions.debugModel') }}
         </t-button>
         </div>
@@ -42,7 +42,7 @@
         <a class="doc-link" href="https://github.com/Tencent/WeKnora/blob/main/docs/BUILTIN_MODELS.md" target="_blank"
           rel="noopener noreferrer">
           {{ $t('modelSettings.builtinModels.viewGuide') }}
-          <ExternalLink :size="14" class="link-icon" aria-hidden="true" />
+          <t-icon name="link" class="link-icon" />
         </a>
       </div>
     </div>
@@ -71,29 +71,27 @@
         ]" :role="isModelCardClickable(model) ? 'button' : undefined"
           :tabindex="isModelCardClickable(model) ? 0 : undefined"
           @click="onModelCardClick($event, model._modelType, model)"
-          @keydown.enter="onModelCardClick($event, model._modelType, model)"
-          @keydown.space="onModelCardClick($event, model._modelType, model)">
+          @keydown.enter="onModelCardClick($event, model._modelType, model)">
           <div class="model-card__badge" :aria-label="typeLabel(model._modelType)">
-            <component :is="typeIcon(model._modelType)" :size="18" :stroke-width="1.7" aria-hidden="true" />
+            <t-icon :name="typeIcon(model._modelType)" size="18px" />
           </div>
           <div class="model-card__body">
             <div class="model-card__header">
               <h3 class="model-card__title">{{ modelDisplayName(model) }}</h3>
               <span v-if="model.isBuiltin" class="model-card__lock" :title="$t('modelSettings.builtinTag')"
                 :aria-label="$t('modelSettings.builtinTag')">
-                <component :is="authStore.isSystemAdmin ? Pencil : LockKeyhole" :size="13" aria-hidden="true" />
+                <t-icon :name="authStore.isSystemAdmin ? 'edit-1' : 'lock-on'" />
               </span>
               <div v-if="canManageModel(model)" class="model-card__actions" @click.stop>
                 <t-dropdown :options="getModelOptions(model._modelType, model)" placement="bottom-right" attach="body"
                   trigger="click"
                   @click="(data: any) => handleMenuAction({ value: data.value }, model._modelType, model)">
-                  <t-button variant="text" shape="square" size="small" class="model-card__action-btn model-card__more" :aria-label="$t('modelSettings.actions.more')">
-                    <Ellipsis :size="17" aria-hidden="true" />
+                  <t-button variant="text" shape="square" size="small" class="model-card__action-btn model-card__more">
+                    <t-icon name="ellipsis" />
                   </t-button>
                 </t-dropdown>
                 <t-popconfirm
                   v-if="canDeleteModel(model)"
-                  :icon="() => h(Trash2, { size: 17, 'aria-hidden': 'true' })"
                   :content="$t('modelSettings.confirmDelete', { name: modelDisplayName(model) })"
                   :confirm-btn="{ content: $t('common.delete'), theme: 'danger' }"
                   :cancel-btn="{ content: $t('common.cancel') }"
@@ -107,10 +105,9 @@
                       variant="text"
                       size="small"
                       class="model-card__action-btn model-card__delete"
-                      :aria-label="$t('common.delete')"
                       @click.stop
                     >
-                      <template #icon><Trash2 :size="16" aria-hidden="true" /></template>
+                      <template #icon><t-icon name="delete" /></template>
                     </t-button>
                   </t-tooltip>
                 </t-popconfirm>
@@ -134,7 +131,7 @@
                 <span class="model-card__sep">·</span>
                 <span class="model-card__vision" :title="$t('model.editor.supportsVisionLabel')"
                   :aria-label="$t('model.editor.supportsVisionLabel')">
-                  <Image :size="12" aria-hidden="true" />
+                  <t-icon name="image" size="12px" />
                 </span>
               </template>
             </p>
@@ -148,7 +145,7 @@
           @click="openAddDialog"
         >
           <span class="model-card--add__icon" aria-hidden="true">
-            <Plus :size="18" aria-hidden="true" />
+            <add-icon />
           </span>
           <span class="model-card--add__label">{{ $t('modelSettings.actions.addModel') }}</span>
         </button>
@@ -159,9 +156,7 @@
       v-model:visible="showUsageDialog"
       :header="$t('modelSettings.usage.title')"
       :footer="false"
-      width="min(680px, calc(100vw - 32px))"
-      class="model-reference-dialog"
-      :close-btn="() => h(X, { size: 20, 'aria-hidden': 'true' })"
+      width="680px"
       destroy-on-close
     >
       <div v-if="usageConflict" class="model-usage-dialog">
@@ -279,19 +274,15 @@
     <ModelEditorDialog v-model:visible="showDialog" :model-type="currentModelType" :model-data="editingModel"
       @confirm="handleModelSave" />
     <ModelDebugDrawer v-model:visible="showDebugDrawer" :models="allModels" />
-    <ModelUsageDrawer
-      v-model:visible="showUsageDrawer"
-      :models="allModels"
-      :can-edit-pricing="authStore.hasRole('admin')"
-    />
+    <ModelUsageDrawer v-model:visible="showUsageDrawer" :models="allModels" :can-edit-pricing="authStore.hasRole('admin')" />
 
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, nextTick, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { Plus, CirclePlay, ChartNoAxesCombined, ExternalLink, MessageSquare, Network, ListFilter, Image, Mic, Pencil, LockKeyhole, Ellipsis, Trash2, X } from '@lucide/vue'
+import { AddIcon, PlayCircleIcon, ChartAnalyticsIcon } from 'tdesign-icons-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import ModelEditorDialog from '@/components/ModelEditorDialog.vue'
@@ -415,9 +406,17 @@ const filteredModels = computed(() => {
 
 const countByType = (type: ModelType) => allLegacyModels.value.filter(m => m._modelType === type).length
 
-const typeIcon = (type: ModelType) => ({
-  chat: MessageSquare, embedding: Network, rerank: ListFilter, vllm: Image, asr: Mic,
-})[type]
+// 类型徽章图标。沿用 TDesign 自带 icon name，避免再引第三方图标包。
+const typeIcon = (type: ModelType): string => {
+  const map: Record<ModelType, string> = {
+    chat: 'chat',
+    embedding: 'chart-bubble',
+    rerank: 'filter-sort',
+    vllm: 'image',
+    asr: 'sound',
+  }
+  return map[type]
+}
 
 const typeLabel = (type: ModelType) => {
   const map: Record<ModelType, string> = {
@@ -532,13 +531,13 @@ const canDeleteModel = (model: any) =>
 
 const onModelCardClick = (event: Event, type: ModelType, model: any) => {
   if (!isModelCardClickable(model)) return
-  const target = event.target as HTMLElement | null
-  if (target?.closest('.model-card__actions')) return
   if (event.type === 'keydown') {
     const ke = event as KeyboardEvent
     if (ke.key !== 'Enter' && ke.key !== ' ') return
     ke.preventDefault()
   }
+  const target = event.target as HTMLElement | null
+  if (target?.closest('.model-card__actions')) return
   editModel(type, model)
 }
 
@@ -699,13 +698,13 @@ const deleteModel = async (_type: ModelType, modelId: string) => {
     MessagePlugin.success(t('modelSettings.toasts.deleted'))
     await loadModels()
   } catch (error: any) {
+    console.error('删除模型失败:', error)
     if (error instanceof ModelInUseError) {
       usageConflict.value = error.details
       usageConflictModelName.value = model?.display_name || model?.name || modelId
       showUsageDialog.value = true
       return
     }
-    console.error('删除模型失败:', error)
     MessagePlugin.error(error.message || t('modelSettings.toasts.deleteFailed'))
   }
 }
@@ -858,10 +857,6 @@ onMounted(() => {
 
 <style lang="less" scoped>
 .model-settings {
-  --td-brand-color: #087b59;
-  --td-brand-color-hover: #096d51;
-  --td-brand-color-active: #075d45;
-  --td-brand-color-1: #e9f5ef;
   width: 100%;
 }
 
@@ -869,8 +864,7 @@ onMounted(() => {
   margin-bottom: 28px;
 
   h2 {
-    font-size: clamp(22px, 2vw, 28px);
-    letter-spacing: -0.035em;
+    font-size: 20px;
     font-weight: 600;
     color: var(--td-text-color-primary);
     margin: 0 0 8px 0;
@@ -891,13 +885,7 @@ onMounted(() => {
   gap: 20px;
 }
 
-.section-header__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
+.section-header__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 
 .model-test-trigger {
   --td-bg-color-container-hover: transparent;
@@ -982,7 +970,7 @@ onMounted(() => {
 
 .model-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 12px;
 
   .model-card--add {
@@ -1328,22 +1316,5 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 20px;
-}
-.builtin-models-hint .doc-link { display: inline-flex; align-items: center; gap: 6px; }
-.doc-link:focus-visible, .model-card__action-btn:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 3px; }
-@media (max-width: 700px) {
-  .section-header__top { align-items: flex-start; flex-direction: column; gap: 16px; }
-  .section-header__actions { width: 100%; }
-  .model-usage-group li { align-items: flex-start; flex-direction: column; gap: 8px; }
-  .model-usage-resource { max-width: 100%; }
-}
-@media (hover: none) { .model-card__action-btn { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) {
-  .model-card, .model-card__lock, .model-card__action-btn { transition: none; }
-}
-</style>
-<style lang="less">
-@media (prefers-reduced-motion: reduce) {
-  .model-reference-dialog, .model-reference-dialog .t-dialog, .model-reference-dialog .t-dialog__mask { animation: none !important; transition: none !important; }
 }
 </style>
