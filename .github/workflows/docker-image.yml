@@ -16,6 +16,8 @@ env:
 
 jobs:
   build-ui:
+    # Upstream registry publishing does not run from submission forks.
+    if: github.repository == 'Tencent/WeKnora'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -68,6 +70,8 @@ jobs:
           cache-to: type=gha,scope=build-ui,mode=max
 
   build-docreader:
+    # Upstream registry publishing does not run from submission forks.
+    if: github.repository == 'Tencent/WeKnora'
     runs-on: ubuntu-latest
     steps:
       - name: Free Disk Space
@@ -117,6 +121,8 @@ jobs:
           cache-to: type=gha,scope=build-docreader,mode=max
 
   build-sandbox:
+    # Upstream registry publishing does not run from submission forks.
+    if: github.repository == 'Tencent/WeKnora'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -176,6 +182,8 @@ jobs:
           cache-to: type=gha,scope=build-sandbox-cube,mode=max
 
   build-app:
+    # Upstream registry publishing does not run from submission forks.
+    if: github.repository == 'Tencent/WeKnora'
     strategy:
       matrix:
         include:
@@ -258,6 +266,8 @@ jobs:
           retention-days: 1
 
   merge:
+    # Upstream registry publishing does not run from submission forks.
+    if: github.repository == 'Tencent/WeKnora'
     runs-on: ubuntu-latest
     needs:
       - build-app
