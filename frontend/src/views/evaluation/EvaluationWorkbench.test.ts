@@ -37,6 +37,7 @@ interface HumanRatingPanelStub {
 
 interface WorkbenchBindings {
   activeTaskId: { value: string }
+  applyFilters: () => void
   baselineTaskId: { value: string }
   comparisonLoading: { value: boolean }
   comparisonResult: { value: { runs: Array<{ task_id: string }> } | null }
@@ -450,4 +451,40 @@ test('a tenant switch invalidates a previous task-list response and clears selec
   assert.deepEqual(workbench.tasks.value.map(task => task.id), ['new-space-task'])
   assert.deepEqual(workbench.selectedTaskIds.value, [])
   assert.equal(workbench.detail.value, null)
+})
+
+test('applying a filter clears the opened task detail and a late detail response cannot restore it', async () => {
+  const detailA = deferred<{ task: EvaluationTaskStub }>()
+  installWorkbenchApi({
+    getDetail: () => detailA.promise,
+    listTasks: async () => ({ items: [{ id: 'task-a', labels: [] }], next_cursor: '' }),
+  })
+  const workbench = (await loadWorkbenchComponent()).setup({}, { expose() {} })
+
+  const opening = workbench.openTask({ id: 'task-a', labels: [] })
+  detailA.resolve({ task: { id: 'task-a', labels: [] } })
+  await opening
+  assert.equal(workbench.activeTaskId.value, 'task-a')
+  assert.equal(workbench.detail.value?.task.id, 'task-a')
+
+  workbench.filters.datasetId = 'dataset-without-runs'
+  workbench.applyFilters()
+  assert.equal(workbench.activeTaskId.value, '')
+  assert.equal(workbench.detail.value, null)
+  assert.deepEqual(workbench.questions.value, [])
+
+  // A detail response that was already in flight when the filter applied
+  // must not restore the stale detail afterwards.
+  const staleDetail = deferred<{ task: EvaluationTaskStub }>()
+  installWorkbenchApi({
+    getDetail: () => staleDetail.promise,
+    listTasks: async () => ({ items: [], next_cursor: '' }),
+  })
+  const workbench2 = (await loadWorkbenchComponent()).setup({}, { expose() {} })
+  const opening2 = workbench2.openTask({ id: 'task-x', labels: [] })
+  workbench2.applyFilters()
+  staleDetail.resolve({ task: { id: 'task-x', labels: [] } })
+  await opening2
+  assert.equal(workbench2.activeTaskId.value, '')
+  assert.equal(workbench2.detail.value, null)
 })

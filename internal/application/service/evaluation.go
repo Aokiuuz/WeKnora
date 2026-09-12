@@ -763,8 +763,14 @@ func (e *EvaluationService) EvaluationWithOptions(
 	return responseDetail, nil
 }
 
-// EvalDataset performs the actual evaluation of a dataset
-// Processes each QA pair in parallel and records metrics
+// EvalDataset performs the actual evaluation of a dataset.
+// Processes each QA pair in parallel and records metrics.
+//
+// Boundary note: this entry claims the persisted lease and verifies ownership,
+// but it does NOT start the heartbeat loop or register a run handle — the
+// production path is runEvaluation (started by EvaluationWithOptions), which
+// owns heartbeat, cancellation, and terminal publication. Callers outside
+// tests should not use this wrapper for new production flows.
 func (e *EvaluationService) EvalDataset(
 	ctx context.Context,
 	detail *types.EvaluationDetail,

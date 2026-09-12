@@ -1,13 +1,16 @@
 package modelcache
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"math"
+	"os"
 	"sync"
 	"testing"
 
+	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/embedding"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/stretchr/testify/assert"
@@ -15,11 +18,12 @@ import (
 )
 
 type cacheStore struct {
-	mu      sync.Mutex
-	entries map[string]*types.EmbeddingCacheEntry
-	getErr  error
-	putErr  error
-	events  []*types.EmbeddingCacheLookupRecord
+	mu        sync.Mutex
+	entries   map[string]*types.EmbeddingCacheEntry
+	getErr    error
+	putErr    error
+	recordErr error
+	events    []*types.EmbeddingCacheLookupRecord
 }
 
 func cacheStoreKey(prefix CachePrefix, hash string) string {
@@ -73,6 +77,9 @@ func (s *cacheStore) PutEmbeddingCache(_ context.Context, entries []*types.Embed
 func (s *cacheStore) RecordEmbeddingCacheLookup(_ context.Context, event *types.EmbeddingCacheLookupRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.recordErr != nil {
+		return s.recordErr
+	}
 	cloned := *event
 	s.events = append(s.events, &cloned)
 	return nil
@@ -88,6 +95,36 @@ func TestEmbeddingCacheReadAndWriteFailuresAreFailOpen(t *testing.T) {
 	require.Len(t, result, 2)
 	assert.Equal(t, result[0], result[1])
 	require.Len(t, provider.batchInputs, 1)
+}
+
+func TestEmbeddingCachePersistFailuresLogSanitizedWarningAndStayFailOpen(t *testing.T) {
+	store := &cacheStore{
+		putErr:    errors.New("cache disk full"),
+		recordErr: errors.New("event store down"),
+	}
+	provider := &countingEmbedder{}
+	wrapped := NewCoordinator(store).Wrap(&types.Model{ID: "embedding-1", TenantID: 7}, provider)
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+
+	var logBuffer bytes.Buffer
+	logger.SetOutput(&logBuffer)
+	defer logger.SetOutput(os.Stdout)
+
+	result, err := wrapped.BatchEmbed(ctx, []string{"alpha"})
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+
+	logs := logBuffer.String()
+	assert.Contains(t, logs, "Embedding cache persist failed")
+	assert.Contains(t, logs, "Embedding cache lookup record persist failed")
+	// The warning must stay sanitized: no source text or vector bytes.
+	assert.NotContains(t, logs, "alpha")
+
+	// A warm lookup still works (returns miss, provider called again) and the
+	// failed lookup event was never persisted.
+	_, err = wrapped.BatchEmbed(ctx, []string{"alpha"})
+	require.NoError(t, err)
+	assert.Empty(t, store.events)
 }
 
 func TestEmbeddingCacheRejectsNonFiniteProviderVector(t *testing.T) {

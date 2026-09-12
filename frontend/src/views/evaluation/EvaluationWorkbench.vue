@@ -710,6 +710,17 @@ function applyFilters() {
   selectedTaskIds.value = []
   baselineTaskId.value = ''
   invalidateComparisonSelection()
+  // Applying a new filter invalidates the previously opened task detail: an
+  // empty filtered list must never sit next to a detail that no longer
+  // belongs to the result set. In-flight detail/question requests are
+  // isolated through their gates so a late response cannot restore it.
+  activeTaskId.value = ''
+  detail.value = null
+  detailError.value = ''
+  questions.value = []
+  questionCursor.value = ''
+  taskDetailRequests.invalidate()
+  questionRequests.invalidate()
   void loadTasks(false)
 }
 

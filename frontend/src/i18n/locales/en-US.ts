@@ -4840,6 +4840,7 @@ export default {
       providerCache: 'Provider prompt cache',
       applicationCache: 'Application embedding cache',
       providerDenominator: '{value} observed tokens',
+      nameUnavailable: 'Name unavailable',
       applicationDenominator: '{value} observed keys · {bypass} bypassed',
       noPricedCost: 'No priced cost',
       pricingTitle: 'Immutable price versions',

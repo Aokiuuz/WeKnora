@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/modelobs"
 	"github.com/Tencent/WeKnora/internal/models/embedding"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -274,7 +275,16 @@ func (e *cachedEmbedder) cachedBatch(
 			}
 			writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cacheWriteTimeout)
 			defer cancel()
-			_ = e.coordinator.store.PutEmbeddingCache(writeCtx, entries)
+			// Best-effort persistence: vectors are still returned on write
+			// failure, but the degraded cache layer must be observable.
+			// The log carries only the operation scope and store error, never
+			// source text, vectors, or credentials.
+			if err := e.coordinator.store.PutEmbeddingCache(writeCtx, entries); err != nil {
+				logger.Warnf(ctx,
+					"Embedding cache persist failed (vectors still returned): "+
+						"tenant %d, model %s, entries %d, error: %v",
+					prefix.TenantID, prefix.ModelID, len(entries), err)
+			}
 			return vectors, nil
 		})
 		var shared singleflight.Result
@@ -317,13 +327,21 @@ func (c *Coordinator) recordLookup(
 	}
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cacheWriteTimeout)
 	defer cancel()
-	_ = store.RecordEmbeddingCacheLookup(writeCtx, &types.EmbeddingCacheLookupRecord{
+	record := &types.EmbeddingCacheLookupRecord{
 		ID: uuid.NewString(), TenantID: prefix.TenantID, ModelID: prefix.ModelID,
 		RequestedItems: requestedItems, UniqueItems: uniqueItems,
 		HitItems: hitItems, MissItems: missItems, BypassItems: bypassItems,
 		Status: cacheLookupStatus(hitItems, missItems, bypassItems), DurationMs: duration.Milliseconds(),
 		OccurredAt: time.Now().UTC(),
-	})
+	}
+	// Lookup statistics are observability data: a persist failure must not fail
+	// the embedding call, but it must be visible in logs. Only aggregate counts
+	// and the store error are logged, never text, vectors, or credentials.
+	if err := store.RecordEmbeddingCacheLookup(writeCtx, record); err != nil {
+		logger.Warnf(ctx,
+			"Embedding cache lookup record persist failed: tenant %d, model %s, status %s, error: %v",
+			prefix.TenantID, prefix.ModelID, record.Status, err)
+	}
 }
 
 func cacheLookupStatus(hitItems, missItems, bypassItems int64) string {

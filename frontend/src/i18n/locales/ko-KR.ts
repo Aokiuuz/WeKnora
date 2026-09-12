@@ -2135,6 +2135,7 @@ export default {
       providerCache: '공급자 프롬프트 캐시',
       applicationCache: '애플리케이션 임베딩 캐시',
       providerDenominator: '관찰된 토큰 {value}개',
+      nameUnavailable: '이름을 사용할 수 없음',
       applicationDenominator: '관찰된 키 {value}개 · 우회 {bypass}개',
       noPricedCost: '산정된 비용 없음',
       pricingTitle: '불변 요금 버전',

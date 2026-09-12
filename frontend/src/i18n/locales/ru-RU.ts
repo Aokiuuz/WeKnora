@@ -2135,6 +2135,7 @@ export default {
       providerCache: 'Кэш промптов провайдера',
       applicationCache: 'Кэш встраиваний приложения',
       providerDenominator: 'Наблюдаемых токенов: {value}',
+      nameUnavailable: 'Название недоступно',
       applicationDenominator: 'Наблюдаемых ключей: {value} · обходов: {bypass}',
       noPricedCost: 'Нет рассчитанной стоимости',
       pricingTitle: 'Неизменяемые версии цен',
