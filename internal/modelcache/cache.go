@@ -277,13 +277,13 @@ func (e *cachedEmbedder) cachedBatch(
 			defer cancel()
 			// Best-effort persistence: vectors are still returned on write
 			// failure, but the degraded cache layer must be observable.
-			// The log carries only the operation scope and store error, never
-			// source text, vectors, or credentials.
+			// Storage errors can include payloads or connection details. Emit
+			// only counts and a fixed error category, never the error text.
 			if err := e.coordinator.store.PutEmbeddingCache(writeCtx, entries); err != nil {
 				logger.Warnf(ctx,
 					"Embedding cache persist failed (vectors still returned): "+
-						"tenant %d, model %s, entries %d, error: %v",
-					prefix.TenantID, prefix.ModelID, len(entries), err)
+						"entries %d, error_kind %s",
+					len(entries), cacheWriteErrorKind(err))
 			}
 			return vectors, nil
 		})
@@ -335,12 +335,25 @@ func (c *Coordinator) recordLookup(
 		OccurredAt: time.Now().UTC(),
 	}
 	// Lookup statistics are observability data: a persist failure must not fail
-	// the embedding call, but it must be visible in logs. Only aggregate counts
-	// and the store error are logged, never text, vectors, or credentials.
+	// the embedding call, but it must be visible in logs. The status and fixed
+	// error category exclude raw storage errors and tenant/model identifiers.
 	if err := store.RecordEmbeddingCacheLookup(writeCtx, record); err != nil {
 		logger.Warnf(ctx,
-			"Embedding cache lookup record persist failed: tenant %d, model %s, status %s, error: %v",
-			prefix.TenantID, prefix.ModelID, record.Status, err)
+			"Embedding cache lookup record persist failed: status %s, error_kind %s",
+			record.Status, cacheWriteErrorKind(err))
+	}
+}
+
+// cacheWriteErrorKind deliberately uses a bounded vocabulary: arbitrary store
+// errors are not safe to print because drivers can embed data or credentials.
+func cacheWriteErrorKind(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	default:
+		return "storage"
 	}
 }
 

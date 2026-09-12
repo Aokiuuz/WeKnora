@@ -98,35 +98,48 @@ func TestEmbeddingCacheReadAndWriteFailuresAreFailOpen(t *testing.T) {
 }
 
 func TestEmbeddingCachePersistFailuresLogSanitizedWarningAndStayFailOpen(t *testing.T) {
-	store := &cacheStore{
-		putErr:    errors.New("cache disk full"),
-		recordErr: errors.New("event store down"),
+	for _, tc := range []struct {
+		name, putKind, recordKind string
+		putErr, recordErr         error
+	}{
+		{
+			name: "storage", putKind: "storage", recordKind: "storage",
+			putErr:    errors.New("alpha vector=[0.125,0.25] credential=synthetic-secret"),
+			recordErr: errors.New("alpha vector=[0.125,0.25] credential=synthetic-secret"),
+		},
+		{
+			name: "wrapped_context", putKind: "timeout", recordKind: "canceled",
+			putErr:    fmt.Errorf("alpha credential=synthetic-secret: %w", context.DeadlineExceeded),
+			recordErr: fmt.Errorf("alpha credential=synthetic-secret: %w", context.Canceled),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &cacheStore{putErr: tc.putErr, recordErr: tc.recordErr}
+			provider := &countingEmbedder{}
+			wrapped := NewCoordinator(store).Wrap(&types.Model{ID: "private-model-id", TenantID: 7}, provider)
+			ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+			var logBuffer bytes.Buffer
+			logger.SetOutput(&logBuffer)
+			defer logger.SetOutput(os.Stdout)
+
+			result, err := wrapped.BatchEmbed(ctx, []string{"alpha"})
+			require.NoError(t, err)
+			require.Len(t, result, 1)
+			logs := logBuffer.String()
+			assert.Contains(t, logs, "Embedding cache persist failed (vectors still returned): entries 1, error_kind "+tc.putKind)
+			assert.Contains(t, logs, "Embedding cache lookup record persist failed: status miss, error_kind "+tc.recordKind)
+			for _, sensitive := range []string{"alpha", "vector=[", "synthetic-secret", "private-model-id", "tenant 7"} {
+				assert.NotContains(t, logs, sensitive)
+			}
+
+			// Failed persistence leaves a miss; the next call retries the provider.
+			_, err = wrapped.BatchEmbed(ctx, []string{"alpha"})
+			require.NoError(t, err)
+			assert.Len(t, provider.batchInputs, 2)
+			assert.Empty(t, store.events)
+		})
 	}
-	provider := &countingEmbedder{}
-	wrapped := NewCoordinator(store).Wrap(&types.Model{ID: "embedding-1", TenantID: 7}, provider)
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
-
-	var logBuffer bytes.Buffer
-	logger.SetOutput(&logBuffer)
-	defer logger.SetOutput(os.Stdout)
-
-	result, err := wrapped.BatchEmbed(ctx, []string{"alpha"})
-	require.NoError(t, err)
-	require.Len(t, result, 1)
-
-	logs := logBuffer.String()
-	assert.Contains(t, logs, "Embedding cache persist failed")
-	assert.Contains(t, logs, "Embedding cache lookup record persist failed")
-	// The warning must stay sanitized: no source text or vector bytes.
-	assert.NotContains(t, logs, "alpha")
-
-	// A warm lookup still works (returns miss, provider called again) and the
-	// failed lookup event was never persisted.
-	_, err = wrapped.BatchEmbed(ctx, []string{"alpha"})
-	require.NoError(t, err)
-	assert.Empty(t, store.events)
 }
-
 func TestEmbeddingCacheRejectsNonFiniteProviderVector(t *testing.T) {
 	provider := &invalidEmbedder{}
 	wrapped := NewCoordinator(&cacheStore{}).Wrap(&types.Model{ID: "embedding-1", TenantID: 7}, provider)

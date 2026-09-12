@@ -721,6 +721,9 @@ function applyFilters() {
   questionCursor.value = ''
   taskDetailRequests.invalidate()
   questionRequests.invalidate()
+  // Invalidated requests cannot clear loading in their guarded finally blocks.
+  detailLoading.value = false
+  questionLoading.value = false
   void loadTasks(false)
 }
 

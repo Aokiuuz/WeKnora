@@ -42,6 +42,8 @@ interface WorkbenchBindings {
   comparisonLoading: { value: boolean }
   comparisonResult: { value: { runs: Array<{ task_id: string }> } | null }
   detail: { value: { task: EvaluationTaskStub } | null }
+  detailLoading: { value: boolean }
+  questionLoading: { value: boolean }
   filters: { datasetId: string }
   ratingPanel: (sampleIndex: number) => HumanRatingPanelStub
   labelDraft: { value: string }
@@ -482,9 +484,29 @@ test('applying a filter clears the opened task detail and a late detail response
   })
   const workbench2 = (await loadWorkbenchComponent()).setup({}, { expose() {} })
   const opening2 = workbench2.openTask({ id: 'task-x', labels: [] })
+  assert.equal(workbench2.detailLoading.value, true)
   workbench2.applyFilters()
+  assert.equal(workbench2.detailLoading.value, false)
   staleDetail.resolve({ task: { id: 'task-x', labels: [] } })
   await opening2
   assert.equal(workbench2.activeTaskId.value, '')
   assert.equal(workbench2.detail.value, null)
+  assert.equal(workbench2.detailLoading.value, false)
+})
+
+test('applying filters releases question loading and rejects a late question page', async () => {
+  const pending = deferred<{ items: Array<{ qid: string }>; next_cursor: string }>()
+  installWorkbenchApi({ listQuestions: () => pending.promise })
+  const workbench = (await loadWorkbenchComponent()).setup({}, { expose() {} })
+  await workbench.openTask({ id: 'task-a', labels: [] })
+  assert.equal(workbench.questionLoading.value, true)
+
+  workbench.applyFilters()
+  assert.equal(workbench.questionLoading.value, false)
+  pending.resolve({ items: [{ qid: 'stale-question' }], next_cursor: 'stale-cursor' })
+  await flushMicrotasks()
+
+  assert.equal(workbench.activeTaskId.value, '')
+  assert.deepEqual(workbench.questions.value, [])
+  assert.equal(workbench.questionLoading.value, false)
 })
