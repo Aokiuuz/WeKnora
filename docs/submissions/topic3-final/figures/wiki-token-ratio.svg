@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg
+  PUBLIC '-//W3C//DTD SVG 1.0//EN'
+  'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'>
+<svg width="495.27559055118115" height="175" preserveAspectRatio="xMinYMin meet" viewBox="0 0 495 175" xmlns="http://www.w3.org/2000/svg" version="1.0" fill-rule="evenodd" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<title>...</title>
+	<desc>...</desc>
+	<clipPath id="clip">
+		<rect x="0" y="0" width="495.27559055118115" height="175"/>
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-175)" style="clip-path: url(#clip)">
+		<g transform="">
+			<text x="29" y="151" style="font-family: CNB; font-size: 10px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,302) scale(1,-1)">批次 A  n=30 对</text>
+			<rect x="29" y="108" width="115" height="18" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(93%,95%,96%); fill-rule: evenodd;"/>
+			<rect x="29" y="108" width="41.31949667341625" height="18" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(38%,45%,51%); fill-rule: evenodd;"/>
+			<text x="29" y="95" style="font-family: CN; font-size: 8.5px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,190) scale(1,-1)">页面优先 35.9%</text>
+			<rect x="29" y="69" width="115" height="18" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(93%,95%,96%); fill-rule: evenodd;"/>
+			<rect x="29" y="69" width="92.13860765596374" height="18" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(9%,49%,50%); fill-rule: evenodd;"/>
+			<text x="29" y="56" style="font-family: CN; font-size: 8.5px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,112) scale(1,-1)">固定前缀 80.1%</text>
+			<text x="194" y="151" style="font-family: CNB; font-size: 10px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,302) scale(1,-1)">批次 B  n=30 对</text>
+			<rect x="194" y="108" width="115" height="18" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(93%,95%,96%); fill-rule: evenodd;"/>
+			<rect x="194" y="108" width="52.01259494279395" height="18" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(38%,45%,51%); fill-rule: evenodd;"/>
+			<text x="194" y="95" style="font-family: CN; font-size: 8.5px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,190) scale(1,-1)">页面优先 45.2%</text>
+			<rect x="194" y="69" width="115" height="18" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(93%,95%,96%); fill-rule: evenodd;"/>
+			<rect x="194" y="69" width="89.49677915585039" height="18" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(9%,49%,50%); fill-rule: evenodd;"/>
+			<text x="194" y="56" style="font-family: CN; font-size: 8.5px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,112) scale(1,-1)">固定前缀 77.8%</text>
+			<text x="359" y="151" style="font-family: CNB; font-size: 10px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,302) scale(1,-1)">批次 C  n=30 对</text>
+			<rect x="359" y="108" width="115" height="18" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(93%,95%,96%); fill-rule: evenodd;"/>
+			<rect x="359" y="108" width="59.15517738678972" height="18" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(38%,45%,51%); fill-rule: evenodd;"/>
+			<text x="359" y="95" style="font-family: CN; font-size: 8.5px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,190) scale(1,-1)">页面优先 51.4%</text>
+			<rect x="359" y="69" width="115" height="18" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(93%,95%,96%); fill-rule: evenodd;"/>
+			<rect x="359" y="69" width="92.86131141236422" height="18" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(9%,49%,50%); fill-rule: evenodd;"/>
+			<text x="359" y="56" style="font-family: CN; font-size: 8.5px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,112) scale(1,-1)">固定前缀 80.7%</text>
+		</g>
+	</g>
+</svg>

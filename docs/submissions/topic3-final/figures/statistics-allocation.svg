@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg
+  PUBLIC '-//W3C//DTD SVG 1.0//EN'
+  'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'>
+<svg width="495.27559055118115" height="195" preserveAspectRatio="xMinYMin meet" viewBox="0 0 495 195" xmlns="http://www.w3.org/2000/svg" version="1.0" fill-rule="evenodd" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<title>...</title>
+	<desc>...</desc>
+	<clipPath id="clip">
+		<rect x="0" y="0" width="495.27559055118115" height="195"/>
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-195)" style="clip-path: url(#clip)">
+		<g transform="">
+			<text x="0" y="165" style="font-family: CN; font-size: 8.5px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,330) scale(1,-1)">1 万行</text>
+			<rect x="136" y="168" width="2.539348799999999" height="11" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(38%,45%,51%); fill-rule: evenodd;"/>
+			<text x="411" y="169" style="font-family: CN; font-size: 8px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,338) scale(1,-1)">4.2 MB</text>
+			<rect x="136" y="152" width="1.6615775999999869" height="11" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(9%,49%,50%); fill-rule: evenodd;"/>
+			<text x="411" y="153" style="font-family: CN; font-size: 8px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,306) scale(1,-1)">2.8 MB</text>
+			<text x="0" y="125" style="font-family: CN; font-size: 8.5px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,250) scale(1,-1)">10 万行</text>
+			<rect x="136" y="128" width="26.99351039999999" height="11" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(38%,45%,51%); fill-rule: evenodd;"/>
+			<text x="411" y="129" style="font-family: CN; font-size: 8px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,258) scale(1,-1)">45.0 MB</text>
+			<rect x="136" y="112" width="16.325140799999986" height="11" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(9%,49%,50%); fill-rule: evenodd;"/>
+			<text x="411" y="113" style="font-family: CN; font-size: 8px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,226) scale(1,-1)">27.2 MB</text>
+			<text x="0" y="85" style="font-family: CN; font-size: 8.5px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,170) scale(1,-1)">100 万行</text>
+			<rect x="136" y="88" width="268.6195584" height="11" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(38%,45%,51%); fill-rule: evenodd;"/>
+			<text x="411" y="89" style="font-family: CN; font-size: 8px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,178) scale(1,-1)">447.7 MB</text>
+			<rect x="136" y="72" width="163.05509759999995" height="11" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(9%,49%,50%); fill-rule: evenodd;"/>
+			<text x="411" y="73" style="font-family: CN; font-size: 8px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,146) scale(1,-1)">271.8 MB</text>
+			<text x="0" y="45" style="font-family: CN; font-size: 8.5px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,90) scale(1,-1)">100 万行 × 4 并发</text>
+			<rect x="136" y="48" width="268.584372" height="11" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(38%,45%,51%); fill-rule: evenodd;"/>
+			<text x="411" y="49" style="font-family: CN; font-size: 8px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,98) scale(1,-1)">447.6 MB</text>
+			<rect x="136" y="32" width="163.02436920000002" height="11" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(9%,49%,50%); fill-rule: evenodd;"/>
+			<text x="411" y="33" style="font-family: CN; font-size: 8px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,66) scale(1,-1)">271.7 MB</text>
+			<text x="136" y="185" style="font-family: CN; font-size: 9px;fill: rgb(38%,45%,51%); stroke:none;" transform="translate(0,370) scale(1,-1)">累计分配 / 请求；十进制 MB</text>
+		</g>
+	</g>
+</svg>

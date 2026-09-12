@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg
+  PUBLIC '-//W3C//DTD SVG 1.0//EN'
+  'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'>
+<svg width="495.27559055118115" height="207" preserveAspectRatio="xMinYMin meet" viewBox="0 0 495 207" xmlns="http://www.w3.org/2000/svg" version="1.0" fill-rule="evenodd" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<title>...</title>
+	<desc>...</desc>
+	<clipPath id="clip">
+		<rect x="0" y="0" width="495.27559055118115" height="207"/>
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-207)" style="clip-path: url(#clip)">
+		<g transform="">
+			<rect x="0" y="145" width="146" height="53" style="stroke: rgb(72%,79%,84%); stroke-linecap: butt; stroke-width: 0.6; fill: rgb(93%,95%,96%); fill-rule: evenodd;"/>
+			<text x="9" y="177" style="font-family: CNB; font-size: 10px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,354) scale(1,-1)">固定数据与参数</text>
+			<text x="9" y="158" style="font-family: CN; font-size: 8px;fill: rgb(38%,45%,51%); stroke:none;" transform="translate(0,316) scale(1,-1)">数据摘要 · 指标版本</text>
+			<rect x="174" y="145" width="146" height="53" style="stroke: rgb(72%,79%,84%); stroke-linecap: butt; stroke-width: 0.6; fill: rgb(93%,95%,96%); fill-rule: evenodd;"/>
+			<text x="183" y="177" style="font-family: CNB; font-size: 10px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,354) scale(1,-1)">任务及持久租约</text>
+			<text x="183" y="158" style="font-family: CN; font-size: 8px;fill: rgb(38%,45%,51%); stroke:none;" transform="translate(0,316) scale(1,-1)">租户 · owner · version</text>
+			<rect x="348" y="145" width="146" height="53" style="stroke: rgb(72%,79%,84%); stroke-linecap: butt; stroke-width: 0.6; fill: rgb(93%,95%,96%); fill-rule: evenodd;"/>
+			<text x="357" y="177" style="font-family: CNB; font-size: 10px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,354) scale(1,-1)">检索与生成</text>
+			<text x="357" y="158" style="font-family: CN; font-size: 8px;fill: rgb(38%,45%,51%); stroke:none;" transform="translate(0,316) scale(1,-1)">有效预算 · 逐题执行</text>
+			<rect x="0" y="35" width="146" height="53" style="stroke: rgb(72%,79%,84%); stroke-linecap: butt; stroke-width: 0.6; fill: rgb(93%,95%,96%); fill-rule: evenodd;"/>
+			<text x="9" y="67" style="font-family: CNB; font-size: 10px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,134) scale(1,-1)">工作台与导出</text>
+			<text x="9" y="48" style="font-family: CN; font-size: 8px;fill: rgb(38%,45%,51%); stroke:none;" transform="translate(0,96) scale(1,-1)">比较 · 模型时间查询</text>
+			<rect x="174" y="35" width="146" height="53" style="stroke: rgb(72%,79%,84%); stroke-linecap: butt; stroke-width: 0.6; fill: rgb(93%,95%,96%); fill-rule: evenodd;"/>
+			<text x="183" y="67" style="font-family: CNB; font-size: 10px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,134) scale(1,-1)">结果与质量指标</text>
+			<text x="183" y="48" style="font-family: CN; font-size: 8px;fill: rgb(38%,45%,51%); stroke:none;" transform="translate(0,96) scale(1,-1)">逐题状态 · 来源证据</text>
+			<rect x="348" y="35" width="146" height="53" style="stroke: rgb(72%,79%,84%); stroke-linecap: butt; stroke-width: 0.6; fill: rgb(93%,95%,96%); fill-rule: evenodd;"/>
+			<text x="357" y="67" style="font-family: CNB; font-size: 10px;fill: rgb(9%,18%,27%); stroke:none;" transform="translate(0,134) scale(1,-1)">模型调用账本</text>
+			<text x="357" y="48" style="font-family: CN; font-size: 8px;fill: rgb(38%,45%,51%); stroke:none;" transform="translate(0,96) scale(1,-1)">开始 · 用量 · 终态</text>
+			<path d="M 146,171 L 174,171 Z" style="stroke: rgb(9%,35%,52%); stroke-linecap: butt; stroke-width: 1.2;"/>
+			<polygon points="174 171, 169 174, 169 168" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(9%,35%,52%); fill-rule: evenodd;"/>
+			<path d="M 320,171 L 348,171 Z" style="stroke: rgb(9%,35%,52%); stroke-linecap: butt; stroke-width: 1.2;"/>
+			<polygon points="348 171, 343 174, 343 168" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(9%,35%,52%); fill-rule: evenodd;"/>
+			<path d="M 421,145 L 421,88 Z" style="stroke: rgb(9%,35%,52%); stroke-linecap: butt; stroke-width: 1.2;"/>
+			<polygon points="421 88, 418 93, 424 93" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(9%,35%,52%); fill-rule: evenodd;"/>
+			<path d="M 348,61 L 320,61 Z" style="stroke: rgb(9%,35%,52%); stroke-linecap: butt; stroke-width: 1.2;"/>
+			<polygon points="320 61, 325 64, 325 58" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(9%,35%,52%); fill-rule: evenodd;"/>
+			<path d="M 174,61 L 146,61 Z" style="stroke: rgb(9%,35%,52%); stroke-linecap: butt; stroke-width: 1.2;"/>
+			<polygon points="146 61, 151 64, 151 58" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(9%,35%,52%); fill-rule: evenodd;"/>
+			<text x="170" y="112" style="font-family: CN; font-size: 9px;fill: rgb(9%,49%,50%); stroke:none;" transform="translate(0,224) scale(1,-1)">每次实际出站调用经统一包装器记账</text>
+		</g>
+	</g>
+</svg>

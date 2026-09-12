@@ -1,0 +1,29 @@
+{
+  "repository": "https://github.com/Aokiuuz/WeKnora",
+  "branch": "main",
+  "code_commit": "ad3330d549adc2c17d0193d22dcdcecf69a7ab12",
+  "code_tree": "b64d8c2c54ace11a08bfb86a0d1c87fd35f86c9e",
+  "upstream_repository": "https://github.com/Tencent/WeKnora",
+  "upstream_base": "462999ec3f5c1467ef0ccf5cf8c422393f40a0e6",
+  "full_go_test_commit": "54ee23b25bf5da95954a6808da80122e7461f6f3",
+  "frontend_test_commit": "c7b47a13c2aa556b81ace2b63e18f17d5b4ae558",
+  "backend_acceptance_commit": "1cc446d64c10a3b56f86802cc22ffb1ecdb37272",
+  "degradation_evidence_commit": "ea694acb1bc1e8297fcd5f4192318bb4c7d866e5",
+  "reader_evidence_commit": "86436db4cecf13039b9a41ff8c78ac1fac8fff58",
+  "rag_evidence_commit": "d0535cdfb4784ebc8cee73dccdf35c3489555a90",
+  "parser_source_archive_commit": "a39b8da71db088ff1bf6120f00966e8b1d0a7a96",
+  "m4_evidence_commit": "1776aa442a491f1657196ca21da914bab197b17c",
+  "browser_backend_commit": "d1fedd6dfac0953823417076878132128b443f2c",
+  "frontend_browser_commit": "c7b47a13c2aa556b81ace2b63e18f17d5b4ae558",
+  "acceptance_server_sha256": "e3ef5177c03e4b95cb81b76ddfee5435971f33123b5aaaeace72ce93abdebbbf",
+  "source_reference": {
+    "type": "commit",
+    "value": "ad3330d549adc2c17d0193d22dcdcecf69a7ab12"
+  },
+  "student": {
+    "name": "刘蔚霖",
+    "school": "南开大学",
+    "github_id": "Aokiuuz"
+  },
+  "backend_equivalence": "Only styles in three frontend components differ from the backend acceptance source; templates and scripts are byte-identical."
+}
