@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Tencent/WeKnora/internal/application/service/retriever"
+	"github.com/Tencent/WeKnora/internal/common"
 	werrors "github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/infrastructure/chunker"
 	"github.com/Tencent/WeKnora/internal/infrastructure/docparser"
@@ -112,7 +113,7 @@ func (s *knowledgeService) cloneKnowledge(
 	return
 }
 
-// processDocumentFromPassage handles asynchronous processing of text passages
+// processDocumentFromPassage indexes text passages synchronously.
 func (s *knowledgeService) processDocumentFromPassage(ctx context.Context,
 	kb *types.KnowledgeBase, knowledge *types.Knowledge, passage []string,
 ) {
@@ -140,14 +141,7 @@ func (s *knowledgeService) processDocumentFromPassage(ctx context.Context,
 		start = end
 	}
 	// Process and store chunks
-	var opts ProcessChunksOptions
-	if kb.QuestionGenerationConfig != nil && kb.QuestionGenerationConfig.Enabled {
-		opts.EnableQuestionGeneration = true
-		opts.QuestionCount = kb.QuestionGenerationConfig.QuestionCount
-		if opts.QuestionCount <= 0 {
-			opts.QuestionCount = 3
-		}
-	}
+	opts := ProcessChunksOptions{SkipEnrichment: true}
 	s.processChunks(ctx, kb, knowledge, chunks, opts)
 }
 
@@ -156,7 +150,9 @@ type ProcessChunksOptions struct {
 	EnableQuestionGeneration bool
 	QuestionCount            int
 	EnableMultimodel         bool
-	StoredImages             []docparser.StoredImage
+	// SkipEnrichment completes after chunks and retrieval indexes are stored.
+	SkipEnrichment bool
+	StoredImages   []docparser.StoredImage
 	// ParentChunks holds parent chunk data when parent-child chunking is enabled.
 	// When set, the chunks passed to processChunks are child chunks, and each
 	// child's ParentIndex references an entry in this slice.
@@ -249,6 +245,23 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 	var options ProcessChunksOptions
 	if len(opts) > 0 {
 		options = opts[0]
+	}
+
+	// Parser output and manually supplied passages can contain malformed byte
+	// sequences. Clean them before logging, chunk persistence, or embedding;
+	// the embedding provider and tracing/database drivers expect valid UTF-8.
+	for i := range chunks {
+		chunks[i].Content = common.CleanInvalidUTF8(chunks[i].Content)
+		chunks[i].ContextHeader = common.CleanInvalidUTF8(chunks[i].ContextHeader)
+		for j := range chunks[i].Images {
+			chunks[i].Images[j].URL = common.CleanInvalidUTF8(chunks[i].Images[j].URL)
+			chunks[i].Images[j].Caption = common.CleanInvalidUTF8(chunks[i].Images[j].Caption)
+			chunks[i].Images[j].OCRText = common.CleanInvalidUTF8(chunks[i].Images[j].OCRText)
+			chunks[i].Images[j].OriginalURL = common.CleanInvalidUTF8(chunks[i].Images[j].OriginalURL)
+		}
+	}
+	for i := range options.ParentChunks {
+		options.ParentChunks[i].Content = common.CleanInvalidUTF8(options.ParentChunks[i].Content)
 	}
 
 	// Check if knowledge is being deleted/cancelled before processing.
@@ -625,10 +638,14 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 	pendingPDFMultimodal := !isImage && !isVideo && options.EnableMultimodel && len(options.StoredImages) > 0
 
 	now := time.Now()
+	textChunkCount := len(textChunks)
+	if options.SkipEnrichment {
+		textChunkCount = 0
+	}
 	finalizeIndexedKnowledgeState(
 		knowledge,
 		totalStorageSize,
-		len(textChunks),
+		textChunkCount,
 		pendingMultimodal || pendingPDFMultimodal,
 		now,
 	)
@@ -638,7 +655,10 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 	}
 
 	// Enqueue multimodal tasks for images (async, non-blocking)
-	if options.EnableMultimodel && len(options.StoredImages) > 0 {
+	if options.SkipEnrichment {
+		s.skipStage(ctx, knowledge.ID, types.StageMultimodal, "skipped")
+		logger.Infof(ctx, "Synchronous passage indexing completed without enrichment: %s", knowledge.ID)
+	} else if options.EnableMultimodel && len(options.StoredImages) > 0 {
 		s.beginStage(ctx, knowledge.ID, types.StageMultimodal, types.JSONMap{
 			"image_count":    len(options.StoredImages),
 			"enable_ocr":     true,
@@ -2896,6 +2916,7 @@ func (s *knowledgeService) UpdateImageInfo(
 	chunkID string,
 	imageInfo string,
 ) error {
+	imageInfo = common.CleanInvalidUTF8(imageInfo)
 	var images []*types.ImageInfo
 	if err := json.Unmarshal([]byte(imageInfo), &images); err != nil {
 		logger.Errorf(ctx, "Failed to unmarshal image info: %v", err)
@@ -3516,6 +3537,7 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 	// Step 3: Split into chunks using Go chunker. Browser textareas normalize
 	// pasted content to LF, so normalize uploaded source text before calculating
 	// chunk boundaries as well.
+	sanitizeReadResult(convertResult)
 	convertResult.MarkdownContent = chunker.NormalizeLineEndings(convertResult.MarkdownContent)
 	chunkCfg := buildSplitterConfigFromChunking(eff.ChunkingConfig)
 
@@ -3524,10 +3546,7 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 		QuestionCount:            payload.QuestionCount,
 		EnableMultimodel:         payload.EnableMultimodel,
 		StoredImages:             storedImages,
-	}
-
-	if convertResult != nil {
-		processOpts.Metadata = convertResult.Metadata
+		Metadata:                 convertResult.Metadata,
 	}
 
 	if eff.ChunkingConfig.EnableParentChild {
@@ -3570,6 +3589,28 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 	s.processChunks(ctx, kb, knowledge, chunks, processOpts)
 
 	return nil
+}
+
+// sanitizeReadResult protects every text field that can cross from a parser
+// into the embedding, storage, or tracing layers. A parser may return a Go
+// string containing arbitrary bytes even though the string type itself does
+// not enforce UTF-8 validity.
+func sanitizeReadResult(result *types.ReadResult) {
+	if result == nil {
+		return
+	}
+	result.MarkdownContent = common.CleanInvalidUTF8(result.MarkdownContent)
+	result.ImageDirPath = common.CleanInvalidUTF8(result.ImageDirPath)
+	result.Error = common.CleanInvalidUTF8(result.Error)
+	for key, value := range result.Metadata {
+		result.Metadata[key] = common.CleanInvalidUTF8(value)
+	}
+	for i := range result.ImageRefs {
+		result.ImageRefs[i].Filename = common.CleanInvalidUTF8(result.ImageRefs[i].Filename)
+		result.ImageRefs[i].OriginalRef = common.CleanInvalidUTF8(result.ImageRefs[i].OriginalRef)
+		result.ImageRefs[i].MimeType = common.CleanInvalidUTF8(result.ImageRefs[i].MimeType)
+		result.ImageRefs[i].StorageKey = common.CleanInvalidUTF8(result.ImageRefs[i].StorageKey)
+	}
 }
 
 // convert handles both file and URL reading using a unified ReadRequest.
@@ -3689,6 +3730,7 @@ func (s *knowledgeService) convert(
 			code, "document read failed", err)
 		return s.failKnowledge(ctx, knowledge, isLastRetry, "document read failed: %v", err)
 	}
+	sanitizeReadResult(result)
 	if result.Error != "" {
 		logger.Errorf(ctx, "[convert] parser returned error kb=%s knowledge=%s file=%q type=%s engine=%q: %s",
 			kb.ID, knowledge.ID, req.FileName, fileType, parserEngine, result.Error)

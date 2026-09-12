@@ -1,3 +1,4 @@
+import { lucideMarkup } from '../components/icons/lucide-markup';
 import i18n from '@/i18n';
 import hljs from 'highlight.js';
 import { openMermaidFullscreen } from '@/utils/mermaidViewer';
@@ -30,9 +31,9 @@ export function syncMermaidExpandButtons(root: HTMLElement | null | undefined): 
   });
 }
 
-const COPY_ICON = '<svg class="chat-code-block__copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const COPY_ICON = lucideMarkup.copy;
 
-const EXPAND_ICON = '<svg class="chat-mermaid-block__expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+const EXPAND_ICON = lucideMarkup.expand;
 
 const LANG_LABELS: Record<string, string> = {
   js: 'JavaScript',

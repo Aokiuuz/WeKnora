@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -30,11 +31,6 @@ const (
 	// and a connection that waits for that forever is a leak, so the stream
 	// stops following and says so.
 	skillEventMaxDuration = 60 * time.Minute
-
-	// skillUploadEnvelopeSlack is the multipart framing allowed on top of the
-	// file itself, so the body cap refuses a genuinely oversized upload
-	// without rejecting a legal one for its boundary lines.
-	skillUploadEnvelopeSlack = 1 << 20
 )
 
 // sandboxSkillService is the skill surface the admin endpoints need. Reads and
@@ -43,10 +39,22 @@ const (
 type sandboxSkillService interface {
 	ListSkills(ctx context.Context, tenantID uint64, configID string) ([]*types.TenantSkillEntity, error)
 	GetSkill(ctx context.Context, tenantID uint64, configID, skillID string) (*types.TenantSkillEntity, error)
-	SetSkillEnabled(
-		ctx context.Context, tenantID uint64, configID, skillID string, enabled bool,
+	ListSkillFiles(
+		ctx context.Context, tenantID uint64, configID, skillID string,
+	) ([]service.SkillFileEntry, error)
+	ReadSkillFile(
+		ctx context.Context, tenantID uint64, configID, skillID, relativePath string,
+	) (*service.SkillFileContent, error)
+	UpdateSkillAdmin(
+		ctx context.Context, tenantID uint64, configID, skillID string,
+		update service.SkillAdminUpdate,
 	) (*types.TenantSkillEntity, error)
 	InstallSkill(ctx context.Context, tenantID uint64, configID string, archive []byte) (string, error)
+	InstallSkillFromSource(
+		ctx context.Context, tenantID uint64, configID, source string,
+	) (string, error)
+	ReinstallSkill(ctx context.Context, tenantID uint64, configID, skillID string) (string, error)
+	StopSkill(ctx context.Context, tenantID uint64, configID, skillID string) (*types.TenantSkillEntity, error)
 	RemoveSkill(ctx context.Context, tenantID uint64, configID, skillID string) error
 	LastProgress(
 		ctx context.Context, tenantID uint64, configID, skillID string,
@@ -100,6 +108,34 @@ type skillResponse struct {
 	InstallMessageID    string    `json:"install_message_id,omitempty"`
 	CreatedAt           time.Time `json:"created_at"`
 	UpdatedAt           time.Time `json:"updated_at"`
+
+	Envs []skillEnvResponse `json:"envs,omitempty"`
+}
+
+// skillEnvResponse is one declared environment variable. It reports whether a
+// workspace value exists and never what it is: a stored credential is written
+// once and read only by the sandbox that needs it.
+type skillEnvResponse struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+	IsSet       bool   `json:"is_set"`
+}
+
+func toSkillEnvResponses(envs types.SkillEnvVars) []skillEnvResponse {
+	if len(envs) == 0 {
+		return nil
+	}
+	out := make([]skillEnvResponse, 0, len(envs))
+	for _, entry := range envs {
+		out = append(out, skillEnvResponse{
+			Name:        entry.Name,
+			Description: entry.Description,
+			Required:    entry.Required,
+			IsSet:       entry.Value != "",
+		})
+	}
+	return out
 }
 
 func toSkillResponse(e *types.TenantSkillEntity) skillResponse {
@@ -120,6 +156,7 @@ func toSkillResponse(e *types.TenantSkillEntity) skillResponse {
 		InstallMessageID:    e.InstallMessageID,
 		CreatedAt:           e.CreatedAt,
 		UpdatedAt:           e.UpdatedAt,
+		Envs:                toSkillEnvResponses(e.Envs),
 	}
 }
 
@@ -127,7 +164,7 @@ func toSkillResponse(e *types.TenantSkillEntity) skillResponse {
 // 400. It is matched as a sentinel rather than by message so a reworded
 // validation error cannot silently start returning 500 for bad input.
 func respondSkillServiceError(c *gin.Context, err error) {
-	if stderrors.Is(err, service.ErrSkillBundleInvalid) {
+	if stderrors.Is(err, service.ErrSkillBundleInvalid) || stderrors.Is(err, service.ErrSkillSourceInvalid) {
 		_ = c.Error(apperrors.NewBadRequestError(err.Error()))
 		return
 	}
@@ -181,34 +218,96 @@ func (h *SandboxSkillHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": toSkillResponse(skill)})
 }
 
+// ListFiles godoc
+// @Summary      List files of an installed skill
+// @Description  List files in the stored skill bundle without starting a sandbox.
+// @Tags         SandboxConfig
+// @Produce      json
+// @Param        id       path      string  true  "Sandbox config ID"
+// @Param        skillId  path      string  true  "Skill ID"
+// @Success      200      {object}  map[string]interface{}  "Skill files"
+// @Failure      401      {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404      {object}  apperrors.AppError      "Skill or files not found"
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /sandbox-configs/{id}/skills/{skillId}/files [get]
+func (h *SandboxSkillHandler) ListFiles(c *gin.Context) {
+	files, err := h.service.ListSkillFiles(
+		c.Request.Context(), sandboxConfigTenantID(c), c.Param("id"), c.Param("skillId"),
+	)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": files})
+}
+
+// GetFile godoc
+// @Summary      Read one file of an installed skill
+// @Description  Read one skill file as UTF-8, a small base64 image, or binary.
+// @Tags         SandboxConfig
+// @Produce      json
+// @Param        id       path      string  true  "Sandbox config ID"
+// @Param        skillId  path      string  true  "Skill ID"
+// @Param        path     query     string  true  "Skill-root-relative file path"
+// @Success      200      {object}  map[string]interface{}  "Skill file"
+// @Failure      400      {object}  apperrors.AppError      "Invalid path"
+// @Failure      401      {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404      {object}  apperrors.AppError      "Skill or file not found"
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /sandbox-configs/{id}/skills/{skillId}/files/content [get]
+func (h *SandboxSkillHandler) GetFile(c *gin.Context) {
+	file, err := h.service.ReadSkillFile(
+		c.Request.Context(), sandboxConfigTenantID(c),
+		c.Param("id"), c.Param("skillId"), c.Query("path"),
+	)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": file})
+}
+
 // Upload godoc
 // @Summary      Install a skill
-// @Description  Upload a skill bundle. The install boots a sandbox from the
-// @Description  config's current image and runs for minutes, so the upload is
-// @Description  only accepted; follow it via the install-events stream.
+// @Description  Install a skill onto this sandbox config's image. Send a zip
+// @Description  as multipart form field "file", or JSON {"source":"..."} to
+// @Description  pull a public skill. source is one of: "@owner/slug" or a
+// @Description  slash-free slug (ClawHub), a github.com / gitlab.com /
+// @Description  skills.sh / clawhub / skillhub URL, a ClawHub skills-sh
+// @Description  catalog page (https://clawhub.ai/skills-sh/owner/repo/slug),
+// @Description  a skills-sh:owner/repo/slug locator, or a direct zip/SKILL.md
+// @Description  URL. Bare "owner/slug" is rejected as ambiguous. The source
+// @Description  must be readable anonymously. The install boots a sandbox and
+// @Description  runs for minutes, so the request is only accepted; follow it
+// @Description  via the install-events stream.
 // @Tags         SandboxConfig
+// @Accept       json
 // @Accept       multipart/form-data
 // @Produce      json
-// @Param        id    path      string  true  "Sandbox config ID"
-// @Param        file  formData  file    true  "Skill bundle (zip)"
-// @Success      202   {object}  map[string]interface{}  "Install accepted"
-// @Failure      400   {object}  apperrors.AppError      "Missing, oversized or invalid bundle"
+// @Param        id      path      string              true   "Sandbox config ID"
+// @Param        file    formData  file                false  "Skill bundle (zip)"
+// @Param        request body      skillSourceRequest  false  "Install from a registry, git host, or archive URL"
+// @Success      202     {object}  map[string]interface{}  "Install accepted"
+// @Failure      400     {object}  apperrors.AppError      "Missing, oversized or invalid bundle or source"
 // @Failure      401   {object}  map[string]interface{}  "Unauthorized"
 // @Failure      404   {object}  apperrors.AppError      "Sandbox config not found"
 // @Security     Bearer
 // @Security     ApiKeyAuth
 // @Router       /sandbox-configs/{id}/skills [post]
 func (h *SandboxSkillHandler) Upload(c *gin.Context) {
-	maxBytes := secutils.GetMaxFileSize()
-	// The cap is applied to the body before it is parsed: multipart parsing
-	// buffers the whole request, spilling to temp files, so checking only the
-	// declared part size would let an unbounded body through first.
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes+skillUploadEnvelopeSlack)
+	maxBytes := secutils.GetMaxSkillBundleSize()
+	limitSkillUploadBody(c, maxBytes)
+
+	if strings.HasPrefix(c.ContentType(), "application/json") {
+		h.installFromSource(c)
+		return
+	}
 
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if stderrors.As(err, &tooLarge) {
+		if isRequestBodyTooLarge(err) {
 			_ = c.Error(skillTooLargeError())
 			return
 		}
@@ -242,20 +341,122 @@ func (h *SandboxSkillHandler) Upload(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"success": true, "data": gin.H{"skill_id": skillID}})
 }
 
+type skillSourceRequest struct {
+	// Source is exactly one of: "@owner/slug" or a slash-free slug (ClawHub),
+	// a github.com / gitlab.com / skills.sh / clawhub / skillhub page URL, a
+	// ClawHub skills-sh catalog page or "skills-sh:owner/repo/slug" locator, or
+	// a direct zip/SKILL.md URL. Bare "owner/slug" is rejected: it is both a
+	// ClawHub id and a GitHub repo. The fetch carries no credential.
+	Source string `json:"source"`
+}
+
+func (h *SandboxSkillHandler) installFromSource(c *gin.Context) {
+	var req skillSourceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		var tooLarge *http.MaxBytesError
+		if stderrors.As(err, &tooLarge) {
+			_ = c.Error(skillSourceRequestTooLargeError())
+			return
+		}
+		_ = c.Error(apperrors.NewBadRequestError("invalid skill source request"))
+		return
+	}
+	source := strings.TrimSpace(req.Source)
+	if source == "" {
+		_ = c.Error(apperrors.NewBadRequestError("source is required"))
+		return
+	}
+
+	skillID, err := h.service.InstallSkillFromSource(
+		c.Request.Context(), sandboxConfigTenantID(c), c.Param("id"), source,
+	)
+	if err != nil {
+		respondSkillServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"success": true, "data": gin.H{"skill_id": skillID}})
+}
+
+// Reinstall godoc
+// @Summary      Retry a skill install
+// @Description  Retry a failed install from the stored archive; does not re-upload.
+// @Tags         SandboxConfig
+// @Produce      json
+// @Param        id       path      string  true  "Sandbox config ID"
+// @Param        skillId  path      string  true  "Skill ID"
+// @Success      202      {object}  map[string]interface{}  "Reinstall accepted"
+// @Failure      400      {object}  apperrors.AppError      "The stored archive is gone"
+// @Failure      401      {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404      {object}  apperrors.AppError      "Skill not found"
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /sandbox-configs/{id}/skills/{skillId}/reinstall [post]
+func (h *SandboxSkillHandler) Reinstall(c *gin.Context) {
+	skillID, err := h.service.ReinstallSkill(
+		c.Request.Context(), sandboxConfigTenantID(c), c.Param("id"), c.Param("skillId"),
+	)
+	if err != nil {
+		respondSkillServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"success": true, "data": gin.H{"skill_id": skillID}})
+}
+
+// Stop godoc
+// @Summary      Stop a skill install
+// @Description  Abort an in-flight install so the operator can retry or uninstall. After a process restart the row may still say installing with no live process; this rewrites it immediately instead of waiting for the stuck-run reaper. Removal is not stopped.
+// @Tags         SandboxConfig
+// @Produce      json
+// @Param        id       path      string  true  "Sandbox config ID"
+// @Param        skillId  path      string  true  "Skill ID"
+// @Success      200      {object}  map[string]interface{}  "Stopped skill"
+// @Failure      400      {object}  apperrors.AppError      "Skill is not installing"
+// @Failure      401      {object}  map[string]interface{}  "Unauthorized"
+// @Failure      404      {object}  apperrors.AppError      "Skill not found"
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /sandbox-configs/{id}/skills/{skillId}/stop [post]
+func (h *SandboxSkillHandler) Stop(c *gin.Context) {
+	skill, err := h.service.StopSkill(
+		c.Request.Context(), sandboxConfigTenantID(c), c.Param("id"), c.Param("skillId"),
+	)
+	if err != nil {
+		respondSkillServiceError(c, err)
+		return
+	}
+	if skill == nil {
+		_ = c.Error(apperrors.NewNotFoundError("skill not found"))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": toSkillResponse(skill)})
+}
+
 func skillTooLargeError() error {
 	return apperrors.NewBadRequestError(
-		fmt.Sprintf("skill bundle cannot exceed %d MB", secutils.GetMaxFileSizeMB()))
+		fmt.Sprintf("skill bundle cannot exceed %d MB", secutils.GetMaxSkillBundleSizeMB()))
+}
+
+func skillSourceRequestTooLargeError() error {
+	return apperrors.NewBadRequestError("skill source request is too large")
+}
+
+func skillJSONRequestTooLargeError() error {
+	return apperrors.NewBadRequestError("skill request is too large")
 }
 
 type skillPatchRequest struct {
-	// Enabled is a pointer because its absence is a bad request rather than a
-	// request to disable the skill.
+	// Enabled is a pointer because its absence is not a request to disable the
+	// skill; a body may carry envs instead.
 	Enabled *bool `json:"enabled"`
+	// Envs is a pointer to a map because "sent an empty object" and "did not
+	// mention envs" are different requests: the first clears what it names,
+	// the second must leave every stored value alone.
+	Envs *map[string]string `json:"envs"`
 }
 
 // Patch godoc
 // @Summary      Update an installed skill
-// @Description  Show or hide an installed skill. The files stay in the image either way; removal is a separate flow.
+// @Description  Show or hide an installed skill and set the workspace-wide values of the environment variables it declared. Either field may be sent, or both. The files stay in the image either way; removal is a separate flow.
 // @Tags         SandboxConfig
 // @Accept       json
 // @Produce      json
@@ -270,17 +471,33 @@ type skillPatchRequest struct {
 // @Security     ApiKeyAuth
 // @Router       /sandbox-configs/{id}/skills/{skillId} [patch]
 func (h *SandboxSkillHandler) Patch(c *gin.Context) {
+	limitJSONBody(c, skillSourceJSONMaxBytes)
 	var req skillPatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		if isRequestBodyTooLarge(err) {
+			_ = c.Error(skillJSONRequestTooLargeError())
+			return
+		}
 		_ = c.Error(apperrors.NewBadRequestError(err.Error()))
 		return
 	}
-	if req.Enabled == nil {
-		_ = c.Error(apperrors.NewBadRequestError("enabled is required"))
+	if req.Enabled == nil && req.Envs == nil {
+		_ = c.Error(apperrors.NewBadRequestError("enabled or envs is required"))
 		return
 	}
-	updated, err := h.service.SetSkillEnabled(c.Request.Context(), sandboxConfigTenantID(c),
-		c.Param("id"), c.Param("skillId"), *req.Enabled)
+
+	ctx := c.Request.Context()
+	tenantID := sandboxConfigTenantID(c)
+	configID, skillID := c.Param("id"), c.Param("skillId")
+
+	// Both fields go down in one call so the request is all-or-nothing: two
+	// service calls could persist the toggle and then fail the values, which
+	// is exactly what a half-applied credential rotation looks like.
+	update := service.SkillAdminUpdate{Enabled: req.Enabled}
+	if req.Envs != nil {
+		update.EnvValues = *req.Envs
+	}
+	updated, err := h.service.UpdateSkillAdmin(ctx, tenantID, configID, skillID, update)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -515,6 +732,7 @@ func (h *SandboxSkillHandler) InstallEvents(c *gin.Context) {
 // @Param        id       path      string  true  "Sandbox config ID"
 // @Param        skillId  path      string  true  "Skill ID"
 // @Success      200      {string}  string  "SSE stream of transcript events"
+// @Success      204      {string}  string  "Install is still preparing; retry once locators exist"
 // @Failure      401      {object}  map[string]interface{}  "Unauthorized"
 // @Failure      404      {object}  apperrors.AppError      "Skill or transcript not found"
 // @Security     Bearer
@@ -537,6 +755,13 @@ func (h *SandboxSkillHandler) InstallTranscript(c *gin.Context) {
 	}
 	sessionID, messageID := skill.InstallSessionID, skill.InstallMessageID
 	if sessionID == "" || messageID == "" {
+		// The skill row exists the moment the upload is accepted; locators
+		// are written only after the installer sandbox is up. A 404 here is
+		// "not yet", not "gone", and the access log would WARN on every poll.
+		if skill.Status == types.SkillStatusInstalling {
+			c.Status(http.StatusNoContent)
+			return
+		}
 		_ = c.Error(apperrors.NewNotFoundError("this skill has no install transcript"))
 		return
 	}

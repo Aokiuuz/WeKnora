@@ -17,6 +17,11 @@ import AgentSelector from './AgentSelector.vue';
 import { getCaretCoordinates } from '@/utils/caret';
 import { getRootZoom, rectToCssPx, cssViewportSize } from '@/utils/zoom';
 import { type ModelConfig } from '@/api/model';
+import {
+  formatContextWindow,
+  isDefaultContextWindow,
+  effectiveContextWindow,
+} from '@/utils/contextWindow';
 import { type CustomAgent, BUILTIN_QUICK_ANSWER_ID, BUILTIN_SMART_REASONING_ID } from '@/api/agent';
 import { useChatResourcesStore } from '@/stores/chatResources';
 import { useEditorResourcesStore } from '@/stores/editorResources';
@@ -41,7 +46,7 @@ import {
   type AgentNotReadyReasonKey,
 } from '@/utils/agent-readiness';
 import { formatLocalizedList } from '@/utils/format-list';
-import type { MentionItem, MentionItemType, MentionRequestItem } from '@/types/mention';
+import { SKILL_ICON, type MentionItem, type MentionItemType, type MentionRequestItem } from '@/types/mention';
 
 const route = useRoute();
 const router = useRouter();
@@ -667,7 +672,7 @@ const getMentionIcon = (item: MentionItem) => {
     case 'file': return 'file';
     case 'tag': return 'tag';
     case 'mcp': return 'tools';
-    case 'skill': return 'bookmark';
+    case 'skill': return SKILL_ICON;
     default: return 'folder';
   }
 };
@@ -1057,6 +1062,27 @@ const modelDisplayName = (model: ModelConfig) => {
   const displayName = model.display_name?.trim();
   return displayName || model.name;
 };
+
+const contextWindowTitle = (tokens?: number) => {
+  if (isDefaultContextWindow(tokens)) {
+    return t('model.editor.contextWindowDefaultHint', { value: formatContextWindow(tokens) });
+  }
+  return t('model.editor.contextWindowTokens', { count: effectiveContextWindow(tokens) });
+};
+
+const selectedModelContextLabel = computed(() => {
+  if (!selectedModel.value) return '';
+  return formatContextWindow(selectedModel.value.parameters?.context_window);
+});
+
+const selectedModelContextIsDefault = computed(() => {
+  return isDefaultContextWindow(selectedModel.value?.parameters?.context_window);
+});
+
+const selectedModelContextTitle = computed(() => {
+  if (!selectedModel.value) return '';
+  return contextWindowTitle(selectedModel.value.parameters?.context_window);
+});
 
 const updateModelDropdownPosition = () => {
   const anchor = modelButtonRef.value;
@@ -1852,6 +1878,13 @@ watch(() => uiStore.showSettingsModal, (visible, prevVisible) => {
   }
 });
 
+watch(() => route.path, (path, prev) => {
+  if (prev === '/platform/settings' && path !== '/platform/settings') {
+    loadWebSearchConfig(true);
+    loadChatModels(true);
+  }
+});
+
 watch([selectedKbIds, selectedFileIds], ([kbIds, fileIds]) => {
   if (!kbIds.length && !fileIds.length) {
     closeModelSelector();
@@ -2545,10 +2578,8 @@ defineExpose({
             <span class="agent-mode-text">
               {{ selectedAgent.name || (isAgentEnabled ? $t('input.agentMode') : $t('input.normalMode')) }}
             </span>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" class="dropdown-arrow"
-              :class="{ 'rotate': showAgentModeSelector }">
-              <path d="M2.5 4.5L6 8L9.5 4.5H2.5Z" />
-            </svg>
+            <t-icon name="chevron-down" size="12px" width="12" height="12" class="dropdown-arrow"
+              :class="{ 'rotate': showAgentModeSelector }" />
           </div>
 
           <!-- Agent 选择器下拉菜单 -->
@@ -2571,16 +2602,8 @@ defineExpose({
               'active': isWebSearchEnabled && isWebSearchConfigured,
               'disabled': !isWebSearchConfigured
             }" @click.stop="toggleWebSearch">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"
-                class="control-icon websearch-icon" :class="{ 'active': isWebSearchEnabled && isWebSearchConfigured }">
-                <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.2" fill="none" />
-                <path d="M 9 2 A 3.5 7 0 0 0 9 16" stroke="currentColor" stroke-width="1.2" fill="none" />
-                <path d="M 9 2 A 3.5 7 0 0 1 9 16" stroke="currentColor" stroke-width="1.2" fill="none" />
-                <line x1="2.94" y1="5.5" x2="15.06" y2="5.5" stroke="currentColor" stroke-width="1.2"
-                  stroke-linecap="round" />
-                <line x1="2.94" y1="12.5" x2="15.06" y2="12.5" stroke="currentColor" stroke-width="1.2"
-                  stroke-linecap="round" />
-              </svg>
+              <t-icon name="internet" size="18px" width="18" height="18"
+                class="control-icon websearch-icon" :class="{ 'active': isWebSearchEnabled && isWebSearchConfigured }" />
             </div>
           </t-tooltip>
 
@@ -2593,12 +2616,7 @@ defineExpose({
             <div class="control-btn image-upload-btn" :class="{
               'active': uploadedImages.length > 0
             }" @click.stop="triggerImageUpload()">
-              <svg width="18" height="18" viewBox="0 0 1024 1024" fill="currentColor" class="control-icon">
-                <path
-                  d="M896 128H128c-35.3 0-64 28.7-64 64v640c0 35.3 28.7 64 64 64h768c35.3 0 64-28.7 64-64V192c0-35.3-28.7-64-64-64zM128 832V192h768l0.1 640H128z" />
-                <path d="M352 448a96 96 0 1 0 0-192 96 96 0 0 0 0 192z" />
-                <path d="M128 768l224-288 160 160 192-256L896 640v128H128z" />
-              </svg>
+              <t-icon name="image" size="18px" width="18" height="18" class="control-icon" />
               <span v-if="uploadedImages.length > 0" class="image-count">{{ uploadedImages.length }}</span>
             </div>
           </t-tooltip>
@@ -2613,11 +2631,7 @@ defineExpose({
             <div class="control-btn attachment-upload-btn" :class="{ 'active': uploadedAttachments.length > 0 }"
               @click.stop="attachmentUploadRef?.triggerFileSelect()">
               <!-- 回形针图标 -->
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                stroke-linecap="round" stroke-linejoin="round" class="control-icon">
-                <path
-                  d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-              </svg>
+              <t-icon name="attach" size="18px" width="18" height="18" class="control-icon" />
               <span v-if="uploadedAttachments.length > 0" class="attachment-count">{{ uploadedAttachments.length
               }}</span>
             </div>
@@ -2640,13 +2654,8 @@ defineExpose({
               'active': allSelectedItems.length > 0,
               'disabled': isMentionDisabled
             }" @click.stop @mousedown.prevent="triggerMention">
-              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"
-                class="control-icon at-icon">
-                <circle cx="10" cy="10" r="3.5" stroke="currentColor" stroke-width="1.8" />
-                <path
-                  d="M13.5 10V11.5C13.5 12.163 13.7634 12.7989 14.2322 13.2678C14.7011 13.7366 15.337 14 16 14C16.663 14 17.2989 13.7366 17.7678 13.2678C18.2366 12.7989 18.5 12.163 18.5 11.5V10C18.5 7.74566 17.6045 5.58365 16.0104 3.98959C14.4163 2.39553 12.2543 1.5 10 1.5C7.74566 1.5 5.58365 2.39553 3.98959 3.98959C2.39553 5.58365 1.5 7.74566 1.5 10C1.5 12.2543 2.39553 14.4163 3.98959 16.0104C5.58365 17.6045 7.74566 18.5 10 18.5H12"
-                  stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
+              <t-icon name="at" size="18px" width="18" height="18"
+                class="control-icon at-icon" />
               <span v-if="allSelectedItems.length > 0" class="kb-count">{{ allSelectedItems.length }}</span>
             </div>
           </t-tooltip>
@@ -2659,10 +2668,14 @@ defineExpose({
                 <span class="model-selector-name">
                   {{ selectedModelDisplayName }}
                 </span>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" class="model-dropdown-arrow"
-                  :class="{ 'rotate': showModelSelector }">
-                  <path d="M2.5 4.5L6 8L9.5 4.5H2.5Z" />
-                </svg>
+                <span
+                  v-if="selectedModelContextLabel"
+                  class="model-selector-ctx"
+                  :class="{ 'is-default': selectedModelContextIsDefault }"
+                  :title="selectedModelContextTitle"
+                >{{ selectedModelContextLabel }}</span>
+                <t-icon name="chevron-down" size="12px" width="12" height="12" class="model-dropdown-arrow"
+                  :class="{ 'rotate': showModelSelector }" />
               </div>
             </div>
           </t-tooltip>
@@ -2690,6 +2703,11 @@ defineExpose({
                       <span v-if="model.display_name" class="model-option-raw-name">{{ model.name }}</span>
                     </div>
                   </div>
+                  <span
+                    class="model-option-ctx"
+                    :class="{ 'is-default': isDefaultContextWindow(model.parameters?.context_window) }"
+                    :title="contextWindowTitle(model.parameters?.context_window)"
+                  >{{ formatContextWindow(model.parameters?.context_window) }}</span>
                 </div>
                 <div v-if="availableModels.length === 0" class="model-option empty">
                   {{ $t('input.noModel') }}
@@ -2704,9 +2722,7 @@ defineExpose({
           <!-- 停止按钮（仅在回复中时显示） -->
           <t-tooltip v-if="isReplying" :content="$t('input.stopGeneration')" placement="top">
             <div @click="handleStop" class="control-btn stop-btn">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <rect x="5" y="5" width="6" height="6" rx="1" />
-              </svg>
+              <t-icon name="stop" size="16px" width="16" height="16" />
             </div>
           </t-tooltip>
 
@@ -3473,6 +3489,18 @@ const getImgSrc = (url: string) => {
   white-space: nowrap;
 }
 
+.model-selector-ctx {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--td-text-color-placeholder, #999);
+  font-weight: 400;
+
+  &.is-default {
+    opacity: 0.85;
+  }
+}
+
 .model-dropdown-arrow {
   width: 10px;
   height: 10px;
@@ -3577,6 +3605,8 @@ const getImgSrc = (url: string) => {
 .model-option {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 6px 8px;
   cursor: pointer;
   transition: background 0.12s;
@@ -3608,8 +3638,8 @@ const getImgSrc = (url: string) => {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
   min-width: 0;
+  flex: 1;
 }
 
 .model-option-icon {
@@ -3643,6 +3673,21 @@ const getImgSrc = (url: string) => {
   font-size: 11px;
   color: var(--td-text-color-placeholder);
   flex-shrink: 0;
+}
+
+.model-option-ctx {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--td-text-color-secondary);
+  background: var(--td-bg-color-secondarycontainer);
+  padding: 0 6px;
+  border-radius: 4px;
+  line-height: 18px;
+
+  &.is-default {
+    color: var(--td-text-color-placeholder);
+  }
 }
 
 /* Agent 模式选择下拉菜单 */

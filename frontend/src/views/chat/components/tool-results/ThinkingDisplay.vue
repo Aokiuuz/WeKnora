@@ -1,7 +1,7 @@
 <template>
   <div class="thinking-display">
     <div class="thinking-content">
-      <div class="thinking-icon" aria-hidden="true">💭</div>
+      <t-icon class="thinking-icon" name="ai-search" aria-hidden="true" />
       <div class="thinking-text">{{ data.thought }}</div>
     </div>
   </div>

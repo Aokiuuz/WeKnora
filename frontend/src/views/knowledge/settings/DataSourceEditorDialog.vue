@@ -1675,21 +1675,11 @@ const drawerConfirmText = computed(() => {
               }"
               aria-hidden="true"
             >
-              <svg
+              <t-icon name="check" size="10px"
                 v-if="resourceRowState(r.external_id) === 'checked'"
                 width="10"
                 height="10"
-                viewBox="0 0 12 12"
-                fill="none"
-              >
-                <path
-                  d="M10 3L4.5 8.5L2 6"
-                  stroke="#fff"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
+               />
             </span>
             <span class="resource-picker__icon" aria-hidden="true">
               <t-icon :name="resourceIconName(r)" size="16px" />

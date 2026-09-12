@@ -4,11 +4,9 @@ import { createRouter, createWebHistory, RouterView } from 'vue-router'
 import TDesign from 'tdesign-vue-next'
 import 'tdesign-vue-next/es/style/index.css'
 import '@/assets/theme/theme.css'
-import { installTDesignIconOfflineGuard } from '@/utils/tdesign-icon-offline'
 import i18n from './i18n/embed'
 import EmbedPage from '@/views/embed/EmbedPage.vue'
-
-installTDesignIconOfflineGuard()
+import ProtectedResourcePreview from '@/components/ProtectedResourcePreview.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -22,7 +20,7 @@ const router = createRouter({
 })
 
 // Runtime-only Vue build cannot compile string templates — use a render fn.
-const app = createApp({ render: () => h(RouterView) })
+const app = createApp({ render: () => [h(RouterView), h(ProtectedResourcePreview)] })
 
 app.use(TDesign)
 app.use(createPinia())

@@ -8,7 +8,8 @@
     "types": ["vite/client"],
 
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "tdesign-icons-vue-next": ["./src/components/icons/lucide-compat.ts"]
     }
   }
 }

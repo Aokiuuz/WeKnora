@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Tencent/WeKnora/internal/handler"
+	"github.com/Tencent/WeKnora/internal/buildinfo"
 	"github.com/Tencent/WeKnora/internal/logger"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"golang.org/x/mod/semver"
@@ -291,9 +291,9 @@ func downloadAndInstall(ctx context.Context, url string, filename string, curren
 	}()
 }
 
-// desktopAboutVersion 优先使用构建脚本注入的 handler.Version，否则尝试读取仓库根目录 VERSION（本地 wails dev 等未带 ldflags 时）。
+// desktopAboutVersion 优先使用构建脚本注入的 buildinfo.Version，否则尝试读取仓库根目录 VERSION（本地 wails dev 等未带 ldflags 时）。
 func desktopAboutVersion() string {
-	if v := strings.TrimSpace(handler.Version); v != "" && v != "unknown" {
+	if v := strings.TrimSpace(buildinfo.Version); v != "" && v != "unknown" {
 		return v
 	}
 	for _, p := range []string{
@@ -327,7 +327,10 @@ start /wait "" "%s" /S
 start "" "%s"
 del "%%~f0"
 `, savePath, execPath)
-		os.WriteFile(scriptPath, []byte(scriptContent), 0755)
+		if err := os.WriteFile(scriptPath, []byte(scriptContent), 0o755); err != nil {
+			logger.Warnf(context.Background(), "Failed to write Windows update script: %v", err)
+			return
+		}
 
 		cmd := exec.Command("cmd.exe", "/C", "start", "/b", scriptPath)
 		cmd.Start()
@@ -352,7 +355,10 @@ del "%%~f0"
 				}
 
 				mountPoint := filepath.Join(os.TempDir(), "WeKnoraUpdateMount")
-				os.MkdirAll(mountPoint, 0755)
+				if err := os.MkdirAll(mountPoint, 0o755); err != nil {
+					logger.Warnf(context.Background(), "Failed to create update mount point: %v", err)
+					return
+				}
 
 				cmdMount := exec.Command("hdiutil", "attach", savePath, "-mountpoint", mountPoint, "-nobrowse", "-quiet")
 				if err := cmdMount.Run(); err != nil {
@@ -397,7 +403,13 @@ open "%s"
 rm "$0"
 `, appBundlePath, newAppPath, appDir, appBundlePath, newAppPath, appDir, mountPoint, appBundlePath)
 
-				os.WriteFile(scriptPath, []byte(scriptContent), 0755)
+				if err := os.WriteFile(scriptPath, []byte(scriptContent), 0o755); err != nil {
+					logger.Warnf(context.Background(), "Failed to write macOS update script: %v", err)
+					if detachErr := exec.Command("hdiutil", "detach", mountPoint, "-force").Run(); detachErr != nil {
+						logger.Warnf(context.Background(), "Failed to detach update image: %v", detachErr)
+					}
+					return
+				}
 
 				exec.Command("bash", scriptPath).Start()
 				wailsruntime.Quit(ctx)

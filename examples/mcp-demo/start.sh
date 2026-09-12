@@ -24,12 +24,12 @@ fi
 echo "MCP Demo"
 echo "  transport : ${MCP_TRANSPORT}"
 echo "  endpoint  : http://${MCP_HOST}:${MCP_PORT}/$([ "$MCP_TRANSPORT" = http ] && echo mcp || echo sse)"
-echo "  auth token: ${MCP_SERVER_AUTH_TOKEN}"
+echo "  auth token: configured via MCP_SERVER_AUTH_TOKEN"
 echo
 echo "WeKnora UI → 设置 → MCP 服务 → 新建"
 echo "  传输: HTTP Streamable"
 echo "  URL : http://${MCP_HOST}:${MCP_PORT}/mcp"
-echo "  认证: Bearer / ${MCP_SERVER_AUTH_TOKEN}"
+echo "  认证: Bearer / 使用 MCP_SERVER_AUTH_TOKEN 中配置的令牌"
 echo
 
 exec python server.py --transport "$MCP_TRANSPORT" --host "$MCP_HOST" --port "$MCP_PORT"

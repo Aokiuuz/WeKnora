@@ -90,6 +90,10 @@ func TestValidateStoragePathTenant(t *testing.T) {
 	assert.NoError(t, ValidateStoragePathTenant("local://42/knowledge/file.pdf", 42))
 	assert.Error(t, ValidateStoragePathTenant("local://7/knowledge/file.pdf", 42))
 	assert.Error(t, ValidateStoragePathTenant("local://docs/example.txt", 42))
+	assert.Error(t, ValidateStoragePathTenant("cos://1/x/weknora/2/secret", 1))
+	assert.NoError(t, ValidateStoragePathTenant("cos://1/x/weknora/2/secret", 2))
+	assert.NoError(t, ValidateStoragePathTenant("s3://123/prefix/42/knowledge/file.pdf", 42))
+	assert.Error(t, ValidateStoragePathTenant("s3://bucket/42/7/file.pdf", 42))
 }
 
 func TestValidateKBScopedStoragePath(t *testing.T) {

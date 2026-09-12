@@ -22,9 +22,7 @@ export const INTEGRATION_TAB_CAPABILITY: Partial<Record<IntegrationTab, Deployme
   api: 'integrations.api',
 }
 
-export type IntegrationPreviewIcon =
-  | { type: 'icon'; name: string }
-  | { type: 'emoji'; value: string }
+export type IntegrationPreviewIcon = { type: 'icon'; name: string }
 
 /** Sidebar hover preview + Integrations modal nav — add new entries here. */
 export const INTEGRATION_PREVIEW_ITEMS: Array<{
@@ -35,5 +33,5 @@ export const INTEGRATION_PREVIEW_ITEMS: Array<{
   { key: 'embed', icon: { type: 'icon', name: 'code' } },
   { key: 'api', icon: { type: 'icon', name: 'secured' } },
   { key: 'chrome', icon: { type: 'icon', name: 'extension' } },
-  { key: 'claw', icon: { type: 'emoji', value: '🦞' } },
+  { key: 'claw', icon: { type: 'icon', name: 'extension' } },
 ]

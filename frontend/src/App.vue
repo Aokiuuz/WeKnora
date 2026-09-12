@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin, NotifyPlugin } from 'tdesign-vue-next'
+import ProtectedResourcePreview from '@/components/ProtectedResourcePreview.vue'
 import ManualKnowledgeEditor from '@/components/manual-knowledge-editor.vue'
 import UploadConfirmHost from '@/components/UploadConfirmHost.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -14,10 +15,10 @@ import { notifyLoginSuccess } from '@/utils/loginNotify'
 import { renderWorkspaceNotifyContent } from '@/utils/workspaceNotifyContent'
 
 // TDesign locale configs
-import enUSConfig from 'tdesign-vue-next/esm/locale/en_US'
-import zhCNConfig from 'tdesign-vue-next/esm/locale/zh_CN'
-import koKRConfig from 'tdesign-vue-next/esm/locale/ko_KR'
-import ruRUConfig from 'tdesign-vue-next/esm/locale/ru_RU'
+import enUSConfig from 'tdesign-vue-next/es/locale/en_US'
+import zhCNConfig from 'tdesign-vue-next/es/locale/zh_CN'
+import koKRConfig from 'tdesign-vue-next/es/locale/ko_KR'
+import ruRUConfig from 'tdesign-vue-next/es/locale/ru_RU'
 
 const { locale, t, tm } = useI18n()
 const { formatRole, roleIcon } = useRoleLabel()
@@ -275,6 +276,7 @@ onUnmounted(() => {
     <div id="app">
       <RouterView />
       <ManualKnowledgeEditor />
+      <ProtectedResourcePreview />
       <UploadConfirmHost />
     </div>
   </t-config-provider>

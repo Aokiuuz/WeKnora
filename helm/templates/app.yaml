@@ -29,6 +29,7 @@ spec:
     spec:
       {{- include "weknora.imagePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "weknora.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       {{- with .Values.app.podSecurityContext | default .Values.global.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -73,7 +74,8 @@ spec:
                 secretKeyRef:
                   name: {{ include "weknora.secretName" . }}
                   key: DB_NAME
-            # Redis configuration
+            {{- if .Values.redis.enabled }}
+            # Redis configuration (bundled Redis enabled)
             - name: REDIS_ADDR
               value: "redis:6379"
             - name: REDIS_USERNAME
@@ -93,6 +95,12 @@ spec:
               value: "stream:"
             - name: STREAM_MANAGER_TYPE
               value: {{ .Values.app.env.STREAM_MANAGER_TYPE | quote }}
+            {{- else }}
+            # Redis is optional; memory streams keep the app operational when
+            # the bundled Redis component is disabled.
+            - name: STREAM_MANAGER_TYPE
+              value: "memory"
+            {{- end }}
             # Security
             - name: JWT_SECRET
               valueFrom:
@@ -119,6 +127,11 @@ spec:
               value: {{ .Values.app.env.AUTO_RECOVER_DIRTY | quote }}
             - name: CONCURRENCY_POOL_SIZE
               value: {{ .Values.app.env.CONCURRENCY_POOL_SIZE | quote }}
+            # Docker sandbox is off unless the deployer opts in. A workspace
+            # admin who can save a Docker config can create containers on
+            # whatever Engine API this process can reach (often host root).
+            - name: WEKNORA_SANDBOX_DOCKER_ENABLED
+              value: {{ .Values.app.env.WEKNORA_SANDBOX_DOCKER_ENABLED | default "false" | quote }}
             {{- if .Values.neo4j.enabled }}
             # Neo4j configuration (for GraphRAG)
             # NEO4J_ENABLE 是知识图谱的唯一开关（Go 代码认它，不认 ENABLE_GRAPH_RAG）。

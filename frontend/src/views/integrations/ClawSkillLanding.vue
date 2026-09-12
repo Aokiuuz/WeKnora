@@ -12,7 +12,7 @@
         @click="openClawHub"
       >
         <template #icon>
-          <span class="ext-cta-emoji" role="img" :aria-label="$t('common.clawhubSkill')">🦞</span>
+          <t-icon class="ext-cta-emoji" name="extension" :aria-label="$t('common.clawhubSkill')" />
         </template>
       </IntegrationExternalCta>
     </template>
@@ -139,7 +139,7 @@ const openClawHub = () => {
 }
 
 const openApiSettings = () => {
-  router.push({ path: '/platform/settings', query: { section: 'integrations', tab: 'api' } })
+  router.push({ path: '/platform/settings', query: { section: 'integration-api' } })
   uiStore.openSettings('integration-api')
 }
 

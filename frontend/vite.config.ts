@@ -6,6 +6,7 @@ import { createRequire } from 'node:module'
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
+import { lucideInternalIcons } from './lucide-icons-plugin'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
@@ -117,16 +118,19 @@ export default defineConfig({
     },
   },
   plugins: [
+    lucideInternalIcons(),
     vue(),
     vueJsx(),
     embedHtmlDevFallback(),
   ],
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '@vue-office/pptx': resolveVueOfficePptxEntry(),
-    },
+    alias: [
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+      { find: /^tdesign-icons-vue-next$/, replacement: fileURLToPath(new URL('./src/components/icons/lucide-compat.ts', import.meta.url)) },
+      { find: '@vue-office/pptx', replacement: resolveVueOfficePptxEntry() },
+    ],
   },
+  optimizeDeps: { exclude: ['tdesign-vue-next'] },
   server: {
     port: 5173,
     host: true,

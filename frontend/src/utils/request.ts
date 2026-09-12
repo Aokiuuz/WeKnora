@@ -1,14 +1,48 @@
 // src/utils/request.js
-import axios from "axios";
-import { generateRandomString, MAX_FILE_SIZE_MB } from "./index";
+import axios, { type AxiosRequestConfig } from "axios";
+import { generateRandomString, MAX_FILE_SIZE_MB, MAX_SKILL_BUNDLE_SIZE_MB } from "./index";
 import i18n from '@/i18n'
 import { getApiBaseUrl } from './api-base';
+import { isSkillBundleUploadUrl } from './uploadLimit';
 
 const t = (key: string) => i18n.global.t(key)
 
 // API基础URL
 const BASE_URL = getApiBaseUrl();
 
+/**
+ * Response payload augmented with the HTTP status code.
+ *
+ * `$httpStatus` lets callers distinguish outcomes that share a success shape.
+ * Defined as a non-enumerable property, so it stays invisible to object spread,
+ * JSON.stringify and Object.keys and never leaks into downstream payloads.
+ *
+ * Objects, arrays and Blob payloads carry this property. Primitives, null and
+ * string-based SSE responses pass through unchanged.
+ */
+export type WithStatus<T> = T extends object ? T & {
+  /** HTTP status code of the response. Non-enumerable. See {@link WithStatus}. */
+  readonly $httpStatus: number
+} : T;
+
+const HTTP_STATUS_KEY = '$httpStatus';
+
+/**
+ * Attach the non-enumerable `$httpStatus` property to a response payload
+ * in place and return it. Primitives pass through untouched.
+ * See {@link WithStatus} for where the property is guaranteed.
+ */
+function withHttpStatus<T>(data: T, status: number): WithStatus<T> {
+  if (data !== null && typeof data === 'object') {
+    Object.defineProperty(data, HTTP_STATUS_KEY, {
+      value: status,
+      enumerable: false,
+      configurable: true,
+      writable: false,
+    });
+  }
+  return data as WithStatus<T>;
+}
 
 // 创建Axios实例
 const instance = axios.create({
@@ -21,7 +55,7 @@ const instance = axios.create({
 });
 
 // 获取当前用户语言（用于 Accept-Language header）
-function getCurrentLanguage(): string {
+export function getCurrentLanguage(): string {
   return i18n.global.locale?.value || localStorage.getItem('locale') || 'zh-CN'
 }
 
@@ -67,9 +101,89 @@ instance.interceptors.request.use(
   }
 );
 
-// Token刷新标志，防止多个请求同时刷新token
-let isRefreshing = false;
-let failedQueue: Array<{ resolve: Function; reject: Function }> = [];
+interface RefreshWaiter {
+  resolve: (token: string) => void;
+  reject: (error: unknown) => void;
+}
+
+export interface TokenRefreshCoordinator {
+  begin: () => boolean;
+  wait: () => Promise<string>;
+  resolve: (token: string) => void;
+  reject: (error: unknown) => void;
+  finish: () => void;
+  isRefreshing: () => boolean;
+  pendingCount: () => number;
+}
+
+// A single coordinator owns both the refresh state and every request waiting
+// for it, so every terminal path can settle the queue before releasing the lock.
+export function createTokenRefreshCoordinator(): TokenRefreshCoordinator {
+  let refreshing = false;
+  let waiters: RefreshWaiter[] = [];
+
+  const takeWaiters = () => {
+    const pending = waiters;
+    waiters = [];
+    return pending;
+  };
+
+  return {
+    begin: () => {
+      if (refreshing) return false;
+      refreshing = true;
+      return true;
+    },
+    wait: () => new Promise<string>((resolve, reject) => {
+      waiters.push({ resolve, reject });
+    }),
+    resolve: (token: string) => {
+      takeWaiters().forEach(waiter => waiter.resolve(token));
+    },
+    reject: (error: unknown) => {
+      takeWaiters().forEach(waiter => waiter.reject(error));
+    },
+    finish: () => {
+      refreshing = false;
+    },
+    isRefreshing: () => refreshing,
+    pendingCount: () => waiters.length,
+  };
+}
+
+export async function coordinateTokenRefresh(
+  coordinator: TokenRefreshCoordinator,
+  refresh: () => Promise<string>,
+): Promise<string> {
+  if (!coordinator.begin()) return coordinator.wait();
+
+  try {
+    const token = await refresh();
+    coordinator.resolve(token);
+    return token;
+  } catch (error) {
+    coordinator.reject(error);
+    throw error;
+  } finally {
+    coordinator.finish();
+  }
+}
+
+// Cancellation settles only this caller; a shared refresh can still serve other requests.
+function waitForRefresh<T>(refresh: Promise<T>, signal?: AxiosRequestConfig['signal']): Promise<T> {
+  if (!signal) return refresh;
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(new axios.CanceledError());
+    if (signal.aborted) abort();
+    else signal.addEventListener?.('abort', abort, { once: true });
+    refresh.then(
+      value => signal.aborted ? abort() : resolve(value),
+      reject,
+    ).finally(() => signal.removeEventListener?.('abort', abort));
+  });
+}
+
+const tokenRefresh = createTokenRefreshCoordinator();
 
 // Share-link endpoints (/auth/invitations/lookup, /auth/register-by-invite)
 // are reachable by anonymous users opening an invite link. A 401 from these
@@ -82,19 +196,6 @@ function isPublicAuthRequest(url?: string): boolean {
   if (!url) return false;
   return PUBLIC_AUTH_PATHS.some(p => url.includes(p));
 }
-
-// 处理队列中的请求
-const processQueue = (error: any, token: string | null = null) => {
-  failedQueue.forEach(({ resolve, reject }) => {
-    if (error) {
-      reject(error);
-    } else {
-      resolve(token);
-    }
-  });
-  
-  failedQueue = [];
-};
 
 function isEmbedPage(): boolean {
   if (typeof window === 'undefined') return false;
@@ -114,14 +215,21 @@ instance.interceptors.response.use(
     // 根据业务状态码处理逻辑
     const { status, data } = response;
     if (status >= 200 && status < 300) {
-      return data;
+      return withHttpStatus(data, status);
     } else {
-      return Promise.reject(data);
+      return Promise.reject(withHttpStatus(data, status));
     }
   },
   async (error: any) => {
     const originalRequest = error.config;
     
+    if (axios.isCancel(error) || error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      return Promise.reject(error);
+    }
+    if (originalRequest?.signal?.aborted) {
+      return Promise.reject(new axios.CanceledError());
+    }
+
     if (!error.response) {
       return Promise.reject({ message: t('error.networkError') });
     }
@@ -132,7 +240,7 @@ instance.interceptors.response.use(
       const msg = typeof data === 'object'
         ? (typeof data?.error === 'string' ? data.error : (data?.error?.message || data?.message))
         : data;
-      return Promise.reject({ status, message: msg || t('error.invalidCredentials') });
+      return Promise.reject(withHttpStatus({ status, message: msg || t('error.invalidCredentials') }, status));
     }
 
     // Embed 调试页/挂件：无 JWT 时直接拒绝，勿走 refresh → /login
@@ -141,85 +249,63 @@ instance.interceptors.response.use(
       const msg = typeof data === 'object'
         ? (typeof data?.error === 'string' ? data.error : (data?.error?.message || data?.message))
         : data;
-      return Promise.reject({ status, message: msg || t('error.invalidCredentials') });
+      return Promise.reject(withHttpStatus({ status, message: msg || t('error.invalidCredentials') }, status));
     }
 
     // 如果是401错误且不是刷新token的请求，尝试刷新token
-    if (error.response.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/auth/refresh')) {
-      if (isRefreshing) {
-        // 如果正在刷新token，将请求加入队列
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        }).then(token => {
-          originalRequest.headers['Authorization'] = 'Bearer ' + token;
-          return instance(originalRequest);
-        }).catch(err => {
-          return Promise.reject(err);
-        });
-      }
-      
+    if (error.response.status === 401 && originalRequest && !originalRequest._retry && !originalRequest.url?.includes('/auth/refresh')) {
       originalRequest._retry = true;
-      isRefreshing = true;
-      
-      const refreshToken = localStorage.getItem('weknora_refresh_token');
-      
-      if (refreshToken) {
-        try {
+
+      try {
+        const token = await waitForRefresh(coordinateTokenRefresh(tokenRefresh, async () => {
+          const refreshToken = localStorage.getItem('weknora_refresh_token');
+          if (!refreshToken) throw { message: t('error.pleaseRelogin') };
+
           // 动态导入refresh token API
           const { refreshToken: refreshTokenAPI } = await import('../api/auth/index');
           const response = await refreshTokenAPI(refreshToken);
-          
+
           if (response.success && response.data) {
             const { token, refreshToken: newRefreshToken } = response.data;
-            
+
             // 更新localStorage中的token
             localStorage.setItem('weknora_token', token);
             localStorage.setItem('weknora_refresh_token', newRefreshToken);
-            
-            // 更新请求头
-            originalRequest.headers['Authorization'] = 'Bearer ' + token;
-            
-            // 处理队列中的请求
-            processQueue(null, token);
-            
-            return instance(originalRequest);
-          } else {
-            throw new Error(response.message || t('error.tokenRefreshFailed'));
+
+            return token;
           }
-        } catch (refreshError) {
-          // 刷新失败，清除所有token并跳转到登录页
-          localStorage.removeItem('weknora_token');
-          localStorage.removeItem('weknora_refresh_token');
-          localStorage.removeItem('weknora_user');
-          localStorage.removeItem('weknora_tenant');
-          
-          processQueue(refreshError, null);
-          
-          redirectToLogin();
-          
-          return Promise.reject(refreshError);
-        } finally {
-          isRefreshing = false;
-        }
-      } else {
-        // 没有refresh token，直接跳转到登录页
+
+          throw new Error(response.message || t('error.tokenRefreshFailed'));
+        }), originalRequest.signal);
+
+        originalRequest.headers ??= {};
+        originalRequest.headers['Authorization'] = 'Bearer ' + token;
+        return instance(originalRequest);
+      } catch (refreshError) {
+        if (axios.isCancel(refreshError)) return Promise.reject(refreshError);
+        // 刷新失败或缺少 refresh token 时，清除凭据并拒绝所有等待请求。
         localStorage.removeItem('weknora_token');
+        localStorage.removeItem('weknora_refresh_token');
         localStorage.removeItem('weknora_user');
         localStorage.removeItem('weknora_tenant');
-        
+
         redirectToLogin();
-        
-        return Promise.reject({ message: t('error.pleaseRelogin') });
+
+        return Promise.reject(refreshError);
       }
     }
     
     // 处理 Nginx 413 Request Entity Too Large
-    if (error.response.status === 413) {
-      return Promise.reject({ 
-        status: 413, 
-        message: i18n.global.t('error.fileSizeExceeded', { size: MAX_FILE_SIZE_MB }),
+    const ERR_ENTITY_TOO_LARGE = 413;
+    if (error.response.status === ERR_ENTITY_TOO_LARGE) {
+      const skillUpload = isSkillBundleUploadUrl(error.config?.url)
+      return Promise.reject(withHttpStatus({
+        status: ERR_ENTITY_TOO_LARGE,
+        message: skillUpload
+          ? i18n.global.t('settings.sandbox.skillBundleTooLarge', { size: MAX_SKILL_BUNDLE_SIZE_MB })
+          : i18n.global.t('error.fileSizeExceeded', { size: MAX_FILE_SIZE_MB }),
         success: false
-      });
+      }, ERR_ENTITY_TOO_LARGE));
     }
 
     const { status, data } = error.response;
@@ -238,20 +324,23 @@ instance.interceptors.response.use(
     } else if (typeof data === 'string') {
       errorMessage = data;
     }
-    return Promise.reject({ 
-      status, 
+    return Promise.reject(withHttpStatus({
+      status,
       message: errorMessage,
       ...(typeof data === 'object' ? data : {}) 
-    });
+    }, status));
   }
 );
 
-export function get<T = any>(url: string, config?: any): Promise<T> {
-  return instance.get<T>(url, config) as unknown as Promise<T>;
+export function get<T = any>(url: string, config?: any): Promise<WithStatus<T>> {
+  return instance.get<T>(url, config) as unknown as Promise<WithStatus<T>>;
 }
 
-export async function getDown(url: string): Promise<Blob> {
+export type DownloadRequestConfig = Pick<AxiosRequestConfig, 'headers' | 'signal' | 'timeout'>;
+
+export async function getDown(url: string, config: DownloadRequestConfig = {}): Promise<Blob> {
   const res = await instance.get<Blob>(url, {
+    ...config,
     responseType: "blob",
   }) as unknown as Blob;
   return res
@@ -262,7 +351,7 @@ export function postUpload(
   data = {},
   onUploadProgress?: (progressEvent: any) => void,
   config: any = {},
-): Promise<any> {
+): Promise<WithStatus<any>> {
   return instance.post(url, data, {
     ...config,
     headers: {
@@ -275,6 +364,7 @@ export function postUpload(
 }
 
 export function postChat<T = any>(url: string, data = {}): Promise<T> {
+  // SSE stream: body is a string, so no `$httpStatus` is attached (see WithStatus).
   return instance.post(url, data, {
     headers: {
       "Content-Type": "text/event-stream;charset=utf-8",
@@ -283,18 +373,18 @@ export function postChat<T = any>(url: string, data = {}): Promise<T> {
   }) as unknown as Promise<T>;
 }
 
-export function post<T = any>(url: string, data = {}, config?: any): Promise<T> {
-  return instance.post<T>(url, data, config) as unknown as Promise<T>;
+export function post<T = any>(url: string, data = {}, config?: any): Promise<WithStatus<T>> {
+  return instance.post<T>(url, data, config) as unknown as Promise<WithStatus<T>>;
 }
 
-export function put<T = any>(url: string, data = {}, config?: any): Promise<T> {
-  return instance.put<T>(url, data, config) as unknown as Promise<T>;
+export function put<T = any>(url: string, data = {}, config?: any): Promise<WithStatus<T>> {
+  return instance.put<T>(url, data, config) as unknown as Promise<WithStatus<T>>;
 }
 
-export function patch<T = any>(url: string, data = {}, config?: any): Promise<T> {
-  return instance.patch<T>(url, data, config) as unknown as Promise<T>;
+export function patch<T = any>(url: string, data = {}, config?: any): Promise<WithStatus<T>> {
+  return instance.patch<T>(url, data, config) as unknown as Promise<WithStatus<T>>;
 }
 
-export function del<T = any>(url: string, data?: any): Promise<T> {
-  return instance.delete<T>(url, { data }) as unknown as Promise<T>;
+export function del<T = any>(url: string, data?: any): Promise<WithStatus<T>> {
+  return instance.delete<T>(url, { data }) as unknown as Promise<WithStatus<T>>;
 }

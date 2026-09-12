@@ -1,0 +1,42 @@
+{
+  "cmrc2018-dev.json": {
+    "url": "https://raw.githubusercontent.com/ymcui/cmrc2018/c0eb1b6ba219847457e6af3180da722bbeb656af/squad-style-data/cmrc2018_dev.json",
+    "revision": "c0eb1b6ba219847457e6af3180da722bbeb656af",
+    "path": "squad-style-data/cmrc2018_dev.json",
+    "sha256": "e9ff74231f05c230c6fa88b84441ee334d97234cbb610991cd94b82db00c7f1f",
+    "bytes": 3299139
+  },
+  "squad2-dev.json": {
+    "url": "https://raw.githubusercontent.com/rajpurkar/SQuAD-explorer/eee5fdbf62f8613a7812b03419e6b29617b74fd1/dataset/dev-v2.0.json",
+    "revision": "eee5fdbf62f8613a7812b03419e6b29617b74fd1",
+    "path": "dataset/dev-v2.0.json",
+    "sha256": "80a5225e94905956a6446d296ca1093975c4d3b3260f1d6c8f68bc2ab77182d8",
+    "bytes": 4370528
+  },
+  "cmrc2018-LICENCE": {
+    "url": "https://raw.githubusercontent.com/ymcui/cmrc2018/c0eb1b6ba219847457e6af3180da722bbeb656af/LICENCE",
+    "revision": "c0eb1b6ba219847457e6af3180da722bbeb656af",
+    "path": "LICENCE",
+    "sha256": "7abe19ec9bb73b36141b999b861d24ad855e808bafe0f81e84cce28556f6c297",
+    "bytes": 20131
+  },
+  "squad2-home.html": {
+    "url": "https://raw.githubusercontent.com/rajpurkar/SQuAD-explorer/e0c66cfec263165fb3c15cb76a22175e371b71d7/index.html",
+    "revision": "e0c66cfec263165fb3c15cb76a22175e371b71d7",
+    "path": "index.html",
+    "sha256": "989f7e43f27faa490ed9fc8fb440e6f0aa791c49131346a27b8361deb4a18baf",
+    "bytes": 141436
+  },
+  "hotpot-dev.parquet": {
+    "url": "https://huggingface.co/datasets/hotpotqa/hotpot_qa/resolve/1908d6afbbead072334abe2965f91bd2709910ab/distractor/validation-00000-of-00001.parquet",
+    "revision": "1908d6afbbead072334abe2965f91bd2709910ab",
+    "original_unavailable": "http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_dev_distractor_v1.json",
+    "sha256": "c20b638ca82b21d04fe12e14ff417ad05153d4d215a65de54497fca4e972f7c6",
+    "bytes": 27452575
+  },
+  "hotpot-home.html": {
+    "url": "https://hotpotqa.github.io/",
+    "sha256": "1aa51a46cd7080b941a788c61ae3cebaea8df88cd2f4d22e1d98fff39d0e79c7",
+    "bytes": 144422
+  }
+}

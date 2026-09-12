@@ -1,0 +1,123 @@
+{
+  "lookup_events": 66,
+  "total_hits": 448,
+  "total_misses": 602,
+  "first_16_lookups": [
+    {
+      "requested_items": 64,
+      "hit_items": 0,
+      "miss_items": 64,
+      "bypass_items": 0,
+      "status": "miss"
+    },
+    {
+      "requested_items": 64,
+      "hit_items": 0,
+      "miss_items": 64,
+      "bypass_items": 0,
+      "status": "miss"
+    },
+    {
+      "requested_items": 64,
+      "hit_items": 0,
+      "miss_items": 64,
+      "bypass_items": 0,
+      "status": "miss"
+    },
+    {
+      "requested_items": 64,
+      "hit_items": 0,
+      "miss_items": 64,
+      "bypass_items": 0,
+      "status": "miss"
+    },
+    {
+      "requested_items": 64,
+      "hit_items": 0,
+      "miss_items": 64,
+      "bypass_items": 0,
+      "status": "miss"
+    },
+    {
+      "requested_items": 64,
+      "hit_items": 0,
+      "miss_items": 64,
+      "bypass_items": 0,
+      "status": "miss"
+    },
+    {
+      "requested_items": 64,
+      "hit_items": 0,
+      "miss_items": 64,
+      "bypass_items": 0,
+      "status": "miss"
+    },
+    {
+      "requested_items": 52,
+      "hit_items": 0,
+      "miss_items": 52,
+      "bypass_items": 0,
+      "status": "miss"
+    },
+    {
+      "requested_items": 64,
+      "hit_items": 64,
+      "miss_items": 0,
+      "bypass_items": 0,
+      "status": "hit"
+    },
+    {
+      "requested_items": 64,
+      "hit_items": 64,
+      "miss_items": 0,
+      "bypass_items": 0,
+      "status": "hit"
+    },
+    {
+      "requested_items": 64,
+      "hit_items": 64,
+      "miss_items": 0,
+      "bypass_items": 0,
+      "status": "hit"
+    },
+    {
+      "requested_items": 64,
+      "hit_items": 64,
+      "miss_items": 0,
+      "bypass_items": 0,
+      "status": "hit"
+    },
+    {
+      "requested_items": 64,
+      "hit_items": 64,
+      "miss_items": 0,
+      "bypass_items": 0,
+      "status": "hit"
+    },
+    {
+      "requested_items": 64,
+      "hit_items": 64,
+      "miss_items": 0,
+      "bypass_items": 0,
+      "status": "hit"
+    },
+    {
+      "requested_items": 64,
+      "hit_items": 64,
+      "miss_items": 0,
+      "bypass_items": 0,
+      "status": "hit"
+    },
+    {
+      "requested_items": 52,
+      "hit_items": 0,
+      "miss_items": 52,
+      "bypass_items": 0,
+      "status": "miss"
+    }
+  ],
+  "successful_embedding_inputs": 597,
+  "unique_embedding_inputs": 550,
+  "unique_final_entries": 550,
+  "source_commit": "d0535cdfb4784ebc8cee73dccdf35c3489555a90"
+}

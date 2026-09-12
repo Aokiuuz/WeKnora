@@ -5,9 +5,7 @@
         <div class="settings-modal">
           <!-- 关闭按钮 -->
           <button class="close-btn" @click="handleClose" :aria-label="$t('general.close')">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-            </svg>
+            <t-icon name="close" size="20px" width="20" height="20" />
           </button>
 
           <div class="settings-container">
@@ -26,16 +24,7 @@
                       'expanded': expandedMenus.includes(item.key)
                     }]" @click="handleNavClick(item)">
                       <!-- 网络搜索使用自定义 SVG 图标 -->
-                      <svg v-if="item.key === 'websearch'" width="17" height="17" viewBox="0 0 18 18" fill="none"
-                        xmlns="http://www.w3.org/2000/svg" class="nav-icon">
-                        <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.2" fill="none" />
-                        <path d="M 9 2 A 3.5 7 0 0 0 9 16" stroke="currentColor" stroke-width="1.2" fill="none" />
-                        <path d="M 9 2 A 3.5 7 0 0 1 9 16" stroke="currentColor" stroke-width="1.2" fill="none" />
-                        <line x1="2.94" y1="5.5" x2="15.06" y2="5.5" stroke="currentColor" stroke-width="1.2"
-                          stroke-linecap="round" />
-                        <line x1="2.94" y1="12.5" x2="15.06" y2="12.5" stroke="currentColor" stroke-width="1.2"
-                          stroke-linecap="round" />
-                      </svg>
+                      <t-icon name="internet" size="17px" v-if="item.key === 'websearch'" width="17" height="17" class="nav-icon" />
                       <!-- WeKnora Cloud 使用自定义 W 图标 -->
                       <svg v-else-if="item.key === 'weknoracloud'" width="17" height="17" viewBox="0 0 18 18"
                         fill="none" xmlns="http://www.w3.org/2000/svg" class="nav-icon">
@@ -44,16 +33,8 @@
                         <path d="M4.5 5.5L6.5 12.5L9 7.5L11.5 12.5L13.5 5.5" stroke="currentColor" stroke-width="1.3"
                           stroke-linecap="round" stroke-linejoin="round" fill="none" />
                       </svg>
-                      <!-- 技能沙箱：隔离运行窗口，避免和 Ollama / 系统设置共用 server -->
-                      <svg v-else-if="item.key === 'sandbox'" width="17" height="17" viewBox="0 0 18 18" fill="none"
-                        xmlns="http://www.w3.org/2000/svg" class="nav-icon">
-                        <rect x="2.5" y="3" width="13" height="12" rx="2" stroke="currentColor" stroke-width="1.2"
-                          fill="none" />
-                        <path d="M2.5 6.5h13" stroke="currentColor" stroke-width="1.2" />
-                        <path d="M5.5 10h4M5.5 12.5h2.5" stroke="currentColor" stroke-width="1.2"
-                          stroke-linecap="round" />
-                      </svg>
-                      <span v-else-if="item.emoji" class="nav-icon nav-icon-emoji">{{ item.emoji }}</span>
+                      <!-- 沙箱：隔离运行窗口，避免和 Ollama / 系统设置共用 server -->
+                      <t-icon name="terminal" size="17px" v-else-if="item.key === 'sandbox'" width="17" height="17" class="nav-icon" />
                       <t-icon v-else :name="item.icon" class="nav-icon" />
                       <span class="nav-label">{{ item.label }}</span>
                       <t-icon v-if="item.children && item.children.length > 0"
@@ -133,6 +114,11 @@
                     <MemorySettings />
                   </div>
 
+                  <!-- 沙箱密钥（成员自己的技能 / 沙箱密钥） -->
+                  <div v-if="currentSection === 'envvars'" class="section">
+                    <EnvVarSettings />
+                  </div>
+
                   <!-- 向量数据库引擎 -->
                   <div v-if="currentSection === 'vectorstore'" class="section">
                     <VectorStoreSettings />
@@ -148,9 +134,14 @@
                     <StorageEngineSettings />
                   </div>
 
-                  <!-- 技能沙箱 -->
+                  <!-- 沙箱 -->
                   <div v-if="currentSection === 'sandbox'" class="section">
                     <SandboxSettings />
+                  </div>
+
+                  <!-- 技能目录：登记后可装到多份沙箱，智能体只从当前沙箱的就绪集合选用 -->
+                  <div v-if="currentSection === 'skills'" class="section">
+                    <SkillSettings :initial-sandbox-id="currentSubSection" />
                   </div>
 
                   <!-- 系统信息 -->
@@ -214,6 +205,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import type { LocationQueryRaw } from 'vue-router'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
@@ -229,11 +221,13 @@ import McpSettings from './McpSettings.vue'
 import WebSearchSettings from './WebSearchSettings.vue'
 import ChatHistorySettings from './ChatHistorySettings.vue'
 import MemorySettings from './MemorySettings.vue'
+import EnvVarSettings from './EnvVarSettings.vue'
 import MemoryWorkspaceSettings from './MemoryWorkspaceSettings.vue'
 import VectorStoreSettings from './VectorStoreSettings.vue'
 import ParserEngineSettings from './ParserEngineSettings.vue'
 import StorageEngineSettings from './StorageBackendSettings.vue'
 import SandboxSettings from './SandboxSettings.vue'
+import SkillSettings from './SkillSettings.vue'
 import WeKnoraCloudSettings from './WeKnoraCloudSettings.vue'
 import TenantMembers from './TenantMembers.vue'
 import SystemSettings from '@/views/system/SystemSettings.vue'
@@ -245,14 +239,21 @@ import {
   INTEGRATION_PREVIEW_ITEMS,
   INTEGRATION_TAB_CAPABILITY,
   INTEGRATION_TAB_MIN_ROLE,
-  INTEGRATION_TABS,
-  type IntegrationTab,
 } from '@/config/integrations'
 import {
   SETTINGS_SECTION_MIN_ROLE,
   SYSTEM_ADMIN_SETTINGS_SECTIONS,
 } from '@/config/settingsAccess'
 import { SETTINGS_SECTION_CAPABILITY } from '@/config/deploymentCapabilities'
+import { SKILL_ICON } from '@/types/mention'
+import {
+  buildSettingsRouteQuery,
+  integrationSectionKey,
+  integrationTabFromSection,
+  isIntegrationSection,
+  normalizeSettingsSection as normalizeSettingsSectionFromQuery,
+  settingsQueryUnchanged,
+} from '@/config/settingsRoute'
 
 const route = useRoute()
 const router = useRouter()
@@ -269,7 +270,6 @@ type NavItem = {
   key: string
   icon: string
   label: string
-  emoji?: string
   children?: Array<{ key: string; label: string }>
 }
 
@@ -283,7 +283,7 @@ type NavGroup = {
 // internal/router/router.go 的守卫矩阵对齐。
 // 以「页面里至少有 1 个有意义的写操作所要求的最低角色」为基准，把基础设
 // 施配置（models 写、ollama 下载、websearch 写、parser/storage/vector/mcp
-// CRUD、chat-history 配置）统一收到 admin；只读类（general / system info /
+// CRUD、sandbox 连接、skills 安装、chat-history 配置）统一收到 admin；只读类（general / system info /
 // tenant-info / members 名册）保留 viewer 可见；最高敏感的 reset api
 // key 是 owner-only。改这张表前请在 router.go 里复核对应路由组。
 //
@@ -295,33 +295,19 @@ type NavGroup = {
 //   ModelSettings.vue 里另用 hasRole('admin') 自己 gate，所以入口保留
 //   viewer 是合理的（contributor 也能浏览模型列表）。
 const SYSTEM_ADMIN_SECTIONS = SYSTEM_ADMIN_SETTINGS_SECTIONS
-const INTEGRATION_SECTION_PREFIX = 'integration-'
-
-const integrationSectionKey = (tab: IntegrationTab) => `${INTEGRATION_SECTION_PREFIX}${tab}`
-
-const integrationTabFromSection = (section: string): IntegrationTab => {
-  const raw = section.startsWith(INTEGRATION_SECTION_PREFIX)
-    ? section.slice(INTEGRATION_SECTION_PREFIX.length)
-    : section
-  if (INTEGRATION_TABS.includes(raw as IntegrationTab)) {
-    return raw as IntegrationTab
-  }
-  return 'im'
-}
-
-const isIntegrationSection = (section: string) => {
-  return section.startsWith(INTEGRATION_SECTION_PREFIX) &&
-    INTEGRATION_TABS.includes(integrationTabFromSection(section))
-}
 
 const normalizeSettingsSection = (section: string) => {
-  if (section === 'api') {
-    return integrationSectionKey('api')
-  }
-  if (section === 'integrations') {
-    return integrationSectionKey(integrationTabFromSection((route.query.tab as string) || 'im'))
-  }
-  return section
+  return normalizeSettingsSectionFromQuery(section, route.query.tab as string | undefined)
+}
+
+const syncSettingsRoute = (sectionKey: string) => {
+  if (route.path !== '/platform/settings') return
+  const query = buildSettingsRouteQuery(sectionKey, route.query)
+  if (settingsQueryUnchanged(route.query, query)) return
+  void router.replace({
+    path: '/platform/settings',
+    query: query as LocationQueryRaw,
+  })
 }
 
 const isSectionSupported = (key: string): boolean => {
@@ -356,8 +342,7 @@ const navItems = computed(() => {
   // 否露入口；改动入口规则请同步更新 settingsAccess.ts 和对应后端路由。
   const integrationItems: NavItem[] = INTEGRATION_PREVIEW_ITEMS.map((item) => ({
     key: integrationSectionKey(item.key),
-    icon: item.icon.type === 'icon' ? item.icon.name : 'integration',
-    emoji: item.icon.type === 'emoji' ? item.icon.value : undefined,
+    icon: item.icon.name,
     label: t(`integrations.tabs.${item.key}`),
   }))
   const all: NavItem[] = [
@@ -372,6 +357,7 @@ const navItems = computed(() => {
     { key: 'parser', icon: 'file-search', label: t('settings.parserEngine') },
     { key: 'storage', icon: 'cloud', label: t('settings.storageEngine') },
     { key: 'sandbox', icon: 'code', label: t('settings.sandbox.title') },
+    { key: 'skills', icon: SKILL_ICON, label: t('settings.skills.title') },
     { key: 'mcp', icon: 'tools', label: t('settings.mcpService') },
     { key: 'system', icon: 'info-circle', label: t('settings.versionInfo') },
     { key: 'system-global', icon: 'server', label: t('settings.system') },
@@ -380,6 +366,7 @@ const navItems = computed(() => {
     { key: 'system-audit-log', icon: 'history', label: t('system.globalSettings.audit.tabLabel') },
     { key: 'userprofile', icon: 'user', label: t('userProfile.title') },
     { key: 'mymemory', icon: 'bookmark', label: t('memorySettings.title') },
+    { key: 'envvars', icon: 'key', label: t('envVarSettings.title') },
     { key: 'tenant', icon: 'user-circle', label: t('settings.tenantInfo') },
     { key: 'members', icon: 'usergroup', label: t('tenantMember.title') },
     ...integrationItems,
@@ -404,7 +391,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'account',
       label: t('settings.navGroups.account'),
-      items: pickItems(['general', 'userprofile', 'mymemory']),
+      items: pickItems(['general', 'userprofile', 'mymemory', 'envvars']),
     },
     {
       key: 'workspace',
@@ -435,6 +422,7 @@ const navGroups = computed<NavGroup[]>(() => {
         'parser',
         'storage',
         'sandbox',
+        'skills',
         'websearch',
         'mcp',
       ]),
@@ -467,25 +455,10 @@ const handleNavClick = (item: any) => {
     currentSubSection.value = ''
   }
 
-  // 切换到对应页面
+  // 切换到对应页面，并同步 URL 为 ?section=<navKey>（含 integration-claw）。
+  // 否则从其它 section 点进来时 query 不变，路由监听会把内容拉回去。
   currentSection.value = item.key
-  if (route.path === '/platform/settings' && isIntegrationSection(item.key)) {
-    router.replace({
-      path: '/platform/settings',
-      query: {
-        ...route.query,
-        section: 'integrations',
-        tab: integrationTabFromSection(item.key),
-      },
-    })
-  } else if (route.path === '/platform/settings' && SYSTEM_ADMIN_SECTIONS.has(item.key)) {
-    const query = { ...route.query }
-    delete query.tab
-    router.replace({
-      path: '/platform/settings',
-      query: { ...query, section: item.key },
-    })
-  }
+  syncSettingsRoute(item.key)
 }
 
 // 子菜单点击处理
@@ -536,6 +509,7 @@ watch(() => uiStore.settingsInitialSection, (section) => {
       return
     }
     currentSection.value = normalizedSection
+    syncSettingsRoute(normalizedSection)
     const navItem = (navItems.value as any[]).find((item) => item.key === normalizedSection)
     if (navItem && navItem.children && navItem.children.length > 0) {
       if (!expandedMenus.value.includes(section)) {
@@ -550,31 +524,47 @@ watch(() => uiStore.settingsInitialSection, (section) => {
           }
         }, 300)
       }
+    } else if (normalizedSection === 'skills') {
+      // Sandbox config id from the agent editor / sandbox cards. Skills has
+      // no nav children, so this is the only way to preselect the target image.
+      currentSubSection.value = uiStore.settingsInitialSubSection || ''
     } else {
       currentSubSection.value = ''
     }
   }
 }, { immediate: true })
 
+watch(() => uiStore.settingsInitialSubSection, (sub) => {
+  if (uiStore.settingsInitialSection === 'skills' && visible.value) {
+    currentSubSection.value = sub || ''
+  }
+})
+
 watch(
-  () => [visible.value, route.query.section, deploymentCapabilities.loaded] as const,
-  ([isVisible, section, capabilitiesLoaded]) => {
-    if (!isVisible || typeof section !== 'string') return
-    const normalizedSection = normalizeSettingsSection(section)
+  () => [visible.value, route.path, route.query.section, deploymentCapabilities.loaded] as const,
+  ([isVisible, path, section, capabilitiesLoaded]) => {
+    if (!isVisible || path !== '/platform/settings') return
+    if (typeof section !== 'string') {
+      syncSettingsRoute(currentSection.value || 'general')
+      return
+    }
+    const normalizedSection = normalizeSettingsSectionFromQuery(
+      section,
+      typeof route.query.tab === 'string' ? route.query.tab : undefined,
+    )
     if (capabilitiesLoaded && !isSectionSupported(normalizedSection)) {
       MessagePlugin.warning(t('settings.capabilityUnavailable'))
-      currentSection.value = navItems.value[0]?.key || 'general'
+      const fallback = navItems.value[0]?.key || 'general'
+      currentSection.value = fallback
       currentSubSection.value = ''
-      if (route.path === '/platform/settings') {
-        const query = { ...route.query }
-        delete query.section
-        delete query.tab
-        void router.replace({ path: route.path, query })
-      }
+      syncSettingsRoute(fallback)
       return
     }
     currentSection.value = normalizedSection
-    currentSubSection.value = ''
+    currentSubSection.value = normalizedSection === 'skills'
+      ? (uiStore.settingsInitialSubSection || '')
+      : ''
+    syncSettingsRoute(normalizedSection)
   },
   { immediate: true },
 )
@@ -583,8 +573,10 @@ watch(
 // 如果 currentSection 落到了不再显示的 key 上，就回退到第一个可见项。
 watch(navItems, (items) => {
   if (!items.some((item) => item.key === currentSection.value)) {
-    currentSection.value = items[0]?.key || 'general'
+    const fallback = items[0]?.key || 'general'
+    currentSection.value = fallback
     currentSubSection.value = ''
+    syncSettingsRoute(fallback)
   }
 })
 
@@ -607,6 +599,7 @@ const handleSettingsNav = (e: CustomEvent) => {
       return
     }
     currentSection.value = normalizedSection
+    syncSettingsRoute(normalizedSection)
     // 如果有子菜单，自动展开
     const navItem = (navItems.value as any[]).find((item: any) => item.key === normalizedSection)
     if (navItem && navItem.children && navItem.children.length > 0) {

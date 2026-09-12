@@ -99,6 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     # Publish on push to main, manual runs (main/tags only), and release tags — never on PRs.
     if: >-
+      github.repository == 'Tencent/WeKnora' &&
       github.event_name != 'pull_request' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/mcp-server-v'))
     permissions:

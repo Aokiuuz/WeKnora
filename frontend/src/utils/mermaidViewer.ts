@@ -1,3 +1,4 @@
+import { lucideMarkup } from '../components/icons/lucide-markup';
 /**
  * Mermaid 图表全屏查看器
  * 支持：点击放大、滚轮缩放、鼠标拖拽、高清导出
@@ -95,11 +96,11 @@ export const openMermaidFullscreen = (svgHtml: string): void => {
   }
 
   const t = (key: string) => i18n.global.t(key);
-  const zoomInBtn = createBtn(t('mermaid.zoomIn'), '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>')
-  const zoomOutBtn = createBtn(t('mermaid.zoomOut'), '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>')
-  const resetBtn = createBtn(t('mermaid.reset'), '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>')
-  const downloadBtn = createBtn(t('mermaid.download'), '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>')
-  const closeBtn = createBtn(t('mermaid.close'), '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>')
+  const zoomInBtn = createBtn(t('mermaid.zoomIn'), lucideMarkup.zoomIn)
+  const zoomOutBtn = createBtn(t('mermaid.zoomOut'), lucideMarkup.zoomOut)
+  const resetBtn = createBtn(t('mermaid.reset'), lucideMarkup.reset)
+  const downloadBtn = createBtn(t('mermaid.download'), lucideMarkup.download)
+  const closeBtn = createBtn(t('mermaid.close'), lucideMarkup.close)
   toolbar.append(zoomInBtn, zoomOutBtn, resetBtn, downloadBtn, closeBtn)
 
   // 创建内容区域

@@ -44,6 +44,11 @@ const (
 	ErrVectorStoreBindingInvalid ErrorCode = 2200
 	ErrVectorStoreUnavailable    ErrorCode = 2201
 
+	// Model lifecycle errors (2300-2399).
+	// The dedicated code lets clients render structured usage details without
+	// parsing the backwards-compatible English error message.
+	ErrModelInUse ErrorCode = 2300
+
 	// Add more error codes here
 )
 
@@ -71,6 +76,17 @@ func NewBadRequestError(message string) *AppError {
 	return &AppError{
 		Code:     ErrBadRequest,
 		Message:  message,
+		HTTPCode: http.StatusBadRequest,
+	}
+}
+
+// NewModelInUseError creates the typed HTTP 400 returned when active tenant
+// resources still reference a model.
+func NewModelInUseError(message string, details any) *AppError {
+	return &AppError{
+		Code:     ErrModelInUse,
+		Message:  message,
+		Details:  details,
 		HTTPCode: http.StatusBadRequest,
 	}
 }
@@ -121,6 +137,27 @@ func NewTooManyRequestsError(message string) *AppError {
 		Code:     ErrTooManyRequests,
 		Message:  message,
 		HTTPCode: http.StatusTooManyRequests,
+	}
+}
+
+// NewRequestEntityTooLargeError creates a 413 error for bounded inputs that
+// exceed configured size limits.
+func NewRequestEntityTooLargeError(message string) *AppError {
+	return &AppError{
+		Code:     ErrValidation,
+		Message:  message,
+		HTTPCode: http.StatusRequestEntityTooLarge,
+	}
+}
+
+// NewUnprocessableEntityError creates a 422 error for semantically valid
+// requests that conflict with a declared capability (e.g. an explicit seed
+// against a provider without seed support).
+func NewUnprocessableEntityError(message string) *AppError {
+	return &AppError{
+		Code:     ErrValidation,
+		Message:  message,
+		HTTPCode: http.StatusUnprocessableEntity,
 	}
 }
 
@@ -215,7 +252,7 @@ func NewAgentMissingAllowedToolsError() *AppError {
 func NewAgentInvalidMaxIterationsError() *AppError {
 	return &AppError{
 		Code:     ErrAgentInvalidMaxIterations,
-		Message:  "最大迭代次数必须在1-20之间",
+		Message:  "最大迭代次数须为正整数，或 -1 表示不限制",
 		HTTPCode: http.StatusBadRequest,
 	}
 }

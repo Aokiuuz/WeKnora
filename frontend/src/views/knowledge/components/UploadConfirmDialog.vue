@@ -4,9 +4,7 @@
       <div v-if="dialogVisible" class="upload-confirm-overlay">
         <div class="upload-confirm-modal" role="dialog" :aria-label="dialogTitle">
           <button class="close-btn" type="button" :aria-label="t('general.close')" @click="handleCancel">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-              <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-            </svg>
+            <t-icon name="close" size="20px" width="20" height="20" aria-hidden="true" />
           </button>
 
           <div class="upload-confirm-container">

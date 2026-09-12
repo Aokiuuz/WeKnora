@@ -22,7 +22,7 @@ WeKnora 的配置由四层组成，**优先级从低到高**：
 3. viper 开启 `AutomaticEnv()` 且 key 分隔符 `.` 映射为 `_`（即 `server.port` 可被环境变量 `SERVER_PORT` 覆盖）；
 4. 从 `config/prompt_templates/*.yaml` 加载提示词模板，并按 `xxx_prompt_id` 字段**回填**到 conversation 配置（`backfillConversationDefaults`）；
 5. 加载 `builtin_agents.yaml`（内置 Agent）与 `agent_type_presets.yaml`（Agent 类型预设），并解析其中的 `system_prompt_id` 引用；
-6. 应用环境变量覆盖（OIDC、Agent、KnowledgeBase、Auth/Tenant、Audit 各组）并执行 `ValidateConfig` 校验。
+6. 应用环境变量覆盖（OIDC、Agent、KnowledgeBase、Evaluation、Auth/Tenant、Audit 各组）并执行 `ValidateConfig` 校验。
 
 ```mermaid
 flowchart LR
@@ -32,7 +32,7 @@ flowchart LR
     V --> BF
     BA["config/builtin_agents.yaml"] --> LD["LoadBuiltinAgentsConfig"]
     AP["config/agent_type_presets.yaml"] --> LD2["LoadAgentTypePresetsConfig"]
-    BF --> OV["applyOIDCEnvOverrides / applyAgentEnvOverrides / applyKnowledgeBaseEnvOverrides / applyAuthAndTenantDefaults / applyAuditDefaults"]
+    BF --> OV["应用 OIDC / Agent / KnowledgeBase / Evaluation / Auth / Tenant / Audit 覆盖"]
     LD --> OV
     LD2 --> OV
     OV --> VC["ValidateConfig"] --> CFG["最终 *config.Config"]
@@ -98,6 +98,17 @@ flowchart LR
 
 > 每个知识库的 `ChunkingConfig` 会覆盖这里的全局默认值。
 
+### evaluation（`EvaluationConfig`）——评估任务生命周期
+
+| 名称 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `task_timeout` | duration | 2h | 单个后台评估任务执行超时（env `WEKNORA_EVALUATION_TASK_TIMEOUT` 可覆盖） |
+
+该超时从后台 goroutine 开始运行时计时，覆盖数据集加载、同步建索引和问答评估。超时通过 Go context
+协作传播，下游调用需要检查 context 才能及时停止。YAML 配置缺失、为零或为负数时使用 2 小时默认值；
+环境变量仅接受正数 Go duration，无效、零或负数值会被忽略，并保留 YAML 配置或代码默认值。
+临时 Knowledge 与评估知识库清理分别使用独立的 30 秒 context，不占用该执行 deadline。
+
 ### extract（`ExtractManagerConfig`）——知识图谱抽取模板
 
 `extract.extract_graph` / `extract.extract_entity` / `extract.fabri_text` 定义图谱抽取的说明文（`description`）、允许的关系标签（`tags`，默认 `Author`、`Alias`）与 few-shot 示例（`examples`：`text` + `node` + `relation`）。初始化向导中的「试抽取 / 生成示例文本」即使用这些配置（`fabri_text.with_tag` / `with_no_tag` 中的 `%s` 会被标签列表替换）。
@@ -144,7 +155,8 @@ flowchart LR
 | `TZ` | Asia/Shanghai | 时区 |
 | `WEKNORA_LANGUAGE` | 空 | 文档处理语言（问题/摘要生成）。优先级：本变量 > 请求的 `Accept-Language` > 内置 `zh-CN`。**它压过请求头**是刻意的：界面语言与文档处理语言是两件事，允许「英文界面 + 处理韩文文档」 |
 | `AUTO_MIGRATE` | true | 启动时自动执行数据库迁移 |
-| `AUTO_RECOVER_DIRTY` | true | 自动修复 golang-migrate 的 dirty 状态（上次迁移中断留下的）。手工排查迁移问题时应临时设为 false，否则启动会自动改写迁移版本记录，见[数据库与迁移](../06-development/02-database-schema.md) |
+| `AUTO_RECOVER_DIRTY` | false | 脏迁移状态阻断启动；设置为 true 返回不支持自动改写版本的错误，见[数据库与迁移](../06-development/02-database-schema.md) |
+| `MIGRATION_BACKUP_ID` | 空 | 现有数据库首次桥接时必填，关联已验证备份；空库初始化可省略 |
 | `WEKNORA_TRUSTED_PROXIES` | 空 | gin 信任代理 CIDR（逗号分隔） |
 | `MAX_FILE_SIZE_MB` | 50 | 上传文件大小限制（app/frontend/docreader 三处共用） |
 | `CONCURRENCY_POOL_SIZE` | 5 | 通用并发池 |
@@ -250,13 +262,14 @@ AWS S3 的 `S3_ACCESS_KEY` / `S3_SECRET_KEY` 可以**同时留空**，此时走 
 
 | 名称 | 默认值 | 说明 |
 | --- | --- | --- |
-| Sandbox 配置 | 设置页按空间维护 | 后端、凭据、模板、超时和私网访问策略不再读取 `WEKNORA_SANDBOX_*` |
-| `WEKNORA_SKILLS_DIR` | 空（镜像内 /app/skills/preloaded） | 自定义 Skills 目录 |
+| Sandbox 配置 | 设置页按空间维护 | 后端、凭据、模板、超时和私网访问策略按空间保存 |
+| `WEKNORA_SANDBOX_DOCKER_ENABLED` | false | Docker 沙箱后端回退开关。系统管理员也可在「设置 → 系统设置」打开（DB 优先，立即生效）。默认关闭，因为本机 `docker.sock` 等同宿主机 root |
 | `WEKNORA_AGENT_LLM_TIMEOUT` | 120s | Agent 单次 LLM 调用超时（Go duration 或纯数字秒） |
 | `WEKNORA_AGENT_TOOL_APPROVAL_TIMEOUT` / `_FAIL_OPEN` | 600s / fail-close | MCP 工具人工审批等待与失败策略 |
 | `WEKNORA_CHAT_ATTACHMENT_TTL_HOURS` / `_WAIT_TIMEOUT_SEC` / `_OCR_CONCURRENCY` / `_OCR_MAX_PAGES` | 24 / 60 / 8 / 8 | 聊天附件解析保留时长、等待超时与 OCR 并发/页数上限 |
 | `WEKNORA_HOUSEKEEPING_ENABLED` | 启用 | 回收卡在 processing 的脏数据 |
 | `WEKNORA_DOCUMENT_PROCESS_TIMEOUT` / `WEKNORA_DOCREADER_CALL_TIMEOUT` | 2h / 30m | 文档处理任务与单次 RPC 超时 |
+| `WEKNORA_EVALUATION_TASK_TIMEOUT` | 2h | 单个后台评估任务执行超时（Go duration） |
 
 ### 可观测性（Langfuse）
 

@@ -5,9 +5,7 @@
         <div class="settings-modal">
           <!-- 关闭按钮 -->
           <button class="close-btn" @click="handleClose" :aria-label="$t('common.close')">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-            </svg>
+            <t-icon name="close" size="20px" width="20" height="20" />
           </button>
 
           <div class="settings-container">
@@ -52,7 +50,7 @@
                   </div>
 
                   <div class="settings-group">
-                    <!-- 空间名称与头像：一行展示，头像点击弹出 Emoji 选择 -->
+                    <!-- 空间名称与头像：一行展示，头像点击弹出图标选择 -->
                     <div class="setting-row">
                       <div class="setting-info">
                         <label>{{ $t('organization.name') }} <span class="required">*</span></label>
@@ -61,24 +59,24 @@
                       <div class="setting-control">
                         <div class="name-input-wrapper">
                           <t-popup v-model="avatarPopoverVisible" trigger="click" placement="bottom-left"
-                            :disabled="!isAdmin" overlay-class-name="avatar-emoji-popover">
-                            <div class="avatar-trigger-wrap">
+                            :disabled="!isAdmin" overlay-class-name="avatar-icon-popover">
+                            <button type="button" class="avatar-trigger-wrap" :aria-label="$t('organization.avatarPickerHint')" :disabled="!isAdmin">
                               <SpaceAvatar :name="formData.name || '?'" :avatar="formData.avatar" size="medium" />
                               <span v-if="isAdmin" class="avatar-change-hint">{{ $t('organization.avatar') }}</span>
-                            </div>
+                            </button>
                             <template #content>
                               <div class="avatar-popover-content" @click.stop>
                                 <p class="avatar-popover-title">{{ $t('organization.avatarPickerHint') }}</p>
-                                <div class="avatar-emoji-grid">
-                                  <button v-for="emoji in avatarEmojiOptions" :key="emoji" type="button"
-                                    class="avatar-emoji-btn"
-                                    :class="{ 'is-selected': formData.avatar === 'emoji:' + emoji }"
-                                    @click="selectAvatarEmoji(emoji)">
-                                    {{ emoji }}
+                                <div class="avatar-icon-grid">
+                                  <button v-for="icon in avatarIconOptions" :key="icon" type="button"
+                                    class="avatar-icon-btn"
+                                    :class="{ 'is-selected': formData.avatar === 'icon:' + icon }"
+                                    :aria-label="icon" :aria-pressed="formData.avatar === 'icon:' + icon" @click="selectAvatarIcon(icon)">
+                                    <t-icon :name="icon" size="20px" />
                                   </button>
                                 </div>
                                 <t-button v-if="formData.avatar" variant="text" size="small" class="avatar-clear-btn"
-                                  @click="clearAvatarEmoji">
+                                  @click="clearAvatarIcon">
                                   {{ $t('organization.avatarClear') }}
                                 </t-button>
                               </div>
@@ -265,7 +263,7 @@
                         <li><t-icon name="check" class="check-icon" />{{ $t('organization.editor.editorPerm1') }}</li>
                         <li><t-icon name="check" class="check-icon" />{{ $t('organization.editor.editorPerm2') }}</li>
                         <li><t-icon name="check" class="check-icon" />{{ $t('organization.editor.useSharedAgentsPerm') }}</li>
-                        <li><t-icon name="close" class="close-icon" />{{ $t('organization.editor.shareKBPerm') }}</li>
+                        <li><t-icon name="check" class="check-icon" />{{ $t('organization.editor.shareKBPerm') }}</li>
                         <li><t-icon name="close" class="close-icon" />{{ $t('organization.editor.editorPerm3') }}</li>
                       </ul>
                     </div>
@@ -908,19 +906,18 @@ const formData = ref({
   member_limit: 50 as number // 0 = unlimited
 })
 
-// 空间头像可选 Emoji（方案三：Emoji 作为头像）
-const avatarEmojiOptions = [
-  '🚀', '📁', '👥', '🏢', '💡', '📚', '🌟', '🔧', '📌', '🎯',
-  '📂', '🔒', '🌐', '⚡', '🎨', '📊', '🤝', '💼', '📧', '🏠',
-  '🔑', '📈', '✨', '📋', '🌍', '💬', '🔔', '📦', '🎉', '🌈'
+// Lucide avatar choices; stored legacy values remain unchanged until an explicit selection.
+const avatarIconOptions = [
+  'folder', 'usergroup', 'building', 'lightbulb', 'book', 'star', 'tools', 'pin', 'focus',
+  'lock-on', 'internet', 'chart-bar', 'mail', 'home', 'key', 'chart-line', 'task', 'chat', 'notification', 'extension'
 ]
 const avatarPopoverVisible = ref(false)
 
-function selectAvatarEmoji(emoji: string) {
-  formData.value.avatar = 'emoji:' + emoji
+function selectAvatarIcon(icon: string) {
+  formData.value.avatar = 'icon:' + icon
   avatarPopoverVisible.value = false
 }
-function clearAvatarEmoji() {
+function clearAvatarIcon() {
   formData.value.avatar = ''
   avatarPopoverVisible.value = false
 }
@@ -1098,7 +1095,7 @@ const orgRoleMatrix: Record<OrgRole, OrgRolePerm[]> = {
     { key: 'viewerPerm1', has: true },
     { key: 'editorPerm1', has: true },
     { key: 'useSharedAgentsPerm', has: true },
-    { key: 'shareKBPerm', has: false },
+    { key: 'shareKBPerm', has: true },
     { key: 'adminPerm1', has: false },
   ],
   viewer: [
@@ -1957,6 +1954,24 @@ watch(addMemberPopupVisible, (visible) => {
   }
 }
 
+@media (max-width: 640px) {
+  .settings-overlay .settings-modal { width: calc(100vw - 24px); height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
+  .settings-modal .settings-container { flex-direction: column; }
+  .settings-modal .settings-sidebar { width: 100%; border-right: 0; border-bottom: 1px solid var(--td-component-stroke); }
+  .settings-modal .sidebar-header { padding: 14px 44px 12px 16px; }
+  .settings-modal .settings-nav { display: flex; gap: 4px; overflow-x: auto; overflow-y: hidden; padding: 8px; }
+  .settings-modal .nav-group-title { display: none; }
+  .settings-modal .nav-item { flex: 0 0 auto; white-space: nowrap; }
+  .settings-modal .content-wrapper { padding: 20px 16px 32px; }
+  .settings-modal .setting-row { flex-direction: column; align-items: stretch; gap: 12px; }
+  .settings-modal .setting-row .setting-info, .settings-modal .setting-row .setting-control { width: 100%; max-width: 100%; flex: initial; }
+  .settings-modal .name-input-wrapper { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-enter-active, .modal-leave-active, .nav-item { transition: none !important; }
+}
+
 .settings-container {
   display: flex;
   height: 100%;
@@ -2402,14 +2417,14 @@ watch(addMemberPopupVisible, (visible) => {
   line-height: 1.4;
 }
 
-.avatar-popover-content .avatar-emoji-grid {
+.avatar-popover-content .avatar-icon-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   max-width: 280px;
 }
 
-.avatar-popover-content .avatar-emoji-btn {
+.avatar-popover-content .avatar-icon-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2424,12 +2439,12 @@ watch(addMemberPopupVisible, (visible) => {
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 
-.avatar-popover-content .avatar-emoji-btn:hover {
+.avatar-popover-content .avatar-icon-btn:hover {
   border-color: var(--td-brand-color);
   background: rgba(7, 192, 95, 0.06);
 }
 
-.avatar-popover-content .avatar-emoji-btn.is-selected {
+.avatar-popover-content .avatar-icon-btn.is-selected {
   border-color: var(--td-brand-color);
   background: rgba(7, 192, 95, 0.12);
 }

@@ -35,7 +35,7 @@
           <div class="result-meta">
             <span class="score">{{ (result.score * 100).toFixed(0) }}%</span>
             <span class="expand-icon" :class="{ expanded: expandedResults.includes(result.chunk_id) }">
-              ▶
+              <t-icon name="chevron-right" aria-hidden="true" />
             </span>
           </div>
         </div>

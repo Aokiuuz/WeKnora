@@ -94,9 +94,14 @@ app:
     STORAGE_TYPE: local
     LOCAL_STORAGE_BASE_DIR: /data/files
     AUTO_RECOVER_DIRTY: "true"
+    # -- Stream backend when redis.enabled is true; redis.enabled=false uses memory
     STREAM_MANAGER_TYPE: redis
     CONCURRENCY_POOL_SIZE: "5"
     TZ: UTC
+    # Docker sandbox talks to a local Engine API (often docker.sock = host root).
+    # Leave false unless this is a private single-node install that also mounts
+    # the daemon socket or points at a remote tcp:// daemon with TLS.
+    WEKNORA_SANDBOX_DOCKER_ENABLED: "false"
 
   # -- Additional environment variables
   extraEnv: []
@@ -111,7 +116,7 @@ app:
   # -- Liveness probe configuration
   livenessProbe:
     httpGet:
-      path: /health
+      path: /health/live
       port: http
     initialDelaySeconds: 30
     periodSeconds: 10
@@ -121,7 +126,7 @@ app:
   # -- Readiness probe configuration
   readinessProbe:
     httpGet:
-      path: /health
+      path: /health/ready
       port: http
     initialDelaySeconds: 10
     periodSeconds: 5
@@ -150,8 +155,8 @@ frontend:
   image:
     # -- Image repository
     repository: wechatopenai/weknora-ui
-    # -- Image tag
-    tag: latest
+    # -- Image tag (defaults to Chart.appVersion if empty)
+    tag: ""
     # -- Image pull policy
     pullPolicy: IfNotPresent
 
@@ -197,8 +202,8 @@ docreader:
   image:
     # -- Image repository
     repository: wechatopenai/weknora-docreader
-    # -- Image tag
-    tag: latest
+    # -- Image tag (defaults to Chart.appVersion if empty)
+    tag: ""
     # -- Image pull policy
     pullPolicy: IfNotPresent
 
@@ -284,7 +289,8 @@ postgresql:
 # Redis (Stream & Task Queue)
 # -----------------------------------------------------------------------------
 redis:
-  # -- Enable Redis
+  # -- Deploy bundled Redis and configure the app to require it
+  # When false, streams are kept in process memory and are not shared by replicas.
   enabled: true
 
   image:
@@ -407,7 +413,8 @@ secrets:
   systemAesKey: ""
 
   # -- Use existing secret instead of creating one
-  # The secret must contain keys: DB_USER, DB_PASSWORD, DB_NAME, REDIS_USERNAME, REDIS_PASSWORD, JWT_SECRET, SYSTEM_AES_KEY
+  # The secret must contain DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET, and SYSTEM_AES_KEY.
+  # REDIS_USERNAME and REDIS_PASSWORD are also required when redis.enabled=true.
   existingSecret: ""
 
 # -----------------------------------------------------------------------------

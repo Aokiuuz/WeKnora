@@ -1,5 +1,8 @@
 import { get, post, postUpload, put, del } from '../../utils/request';
 import i18n from '@/i18n'
+import { ModelInUseError, modelInUseErrorFromRequest } from './modelUsage'
+
+export * from './modelUsage'
 
 const t = (key: string) => i18n.global.t(key)
 
@@ -28,6 +31,9 @@ export interface ModelConfig {
     // 会在调用远程模型 API 时附加到每个请求上。Authorization、Content-Type 等保留头会被忽略。
     custom_headers?: Record<string, string>;
     supports_vision?: boolean; // Whether the model accepts image/multimodal input
+    // 对话/VLM 的上下文窗口（token）。0 或不填表示使用后端默认 200000。
+    context_window?: number;
+    max_output_tokens?: number;
     // 后台任务（入库/富化）对该模型的并发上限，按模型 ID 全副本共享。
     // 0 或不填表示沿用全局默认（model.max_concurrency）；仅对 chat/embedding/vllm 生效。
     max_concurrency?: number;
@@ -135,11 +141,25 @@ export function deleteModel(id: string): Promise<void> {
         if (response.success) {
           resolve();
         } else {
+          const conflict = modelInUseErrorFromRequest(response)
+          if (conflict) {
+            reject(conflict)
+            return
+          }
           reject(new Error(response.message || t('error.model.deleteFailed')));
         }
       })
       .catch((error: any) => {
         console.error('Failed to delete model:', error);
+        if (error instanceof ModelInUseError) {
+          reject(error)
+          return
+        }
+        const conflict = modelInUseErrorFromRequest(error)
+        if (conflict) {
+          reject(conflict)
+          return
+        }
         reject(error);
       });
   });
@@ -258,4 +278,104 @@ export function getWeKnoraCloudStatus(): Promise<WeKnoraCloudStatusResult> {
         resolve({ has_models: false, needs_reinit: false })
       })
   })
+}
+
+export interface ModelCostTotal {
+  currency: string
+  cost_microunits: number
+}
+
+export interface ModelUsageStatistics {
+  model_id: string
+  call_count: number
+  started_calls: number
+  success_calls: number
+  error_calls: number
+  canceled_calls: number
+  usage_reported_calls: number
+  usage_unreported_calls: number
+  accounting_complete_calls: number
+  unpriced_calls: number
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  average_duration_ms: number
+  latency: {
+    p50_ms: number | null
+    p95_ms: number | null
+    p99_ms: number | null
+    reported_calls: number
+  }
+  costs: ModelCostTotal[]
+  provider_cache: {
+    read_tokens: number
+    write_tokens: number
+    miss_tokens: number
+    observed_tokens: number
+    hit_rate: number | null
+  }
+  application_cache: {
+    lookup_count: number
+    bypass_lookup_count: number
+    requested_items: number
+    unique_items: number
+    hit_items: number
+    miss_items: number
+    bypass_items: number
+    observed_items: number
+    hit_rate: number | null
+    average_lookup_duration_ms: number
+  }
+}
+
+export interface ModelUsageResponse {
+  from: string
+  to: string
+  items: ModelUsageStatistics[]
+}
+
+export interface ModelCachePricing {
+  version: 1
+  read_microunits_per_million?: number
+  write_5m_microunits_per_million?: number
+  write_1h_microunits_per_million?: number
+}
+
+export interface ModelPriceVersion {
+  id: string
+  tenant_id: number
+  model_id: string
+  valid_from: string
+  valid_to?: string
+  cache_pricing?: ModelCachePricing | null
+  input_microunits_per_million: number
+  output_microunits_per_million: number
+  currency: string
+  created_at: string
+}
+
+export async function listModelUsage(params: {
+  from?: string
+  to?: string
+  modelIds?: string[]
+} = {}): Promise<ModelUsageResponse> {
+  const query = new URLSearchParams()
+  if (params.from) query.set('from', params.from)
+  if (params.to) query.set('to', params.to)
+  if (params.modelIds?.length) query.set('model_ids', params.modelIds.join(','))
+  const response: any = await get(`/api/v1/models/usage${query.size ? `?${query}` : ''}`)
+  return response.data as ModelUsageResponse
+}
+
+export async function listModelPrices(modelId: string): Promise<ModelPriceVersion[]> {
+  const response: any = await get(`/api/v1/models/${modelId}/pricing`)
+  return (response.data || []) as ModelPriceVersion[]
+}
+
+export async function putModelPrice(
+  modelId: string,
+  body: Omit<ModelPriceVersion, 'id' | 'tenant_id' | 'model_id' | 'created_at'>,
+): Promise<ModelPriceVersion> {
+  const response: any = await put(`/api/v1/models/${modelId}/pricing`, body)
+  return response.data as ModelPriceVersion
 }

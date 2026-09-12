@@ -3,17 +3,11 @@
     <div v-if="data.steps && data.steps.length > 0" class="plan-steps">
       <div v-for="(step, index) in data.steps" :key="step.id || index" class="step-item" :class="`status-${step.status}`">
         <div class="step-checkbox" :class="{ 'checked': step.status === 'completed', 'in-progress': step.status === 'in_progress' }">
-          <svg v-if="step.status === 'completed'" width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect x="2" y="2" width="12" height="12" rx="2" fill="currentColor" />
-            <path d="M5 8L7 10L11 6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <svg v-else width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5" fill="none" />
-          </svg>
+          <t-icon :name="step.status === 'completed' ? 'check-rectangle' : 'stop'" size="16px" />
         </div>
         <span class="step-description" :class="{ 'completed': step.status === 'completed' }">
           {{ step.description }}
-          <span v-if="step.status === 'in_progress'" class="sparkle">✨</span>
+          <t-icon v-if="step.status === 'in_progress'" name="loading" class="sparkle" />
         </span>
       </div>
     </div>

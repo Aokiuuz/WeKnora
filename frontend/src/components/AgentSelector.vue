@@ -22,7 +22,7 @@
                 <TIcon :name="agent.config?.agent_mode === 'smart-reasoning' ? 'control-platform' : 'chat'"
                   size="13px" />
               </div>
-              <div v-else-if="agent.avatar" class="builtin-avatar">{{ agent.avatar }}</div>
+              <AgentAvatar v-else-if="agent.avatar" :name="agent.name" size="small" />
               <div v-else class="builtin-icon normal">
                 <TIcon name="app" size="13px" />
               </div>

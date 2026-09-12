@@ -147,6 +147,30 @@ func parseOssFilePath(filePath string) (bucketName string, objectKey string, err
 	return parts[0], parts[1], nil
 }
 
+func (s *ossFileService) ossClientForPath(
+	filePath string,
+) (bucketName string, objectKey string, client *oss.Client, err error) {
+	bucketName, objectKey, err = parseOssFilePath(filePath)
+	if err != nil {
+		return "", "", nil, err
+	}
+	switch bucketName {
+	case s.bucketName:
+		client = s.client
+	case s.tempBucketName:
+		if s.tempBucketName == "" || s.tempClient == nil {
+			return "", "", nil, fmt.Errorf("OSS bucket mismatch in path")
+		}
+		client = s.tempClient
+	default:
+		return "", "", nil, fmt.Errorf("OSS bucket mismatch in path")
+	}
+	if err := utils.SafeObjectKey(objectKey); err != nil {
+		return "", "", nil, fmt.Errorf("invalid file path: %w", err)
+	}
+	return bucketName, objectKey, client, nil
+}
+
 // CheckConnectivity verifies OSS is reachable and the main bucket exists.
 func (s *ossFileService) CheckConnectivity(ctx context.Context) error {
 	checkCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -253,12 +277,9 @@ func (s *ossFileService) SaveBytes(ctx context.Context, data []byte, tenantID ui
 func (s *ossFileService) CopyFile(ctx context.Context,
 	srcPath string, tenantID uint64, knowledgeID string,
 ) (string, error) {
-	srcBucket, srcKey, err := parseOssFilePath(srcPath)
+	srcBucket, srcKey, _, err := s.ossClientForPath(srcPath)
 	if err != nil {
 		return "", fmt.Errorf("oss copy rejected source %q: %w", srcPath, ErrCrossBackendCopy)
-	}
-	if err := utils.SafeObjectKey(srcKey); err != nil {
-		return "", fmt.Errorf("invalid source path: %w", err)
 	}
 
 	ext := filepath.Ext(srcPath)
@@ -281,21 +302,10 @@ func (s *ossFileService) CopyFile(ctx context.Context,
 
 // GetFile retrieves a file from OSS by its path.
 func (s *ossFileService) GetFile(ctx context.Context, filePath string) (io.ReadCloser, error) {
-	bucketName, objectName, err := parseOssFilePath(filePath)
+	bucketName, objectName, client, err := s.ossClientForPath(filePath)
 	if err != nil {
 		return nil, err
 	}
-	if err := utils.SafeObjectKey(objectName); err != nil {
-		return nil, fmt.Errorf("invalid file path: %w", err)
-	}
-
-	var client *oss.Client
-	if bucketName == s.tempBucketName && s.tempClient != nil {
-		client = s.tempClient
-	} else {
-		client = s.client
-	}
-
 	resp, err := client.GetObject(ctx, &oss.GetObjectRequest{
 		Bucket: oss.Ptr(bucketName),
 		Key:    oss.Ptr(objectName),
@@ -309,21 +319,10 @@ func (s *ossFileService) GetFile(ctx context.Context, filePath string) (io.ReadC
 
 // DeleteFile removes a file from OSS.
 func (s *ossFileService) DeleteFile(ctx context.Context, filePath string) error {
-	bucketName, objectName, err := parseOssFilePath(filePath)
+	bucketName, objectName, client, err := s.ossClientForPath(filePath)
 	if err != nil {
 		return err
 	}
-	if err := utils.SafeObjectKey(objectName); err != nil {
-		return fmt.Errorf("invalid file path: %w", err)
-	}
-
-	var client *oss.Client
-	if bucketName == s.tempBucketName && s.tempClient != nil {
-		client = s.tempClient
-	} else {
-		client = s.client
-	}
-
 	_, err = client.DeleteObject(ctx, &oss.DeleteObjectRequest{
 		Bucket: oss.Ptr(bucketName),
 		Key:    oss.Ptr(objectName),
@@ -337,22 +336,10 @@ func (s *ossFileService) DeleteFile(ctx context.Context, filePath string) error 
 
 // GetFileURL returns a presigned download URL for the file.
 func (s *ossFileService) GetFileURL(ctx context.Context, filePath string) (string, error) {
-	bucketName, objectName, err := parseOssFilePath(filePath)
+	bucketName, objectName, client, err := s.ossClientForPath(filePath)
 	if err != nil {
 		return "", err
 	}
-	if err := utils.SafeObjectKey(objectName); err != nil {
-		return "", fmt.Errorf("invalid file path: %w", err)
-	}
-
-	// Determine which client to use
-	var client *oss.Client
-	if bucketName == s.tempBucketName && s.tempClient != nil {
-		client = s.tempClient
-	} else {
-		client = s.client
-	}
-
 	// Generate presigned URL (valid for 24 hours)
 	result, err := client.Presign(ctx, &oss.GetObjectRequest{
 		Bucket: oss.Ptr(bucketName),

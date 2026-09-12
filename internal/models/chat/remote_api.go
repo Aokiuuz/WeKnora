@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/Tencent/WeKnora/internal/models/call"
 
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/provider"
@@ -81,7 +84,7 @@ func NewRemoteAPIChat(chatConfig *ChatConfig) (*RemoteAPIChat, error) {
 	if len(chatConfig.CustomHeaders) > 0 {
 		sdkHTTPClient = secutils.WrapHTTPClientWithHeaders(sdkHTTPClient, chatConfig.CustomHeaders)
 	}
-	config.HTTPClient = sdkHTTPClient
+	config.HTTPClient = usageCapturingHTTPClient{inner: sdkHTTPClient}
 
 	modelName := chatConfig.ModelName
 	if chatConfig.ExtraConfig != nil {
@@ -132,7 +135,7 @@ func (c *RemoteAPIChat) shapedRequest(messages []Message, opts *ChatOptions, isS
 // path is required. This is the single place that composes adapter + thinking,
 // replacing the former buildRequestCustomizer plumbing.
 func (c *RemoteAPIChat) buildOutbound(
-	messages []Message, opts *ChatOptions, isStream bool,
+	ctx context.Context, messages []Message, opts *ChatOptions, isStream bool,
 ) (body any, endpoint string, useRawHTTP bool, err error) {
 	req := c.shapedRequest(messages, opts, isStream)
 
@@ -150,8 +153,18 @@ func (c *RemoteAPIChat) buildOutbound(
 	if err != nil {
 		return nil, "", false, err
 	}
+
+	retention := resolveCacheRetention(opts)
+	policy := promptCachePolicyFor(c.provider, c.baseURL)
+	sessionID := promptCacheSessionID(ctx, opts)
+	cachedBody, forceRaw, err := applyPromptCacheToJSONBody(body, policy, sessionID, retention)
+	if err != nil {
+		return nil, "", false, err
+	}
+	body = cachedBody
+
 	endpoint = c.adapter.Endpoint(c.baseURL, c.modelID, isStream)
-	useRawHTTP = useRaw || c.adapter.ForceRawHTTP() || endpoint != ""
+	useRawHTTP = useRaw || c.adapter.ForceRawHTTP() || endpoint != "" || forceRaw
 	return body, endpoint, useRawHTTP, nil
 }
 
@@ -164,25 +177,54 @@ func (c *RemoteAPIChat) logRequest(ctx context.Context, req any, isStream bool) 
 }
 
 // Chat 进行非流式聊天
-func (c *RemoteAPIChat) Chat(ctx context.Context, messages []Message, opts *ChatOptions) (*types.ChatResponse, error) {
+func (
+	c *RemoteAPIChat,
+) Chat(
+	ctx context.Context,
+	messages []Message,
+	opts *ChatOptions,
+) (
+	result *types.ChatResponse,
+	err error,
+) {
 	// 仅在调用方未设置 deadline 时附加一个兜底超时，防止 hung 请求永久阻塞 worker；
 	// 调用方若显式设置了更短或更长的 deadline，都会被原样尊重。
 	timeoutCtx, cancel := withLLMTimeout(ctx, defaultChatTimeout)
 	defer cancel()
+	timeoutCtx, evidence := captureUsage(timeoutCtx)
 
-	body, endpoint, useRawHTTP, err := c.buildOutbound(messages, opts, false)
+	body, endpoint, useRawHTTP, err := c.buildOutbound(timeoutCtx, messages, opts, false)
 	if err != nil {
 		return nil, err
 	}
 	if useRawHTTP {
-		return c.chatWithRawHTTP(timeoutCtx, endpoint, body)
+		return c.chatWithRawHTTP(timeoutCtx, endpoint, body, opts)
 	}
 
-	req := *(body.(*openai.ChatCompletionRequest))
+	req := *body.(*openai.ChatCompletionRequest)
 	c.logRequest(timeoutCtx, req, false)
+	finish, err := call.Start(timeoutCtx, "chat")
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		var usage *types.TokenUsage
+		if result != nil {
+			usage = &result.Usage
+		}
+		err = finish(err, usage)
+	}()
 	resp, err := c.client.CreateChatCompletion(timeoutCtx, req)
 	if err != nil {
-		if isMultimodalNotSupportedError(err) {
+		if isMultimodalNotSupportedError(err) && !errors.Is(err, types.ErrModelAccounting) {
+			if failure := finish(err, nil); errors.Is(failure, types.ErrModelAccounting) {
+				return nil, failure
+			}
+			finish, err = call.Start(timeoutCtx, "chat")
+			if err != nil {
+				finish = func(e error, _ *types.TokenUsage) error { return e }
+				return nil, err
+			}
 			logger.Warnf(timeoutCtx, "[LLM Request] Model %s does not support multimodal, retrying without images", c.modelName)
 			cleaned := stripImagesFromMessages(messages)
 			req = c.shapedRequest(cleaned, opts, false)
@@ -193,16 +235,27 @@ func (c *RemoteAPIChat) Chat(ctx context.Context, messages []Message, opts *Chat
 		}
 	}
 
-	result, err := c.parseCompletionResponse(&resp)
+	result, err = c.parseCompletionResponse(&resp)
 	if err != nil {
 		return nil, err
 	}
+	applyRawPromptCacheUsage(evidence.body, &result.Usage)
 	logUsage(timeoutCtx, c.modelName, &result.Usage)
 	return result, nil
 }
 
 // chatWithRawHTTP 使用原始 HTTP 请求进行聊天（供自定义请求使用）
-func (c *RemoteAPIChat) chatWithRawHTTP(ctx context.Context, endpoint string, customReq any) (*types.ChatResponse, error) {
+func (
+	c *RemoteAPIChat,
+) chatWithRawHTTP(
+	ctx context.Context,
+	endpoint string,
+	customReq any,
+	opts *ChatOptions,
+) (
+	result *types.ChatResponse,
+	err error,
+) {
 	jsonData, err := json.Marshal(customReq)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
@@ -227,10 +280,22 @@ func (c *RemoteAPIChat) chatWithRawHTTP(ctx context.Context, endpoint string, cu
 
 	// 注入用户自定义 header（保留头会在工具内部自动跳过）
 	secutils.ApplyCustomHeaders(httpReq, c.customHeaders)
+	attachPromptCacheHeaders(httpReq, promptCachePolicyFor(c.provider, c.baseURL), promptCacheSessionID(ctx, opts))
 
 	logger.Infof(ctx, "[LLM Request] Remote HTTP, endpoint=%s, model=%s",
 		endpoint, c.modelName)
 
+	finish, err := call.Start(ctx, "chat")
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		var usage *types.TokenUsage
+		if result != nil {
+			usage = &result.Usage
+		}
+		err = finish(err, usage)
+	}()
 	resp, err := rawHTTPClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("send request: %w", err)
@@ -252,7 +317,7 @@ func (c *RemoteAPIChat) chatWithRawHTTP(ctx context.Context, endpoint string, cu
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
-	result, err := c.parseCompletionResponse(&chatResp)
+	result, err = c.parseCompletionResponse(&chatResp)
 	if err != nil {
 		return nil, err
 	}
@@ -268,17 +333,17 @@ func (c *RemoteAPIChat) ChatStream(ctx context.Context, messages []Message, opts
 	// 因为带思考/推理的模型可能数十秒甚至几分钟才产出首 token。
 	timeoutCtx, cancel := withLLMTimeout(ctx, defaultStreamTimeout)
 
-	body, endpoint, useRawHTTP, err := c.buildOutbound(messages, opts, true)
+	body, endpoint, useRawHTTP, err := c.buildOutbound(timeoutCtx, messages, opts, true)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 	if useRawHTTP {
-		ch, err := c.chatStreamWithRawHTTP(timeoutCtx, endpoint, body)
-		return wrapStreamCancel(ch, err, cancel)
+		ch, err := c.chatStreamWithRawHTTP(timeoutCtx, endpoint, body, opts)
+		return wrapStreamCancel(timeoutCtx, ch, err, cancel)
 	}
 
-	req := *(body.(*openai.ChatCompletionRequest))
+	req := *body.(*openai.ChatCompletionRequest)
 	c.logRequest(timeoutCtx, req, true)
 
 	streamDumper := newStreamPacketDumper(c.modelName, &req)
@@ -288,9 +353,23 @@ func (c *RemoteAPIChat) ChatStream(ctx context.Context, messages []Message, opts
 
 	streamChan := make(chan types.StreamResponse)
 
+	finish, err := call.Start(timeoutCtx, "chat_stream")
+	if err != nil {
+		cancel()
+		return nil, err
+	}
 	stream, err := c.client.CreateChatCompletionStream(timeoutCtx, req)
 	if err != nil {
-		if isMultimodalNotSupportedError(err) {
+		if isMultimodalNotSupportedError(err) && !errors.Is(err, types.ErrModelAccounting) {
+			if failure := finish(err, nil); errors.Is(failure, types.ErrModelAccounting) {
+				cancel()
+				return nil, failure
+			}
+			finish, err = call.Start(timeoutCtx, "chat_stream")
+			if err != nil {
+				cancel()
+				return nil, err
+			}
 			logger.Warnf(timeoutCtx, "[LLM Stream] Model %s does not support multimodal, retrying without images", c.modelName)
 			cleaned := stripImagesFromMessages(messages)
 			req = c.shapedRequest(cleaned, opts, true)
@@ -299,24 +378,31 @@ func (c *RemoteAPIChat) ChatStream(ctx context.Context, messages []Message, opts
 		if err != nil {
 			cancel()
 			close(streamChan)
-			return nil, fmt.Errorf("create chat completion stream: %w", err)
+			return nil, finish(fmt.Errorf("create chat completion stream: %w", err), nil)
 		}
 	}
 
 	go func() {
-		defer cancel()
 		if streamDumper != nil {
 			defer streamDumper.Close()
 		}
 		c.processStream(timeoutCtx, stream, streamChan, streamDumper)
 	}()
 
-	return streamChan, nil
+	return wrapStreamCancel(timeoutCtx, call.FinishStream(timeoutCtx, streamChan, finish), nil, cancel)
 }
 
 // wrapStreamCancel 在子 channel 关闭后执行 cancel，避免 timeout context 泄漏。
 // 当底层调用直接返回 error 时，立即调用 cancel 并将 error 透出。
-func wrapStreamCancel(in <-chan types.StreamResponse, err error, cancel context.CancelFunc) (<-chan types.StreamResponse, error) {
+func wrapStreamCancel(
+	ctx context.Context,
+	in <-chan types.StreamResponse,
+	err error,
+	cancel context.CancelFunc,
+) (
+	<-chan types.StreamResponse,
+	error,
+) {
 	if err != nil {
 		cancel()
 		return nil, err
@@ -326,14 +412,16 @@ func wrapStreamCancel(in <-chan types.StreamResponse, err error, cancel context.
 		defer cancel()
 		defer close(out)
 		for v := range in {
-			out <- v
+			if !emitStream(ctx, out, v) {
+				return
+			}
 		}
 	}()
 	return out, nil
 }
 
 // chatStreamWithRawHTTP 使用原始 HTTP 请求进行流式聊天
-func (c *RemoteAPIChat) chatStreamWithRawHTTP(ctx context.Context, endpoint string, customReq any) (<-chan types.StreamResponse, error) {
+func (c *RemoteAPIChat) chatStreamWithRawHTTP(ctx context.Context, endpoint string, customReq any, opts *ChatOptions) (<-chan types.StreamResponse, error) {
 	jsonData, err := json.Marshal(customReq)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
@@ -363,16 +451,21 @@ func (c *RemoteAPIChat) chatStreamWithRawHTTP(ctx context.Context, endpoint stri
 
 	// 注入用户自定义 header（保留头会在工具内部自动跳过）
 	secutils.ApplyCustomHeaders(httpReq, c.customHeaders)
+	attachPromptCacheHeaders(httpReq, promptCachePolicyFor(c.provider, c.baseURL), promptCacheSessionID(ctx, opts))
 
+	finish, err := call.Start(ctx, "chat_stream")
+	if err != nil {
+		return nil, err
+	}
 	resp, err := rawHTTPClient.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
+		return nil, finish(fmt.Errorf("send request: %w", err), nil)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		return nil, finish(fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body)), nil)
 	}
 
 	streamChan := make(chan types.StreamResponse)
@@ -388,7 +481,7 @@ func (c *RemoteAPIChat) chatStreamWithRawHTTP(ctx context.Context, endpoint stri
 		c.processRawHTTPStream(ctx, resp, streamChan, streamDumper)
 	}()
 
-	return streamChan, nil
+	return call.FinishStream(ctx, streamChan, finish), nil
 }
 
 // GetModelName 获取模型名称
@@ -415,3 +508,6 @@ func (c *RemoteAPIChat) GetBaseURL() string {
 func (c *RemoteAPIChat) GetAPIKey() string {
 	return c.apiKey
 }
+
+// RequestAccountingSupported reports support for accounting at each physical provider request.
+func (c *RemoteAPIChat) RequestAccountingSupported() bool { return true }

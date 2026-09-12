@@ -85,6 +85,30 @@ curl -X PUT $BASE/api/v1/models/m-1 -H "Authorization: Bearer $TOKEN" \
 
 响应：200 `{"success":true,"message":"Model deleted"}`
 
+仍被当前空间的知识库、智能体或长期记忆引用时，响应为 HTTP 400；兼容 message 保留，同时 `error.code=2300`，`error.details` 给出具体对象和引用位置：
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": 2300,
+    "message": "model is used by 2 knowledge base(s); reconfigure or remove those references before deleting",
+    "details": {
+      "knowledge_bases": [
+        {"id": "kb-1", "name": "Product docs", "bindings": ["vlm_model"]},
+        {"id": "kb-2", "name": "Engineering", "bindings": ["vlm_model"]}
+      ],
+      "agents": [],
+      "long_term_memory": {"bindings": []},
+      "knowledge_base_total": 2,
+      "agent_total": 0
+    }
+  }
+}
+```
+
+知识库绑定值：`embedding_model`、`summary_model`、`image_processing_model`、`vlm_model`、`asr_model`、`wiki_synthesis_model`；智能体绑定值：`chat_model`、`rerank_model`、`vlm_model`、`asr_model`、`query_understand_model`、`follow_up_model`；长期记忆绑定值：`embedding_model`、`extract_model`。详情包含对象 `id`、`name`、合并后的 `bindings`，以及 `knowledge_base_total` / `agent_total`。列表最多各 50 条，删除守卫以总数为准。
+
 ```bash
 curl -X DELETE $BASE/api/v1/models/m-1 -H "Authorization: Bearer $TOKEN"
 ```
@@ -325,32 +349,33 @@ curl -X POST $BASE/api/v1/initialization/extract/fabri-text -H "Authorization: B
 
 ## 评估（/api/v1/evaluation）
 
-Handler: `internal/handler/evaluation.go`。API key：`run_evaluations`/full。
+Handler：`internal/handler/evaluation.go`、`internal/handler/evaluation_dataset.go`、`internal/handler/evaluation_question.go`。应用程序编程接口密钥（Application Programming Interface Key，API Key）需要 `run_evaluations` 或 full-access 权限。
 
-### POST /api/v1/evaluation
-
-用途：发起评估任务（驱动 LLM 调用，产生费用）。权限：Admin+。
-
-| 字段 | 类型 | 必填 | 说明 |
+| 方法 | 路径 | 角色 | 用途 |
 | --- | --- | --- | --- |
-| `dataset_id` | string | 否 | 数据集 ID |
-| `knowledge_base_id` | string | 否 | 目标 KB |
-| `chat_id` | string | 否 | 对话模型 ID |
-| `rerank_id` | string | 否 | Rerank 模型 ID |
+| POST | `/api/v1/evaluation` | Admin+ | 创建评测任务 |
+| GET | `/api/v1/evaluation?task_id=...` | Viewer+ | 查询任务详情 |
+| GET | `/api/v1/evaluation/metrics` | Viewer+ | 列出版本化指标定义 |
+| GET | `/api/v1/evaluation/tasks` | Viewer+ | 筛选并分页列出任务 |
+| PUT | `/api/v1/evaluation/tasks/:task_id/labels` | Admin+ | 全量替换任务标签 |
+| POST | `/api/v1/evaluation/comparisons` | Viewer+ | 比较 2 至 10 个成功任务 |
+| GET | `/api/v1/evaluation/tasks/:task_id/export?format=json|csv` | Viewer+ | 导出终态任务 |
+| POST | `/api/v1/evaluation/:task_id/cancel` | Admin+ | 持久化取消请求 |
+| DELETE | `/api/v1/evaluation/:task_id` | Admin+ 用户令牌 | 软删除终态任务 |
+| GET | `/api/v1/evaluation/tasks/:task_id/questions` | Viewer+ | 分页读取逐题结果 |
+| GET | `/api/v1/evaluation/tasks/:task_id/questions/:sample_index/ratings` | Viewer+ | 列出人工评分修订 |
+| POST | `/api/v1/evaluation/tasks/:task_id/questions/:sample_index/ratings` | Admin+ | 追加人工评分修订 |
+| POST | `/api/v1/evaluation/datasets` | Admin+ | 创建租户数据集 |
+| GET | `/api/v1/evaluation/datasets` | Viewer+ | 列出可见数据集 |
+| POST | `/api/v1/evaluation/datasets/:id/versions` | Admin+ | 创建不可变版本 |
+| GET | `/api/v1/evaluation/datasets/:id/versions` | Viewer+ | 列出数据集版本 |
 
-响应：200 `{"success":true,"data":{评估任务}}`
+创建任务的 JavaScript 对象表示法（JavaScript Object Notation，JSON）字段包括 `dataset_id`、`dataset_version_id`、`knowledge_base_id`、`chat_id`、`rerank_id`、`seed` 和可选 `configuration`。`configuration` 可以覆盖 `retrieval`、`rerank` 与 `generation` 参数。省略 `seed` 与显式传入 `0` 的含义不同。
 
 ```bash
-curl -X POST $BASE/api/v1/evaluation -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' -d '{"knowledge_base_id":"kb-1","chat_id":"m-1"}'
+curl -X POST "$BASE/api/v1/evaluation" -H "X-API-Key: $API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"dataset_id":"golden","dataset_version_id":"version-1","chat_id":"m-1","seed":0}'
 ```
 
-### GET /api/v1/evaluation
-
-用途：查询评估结果。权限：Viewer+。查询参数：`task_id`（必填）。
-
-响应：200 `{"success":true,"data":{评估结果}}`
-
-```bash
-curl "$BASE/api/v1/evaluation?task_id=task-1" -H "Authorization: Bearer $TOKEN"
-```
+任务列表支持 `status`、`dataset_id`、`dataset_version_id`、`model_id`、`started_from`、`started_to`、可重复的 `label`、`page_size` 和 `cursor`。逐题分页的 `page_size` 默认 100、最大 500。数据集版本请求由 `passages`、`questions` 和 `relevance` 三个数组组成。完整的数据传输对象（Data Transfer Object，DTO）、字段约束和响应结构见[评测能力](../03-features/15-evaluation.md)。

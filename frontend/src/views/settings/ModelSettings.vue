@@ -6,6 +6,17 @@
           <h2>{{ $t('modelSettings.title') }}</h2>
           <p class="section-description">{{ $t('modelSettings.description') }}</p>
         </div>
+        <div class="section-header__actions">
+        <t-button
+          type="button"
+          theme="default"
+          variant="outline"
+          size="medium"
+          @click="showUsageDrawer = true"
+        >
+          <template #icon><ChartNoAxesCombined :size="17" aria-hidden="true" /></template>
+          {{ $t('modelSettings.actions.usage') }}
+        </t-button>
         <t-button
           v-if="authStore.hasRole('admin')"
           type="button"
@@ -15,9 +26,10 @@
           class="model-test-trigger"
           @click="showDebugDrawer = true"
         >
-          <template #icon><play-circle-icon /></template>
+          <template #icon><CirclePlay :size="17" aria-hidden="true" /></template>
           {{ $t('modelSettings.actions.debugModel') }}
         </t-button>
+        </div>
       </div>
 
       <div class="builtin-models-hint" role="note">
@@ -30,7 +42,7 @@
         <a class="doc-link" href="https://github.com/Tencent/WeKnora/blob/main/docs/BUILTIN_MODELS.md" target="_blank"
           rel="noopener noreferrer">
           {{ $t('modelSettings.builtinModels.viewGuide') }}
-          <t-icon name="link" class="link-icon" />
+          <ExternalLink :size="14" class="link-icon" aria-hidden="true" />
         </a>
       </div>
     </div>
@@ -59,27 +71,29 @@
         ]" :role="isModelCardClickable(model) ? 'button' : undefined"
           :tabindex="isModelCardClickable(model) ? 0 : undefined"
           @click="onModelCardClick($event, model._modelType, model)"
-          @keydown.enter="onModelCardClick($event, model._modelType, model)">
+          @keydown.enter="onModelCardClick($event, model._modelType, model)"
+          @keydown.space="onModelCardClick($event, model._modelType, model)">
           <div class="model-card__badge" :aria-label="typeLabel(model._modelType)">
-            <t-icon :name="typeIcon(model._modelType)" size="18px" />
+            <component :is="typeIcon(model._modelType)" :size="18" :stroke-width="1.7" aria-hidden="true" />
           </div>
           <div class="model-card__body">
             <div class="model-card__header">
               <h3 class="model-card__title">{{ modelDisplayName(model) }}</h3>
               <span v-if="model.isBuiltin" class="model-card__lock" :title="$t('modelSettings.builtinTag')"
                 :aria-label="$t('modelSettings.builtinTag')">
-                <t-icon :name="authStore.isSystemAdmin ? 'edit-1' : 'lock-on'" />
+                <component :is="authStore.isSystemAdmin ? Pencil : LockKeyhole" :size="13" aria-hidden="true" />
               </span>
               <div v-if="canManageModel(model)" class="model-card__actions" @click.stop>
                 <t-dropdown :options="getModelOptions(model._modelType, model)" placement="bottom-right" attach="body"
                   trigger="click"
                   @click="(data: any) => handleMenuAction({ value: data.value }, model._modelType, model)">
-                  <t-button variant="text" shape="square" size="small" class="model-card__action-btn model-card__more">
-                    <t-icon name="ellipsis" />
+                  <t-button variant="text" shape="square" size="small" class="model-card__action-btn model-card__more" :aria-label="$t('modelSettings.actions.more')">
+                    <Ellipsis :size="17" aria-hidden="true" />
                   </t-button>
                 </t-dropdown>
                 <t-popconfirm
                   v-if="canDeleteModel(model)"
+                  :icon="() => h(Trash2, { size: 17, 'aria-hidden': 'true' })"
                   :content="$t('modelSettings.confirmDelete', { name: modelDisplayName(model) })"
                   :confirm-btn="{ content: $t('common.delete'), theme: 'danger' }"
                   :cancel-btn="{ content: $t('common.cancel') }"
@@ -93,9 +107,10 @@
                       variant="text"
                       size="small"
                       class="model-card__action-btn model-card__delete"
+                      :aria-label="$t('common.delete')"
                       @click.stop
                     >
-                      <template #icon><t-icon name="delete" /></template>
+                      <template #icon><Trash2 :size="16" aria-hidden="true" /></template>
                     </t-button>
                   </t-tooltip>
                 </t-popconfirm>
@@ -107,11 +122,19 @@
                 <span class="model-card__sep">·</span>
                 <span>{{ $t('model.editor.dimensionLabel') }} {{ model.dimension }}</span>
               </template>
+              <template v-if="model._modelType === 'chat' || model._modelType === 'vllm'">
+                <span class="model-card__sep">·</span>
+                <span
+                  class="model-card__ctx"
+                  :class="{ 'model-card__ctx--default': isDefaultContextWindow(model.contextWindow) }"
+                  :title="contextWindowTitle(model.contextWindow)"
+                >{{ formatContextWindow(model.contextWindow) }}</span>
+              </template>
               <template v-if="model._modelType === 'chat' && model.supportsVision">
                 <span class="model-card__sep">·</span>
                 <span class="model-card__vision" :title="$t('model.editor.supportsVisionLabel')"
                   :aria-label="$t('model.editor.supportsVisionLabel')">
-                  <t-icon name="image" size="12px" />
+                  <Image :size="12" aria-hidden="true" />
                 </span>
               </template>
             </p>
@@ -125,46 +148,208 @@
           @click="openAddDialog"
         >
           <span class="model-card--add__icon" aria-hidden="true">
-            <add-icon />
+            <Plus :size="18" aria-hidden="true" />
           </span>
           <span class="model-card--add__label">{{ $t('modelSettings.actions.addModel') }}</span>
         </button>
       </div>
     </t-loading>
 
+    <t-dialog
+      v-model:visible="showUsageDialog"
+      :header="$t('modelSettings.usage.title')"
+      :footer="false"
+      width="min(680px, calc(100vw - 32px))"
+      class="model-reference-dialog"
+      :close-btn="() => h(X, { size: 20, 'aria-hidden': 'true' })"
+      destroy-on-close
+    >
+      <div v-if="usageConflict" class="model-usage-dialog">
+        <p class="model-usage-dialog__description">
+          {{ $t('modelSettings.usage.description', { name: usageConflictModelName }) }}
+        </p>
+
+        <div class="model-usage-dialog__content">
+          <section v-if="usageConflict.knowledge_bases.length" class="model-usage-group">
+            <h3>
+              {{ $t('modelSettings.usage.knowledgeBases', {
+                count: modelUsageResourceCount(usageConflict.knowledge_bases, usageConflict.knowledge_base_total)
+              }) }}
+            </h3>
+            <ul>
+              <li v-for="resource in usageConflict.knowledge_bases" :key="resource.id">
+                <div class="model-usage-resource">
+                  <strong>{{ resource.name || resource.id }}</strong>
+                  <div class="model-usage-bindings">
+                    <t-tag
+                      v-for="(binding, index) in resource.bindings"
+                      :key="`${binding}-${index}`"
+                      size="small"
+                      variant="light"
+                    >
+                      {{ $t(modelUsageBindingI18nKey(binding)) }}
+                    </t-tag>
+                  </div>
+                </div>
+                <t-button
+                  theme="primary"
+                  variant="text"
+                  size="small"
+                  @click="openUsageResource('knowledge_base', resource.id, resource.bindings)"
+                >
+                  {{ $t('modelSettings.usage.openConfiguration') }}
+                </t-button>
+              </li>
+            </ul>
+            <p
+              v-if="modelUsageListTruncated(usageConflict.knowledge_bases, usageConflict.knowledge_base_total)"
+              class="model-usage-truncated"
+            >
+              {{ $t('modelSettings.usage.truncated', {
+                shown: usageConflict.knowledge_bases.length,
+                total: modelUsageResourceCount(usageConflict.knowledge_bases, usageConflict.knowledge_base_total)
+              }) }}
+            </p>
+          </section>
+
+          <section v-if="usageConflict.agents.length" class="model-usage-group">
+            <h3>{{ $t('modelSettings.usage.agents', {
+              count: modelUsageResourceCount(usageConflict.agents, usageConflict.agent_total)
+            }) }}</h3>
+            <ul>
+              <li v-for="resource in usageConflict.agents" :key="resource.id">
+                <div class="model-usage-resource">
+                  <strong>{{ resource.name || resource.id }}</strong>
+                  <div class="model-usage-bindings">
+                    <t-tag
+                      v-for="(binding, index) in resource.bindings"
+                      :key="`${binding}-${index}`"
+                      size="small"
+                      variant="light"
+                    >
+                      {{ $t(modelUsageBindingI18nKey(binding)) }}
+                    </t-tag>
+                  </div>
+                </div>
+                <t-button
+                  theme="primary"
+                  variant="text"
+                  size="small"
+                  @click="openUsageResource('agent', resource.id, resource.bindings)"
+                >
+                  {{ $t('modelSettings.usage.openConfiguration') }}
+                </t-button>
+              </li>
+            </ul>
+            <p
+              v-if="modelUsageListTruncated(usageConflict.agents, usageConflict.agent_total)"
+              class="model-usage-truncated"
+            >
+              {{ $t('modelSettings.usage.truncated', {
+                shown: usageConflict.agents.length,
+                total: modelUsageResourceCount(usageConflict.agents, usageConflict.agent_total)
+              }) }}
+            </p>
+          </section>
+
+          <section v-if="usageConflict.long_term_memory.bindings.length" class="model-usage-group">
+            <h3>{{ $t('modelSettings.usage.longTermMemory') }}</h3>
+            <div class="model-usage-memory">
+              <div class="model-usage-bindings">
+                <t-tag
+                  v-for="(binding, index) in usageConflict.long_term_memory.bindings"
+                  :key="`${binding}-${index}`"
+                  size="small"
+                  variant="light"
+                >
+                  {{ $t(modelUsageBindingI18nKey(binding)) }}
+                </t-tag>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="model-usage-dialog__actions">
+          <t-button @click="showUsageDialog = false">{{ $t('common.close') }}</t-button>
+        </div>
+      </div>
+    </t-dialog>
+
     <!-- 模型编辑器抽屉 -->
     <ModelEditorDialog v-model:visible="showDialog" :model-type="currentModelType" :model-data="editingModel"
       @confirm="handleModelSave" />
     <ModelDebugDrawer v-model:visible="showDebugDrawer" :models="allModels" />
+    <ModelUsageDrawer
+      v-model:visible="showUsageDrawer"
+      :models="allModels"
+      :can-edit-pricing="authStore.hasRole('admin')"
+    />
 
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, h, nextTick, onMounted, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { AddIcon, PlayCircleIcon } from 'tdesign-icons-vue-next'
+import { Plus, CirclePlay, ChartNoAxesCombined, ExternalLink, MessageSquare, Network, ListFilter, Image, Mic, Pencil, LockKeyhole, Ellipsis, Trash2, X } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import ModelEditorDialog from '@/components/ModelEditorDialog.vue'
 import ModelDebugDrawer from '@/components/ModelDebugDrawer.vue'
-import { listModels, createModel, updateModel as updateModelAPI, deleteModel as deleteModelAPI, type ModelConfig } from '@/api/model'
+import ModelUsageDrawer from '@/components/ModelUsageDrawer.vue'
+import {
+  listModels,
+  createModel,
+  updateModel as updateModelAPI,
+  deleteModel as deleteModelAPI,
+  ModelInUseError,
+  modelUsageBindingI18nKey,
+  modelUsageKnowledgeBaseSection,
+  modelUsageListTruncated,
+  modelUsageResourceCount,
+  modelUsageResourceRoute,
+  type ModelConfig,
+  type ModelUsageDetails,
+  type ModelUsageResourceKind,
+} from '@/api/model'
 import { useAuthStore } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
+import { focusKbEditorSection } from '@/config/contextualGuides'
+import { useChatResourcesStore } from '@/stores/chatResources'
+import {
+  formatContextWindow,
+  isDefaultContextWindow,
+  effectiveContextWindow,
+} from '@/utils/contextWindow'
 
 const { t, te } = useI18n()
 const authStore = useAuthStore()
 const uiStore = useUIStore()
+const chatResources = useChatResourcesStore()
+const router = useRouter()
 type ModelType = 'chat' | 'embedding' | 'rerank' | 'vllm' | 'asr'
 type FilterType = 'all' | ModelType
 
 const showDialog = ref(false)
 const showDebugDrawer = ref(false)
+const showUsageDrawer = ref(false)
+const showUsageDialog = ref(false)
+const usageConflict = ref<ModelUsageDetails | null>(null)
+const usageConflictModelName = ref('')
 const currentModelType = ref<ModelType>('chat')
 const editingModel = ref<any>(null)
 const loading = ref(true)
 const activeTypeFilter = ref<FilterType>('all')
 
 const MODEL_TAB_TYPES: FilterType[] = ['chat', 'embedding', 'rerank', 'vllm', 'asr']
+const KNOWLEDGE_BASE_EDITOR_HOST_ROUTES = new Set([
+  'home',
+  'knowledgeBaseList',
+  'knowledgeBaseDetail',
+  'globalCreatChat',
+  'kbCreatChat',
+  'chat',
+])
 watch(
   () => uiStore.settingsInitialSubSection,
   (sub) => {
@@ -206,6 +391,7 @@ function convertToLegacyFormat(model: ModelConfig) {
     supportsDimensionOverride: model.parameters.embedding_parameters?.supports_dimension_override || false,
     isBuiltin: model.is_builtin || false,
     supportsVision: model.parameters.supports_vision || false,
+    contextWindow: model.parameters.context_window || undefined,
     maxConcurrency: model.parameters.max_concurrency,
     customHeaders: model.parameters.custom_headers
       ? Object.entries(model.parameters.custom_headers).map(([key, value]) => ({ key, value: String(value) }))
@@ -229,17 +415,9 @@ const filteredModels = computed(() => {
 
 const countByType = (type: ModelType) => allLegacyModels.value.filter(m => m._modelType === type).length
 
-// 类型徽章图标。沿用 TDesign 自带 icon name，避免再引第三方图标包。
-const typeIcon = (type: ModelType): string => {
-  const map: Record<ModelType, string> = {
-    chat: 'chat',
-    embedding: 'chart-bubble',
-    rerank: 'filter-sort',
-    vllm: 'image',
-    asr: 'sound',
-  }
-  return map[type]
-}
+const typeIcon = (type: ModelType) => ({
+  chat: MessageSquare, embedding: Network, rerank: ListFilter, vllm: Image, asr: Mic,
+})[type]
 
 const typeLabel = (type: ModelType) => {
   const map: Record<ModelType, string> = {
@@ -295,6 +473,13 @@ const modelDisplayName = (model: any) => {
   return displayName || model.name
 }
 
+const contextWindowTitle = (tokens?: number) => {
+  if (isDefaultContextWindow(tokens)) {
+    return t('model.editor.contextWindowDefaultHint', { value: formatContextWindow(tokens) })
+  }
+  return t('model.editor.contextWindowTokens', { count: effectiveContextWindow(tokens) })
+}
+
 const emptyHint = computed(() => {
   if (activeTypeFilter.value === 'all') return t('modelSettings.chat.empty')
   const map: Record<ModelType, string> = {
@@ -313,6 +498,9 @@ const loadModels = async () => {
   try {
     const models = await listModels()
     allModels.value = models
+    // 设置页自己 listModels 之后立刻写回空间级缓存。否则对话输入栏 /
+    // 智能体编辑器会继续拿 60s TTL 里的旧 context_window，刷新页面才对。
+    chatResources.replaceModels(models)
   } catch (error: any) {
     console.error('加载模型列表失败:', error)
     MessagePlugin.error(error.message)
@@ -344,13 +532,13 @@ const canDeleteModel = (model: any) =>
 
 const onModelCardClick = (event: Event, type: ModelType, model: any) => {
   if (!isModelCardClickable(model)) return
+  const target = event.target as HTMLElement | null
+  if (target?.closest('.model-card__actions')) return
   if (event.type === 'keydown') {
     const ke = event as KeyboardEvent
     if (ke.key !== 'Enter' && ke.key !== ' ') return
     ke.preventDefault()
   }
-  const target = event.target as HTMLElement | null
-  if (target?.closest('.model-card__actions')) return
   editModel(type, model)
 }
 
@@ -470,6 +658,10 @@ const handleModelSave = async (modelData: any) => {
         } : saveType === 'chat' ? {
           supports_vision: modelData.supportsVision ?? false
         } : {}),
+        ...((saveType === 'chat' || saveType === 'vllm')
+          && Number(modelData.contextWindow) >= 1024
+          ? { context_window: Math.round(Number(modelData.contextWindow)) }
+          : {}),
         // 后台并发上限：仅 chat/embedding/vllm 受治理，>0 才写入（0/空沿用全局默认）。
         ...(['chat', 'embedding', 'vllm'].includes(saveType)
           && Number(modelData.maxConcurrency) > 0
@@ -507,8 +699,54 @@ const deleteModel = async (_type: ModelType, modelId: string) => {
     MessagePlugin.success(t('modelSettings.toasts.deleted'))
     await loadModels()
   } catch (error: any) {
+    if (error instanceof ModelInUseError) {
+      usageConflict.value = error.details
+      usageConflictModelName.value = model?.display_name || model?.name || modelId
+      showUsageDialog.value = true
+      return
+    }
     console.error('删除模型失败:', error)
     MessagePlugin.error(error.message || t('modelSettings.toasts.deleteFailed'))
+  }
+}
+
+const openUsageResource = async (
+  kind: ModelUsageResourceKind,
+  id: string,
+  bindings: readonly string[] = [],
+) => {
+  showUsageDialog.value = false
+  const knowledgeBaseSection = modelUsageKnowledgeBaseSection(bindings)
+  // The UI store can outlive the route component that owns the KB editor.
+  // Only focus an existing editor when the current route still mounts one;
+  // otherwise a stale visible/id pair would make a direct Settings page no-op.
+  const routeName = router.currentRoute.value.name
+  const canFocusExistingKnowledgeBase = kind === 'knowledge_base'
+    && uiStore.showKBEditorModal
+    && uiStore.currentKBId === id
+    && typeof routeName === 'string'
+    && KNOWLEDGE_BASE_EDITOR_HOST_ROUTES.has(routeName)
+
+  uiStore.closeSettings()
+  await nextTick()
+
+  if (canFocusExistingKnowledgeBase) {
+    // Keep unsaved edits when the referenced KB is already open underneath
+    // global Settings; only move the existing editor to the relevant section.
+    focusKbEditorSection(knowledgeBaseSection)
+    return
+  }
+
+  if (kind === 'knowledge_base') {
+    uiStore.closeKBEditor()
+    await nextTick()
+  }
+  // Both the KB editor and global Settings can already be open underneath the
+  // usage dialog. Flush their false state before reusing either component so
+  // its visible watcher reloads the target object instead of keeping stale data.
+  await router.push(modelUsageResourceRoute(kind, id, bindings))
+  if (kind === 'knowledge_base') {
+    uiStore.openKBSettings(id, knowledgeBaseSection)
   }
 }
 
@@ -620,6 +858,10 @@ onMounted(() => {
 
 <style lang="less" scoped>
 .model-settings {
+  --td-brand-color: #087b59;
+  --td-brand-color-hover: #096d51;
+  --td-brand-color-active: #075d45;
+  --td-brand-color-1: #e9f5ef;
   width: 100%;
 }
 
@@ -627,7 +869,8 @@ onMounted(() => {
   margin-bottom: 28px;
 
   h2 {
-    font-size: 20px;
+    font-size: clamp(22px, 2vw, 28px);
+    letter-spacing: -0.035em;
     font-weight: 600;
     color: var(--td-text-color-primary);
     margin: 0 0 8px 0;
@@ -646,6 +889,14 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
+}
+
+.section-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .model-test-trigger {
@@ -731,7 +982,7 @@ onMounted(() => {
 
 .model-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: 12px;
 
   .model-card--add {
@@ -945,6 +1196,14 @@ onMounted(() => {
   gap: 3px;
 }
 
+.model-card__ctx {
+  font-variant-numeric: tabular-nums;
+}
+
+.model-card__ctx--default {
+  color: var(--td-text-color-placeholder);
+}
+
 .model-card__actions {
   flex-shrink: 0;
   display: flex;
@@ -985,5 +1244,106 @@ onMounted(() => {
     color: var(--td-text-color-placeholder);
     margin-bottom: 16px;
   }
+}
+
+.model-usage-dialog__description {
+  margin: 0 0 16px;
+  color: var(--td-text-color-secondary);
+  line-height: 1.6;
+}
+
+.model-usage-dialog__content {
+  max-height: min(58vh, 560px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.model-usage-group {
+  & + & {
+    margin-top: 20px;
+  }
+
+  h3 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--td-text-color-primary);
+  }
+
+  ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--td-component-stroke);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+
+    & + li {
+      border-top: 1px solid var(--td-component-stroke);
+    }
+  }
+}
+
+.model-usage-truncated {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+  line-height: 1.5;
+}
+
+.model-usage-resource {
+  min-width: 0;
+
+  strong {
+    display: block;
+    margin-bottom: 6px;
+    overflow: hidden;
+    color: var(--td-text-color-primary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.model-usage-bindings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.model-usage-memory {
+  padding: 10px 12px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 8px;
+}
+
+.model-usage-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+.builtin-models-hint .doc-link { display: inline-flex; align-items: center; gap: 6px; }
+.doc-link:focus-visible, .model-card__action-btn:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 3px; }
+@media (max-width: 700px) {
+  .section-header__top { align-items: flex-start; flex-direction: column; gap: 16px; }
+  .section-header__actions { width: 100%; }
+  .model-usage-group li { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .model-usage-resource { max-width: 100%; }
+}
+@media (hover: none) { .model-card__action-btn { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .model-card, .model-card__lock, .model-card__action-btn { transition: none; }
+}
+</style>
+<style lang="less">
+@media (prefers-reduced-motion: reduce) {
+  .model-reference-dialog, .model-reference-dialog .t-dialog, .model-reference-dialog .t-dialog__mask { animation: none !important; transition: none !important; }
 }
 </style>

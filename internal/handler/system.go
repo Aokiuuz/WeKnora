@@ -18,6 +18,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/application/repository"
 	"github.com/Tencent/WeKnora/internal/application/service"
 	"github.com/Tencent/WeKnora/internal/application/service/file"
+	"github.com/Tencent/WeKnora/internal/buildinfo"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/database"
 	apperrors "github.com/Tencent/WeKnora/internal/errors"
@@ -276,7 +277,15 @@ func (h *SystemHandler) emitAdminAudit(
 	_ = h.auditSvc.Log(ctx, entry)
 }
 
-// GetSystemInfoResponse defines the response structure for system info
+// DBMigrationStatusResponse exposes both startup migration chains.
+type DBMigrationStatusResponse struct {
+	Official database.MigrationChainState `json:"official"`
+	Topic3   database.MigrationChainState `json:"topic3"`
+	Ready    bool                         `json:"ready"`
+	Phase    string                       `json:"phase"`
+}
+
+// GetSystemInfoResponse defines the response structure for system info.
 type GetSystemInfoResponse struct {
 	Version             string `json:"version"`
 	Edition             string `json:"edition"`
@@ -292,21 +301,13 @@ type GetSystemInfoResponse struct {
 	// the most recent startup migration attempt failed. Empty when migrations
 	// succeeded; non-empty values let the frontend surface a troubleshooting
 	// banner instead of silently hiding the DB version row (see issue #1319).
-	DBMigrationError string `json:"db_migration_error,omitempty"`
+	DBMigrationError  string                     `json:"db_migration_error,omitempty"`
+	DBMigrationStatus *DBMigrationStatusResponse `json:"db_migration_status,omitempty"`
 	// StartedAt is the server process boot time (RFC3339, UTC).
 	StartedAt string `json:"started_at,omitempty"`
 	// UptimeSeconds is seconds elapsed since process start.
 	UptimeSeconds int64 `json:"uptime_seconds,omitempty"`
 }
-
-// 编译时注入的版本信息
-var (
-	Version   = "unknown"
-	Edition   = "standard"
-	CommitID  = "unknown"
-	BuildTime = "unknown"
-	GoVersion = "unknown"
-)
 
 // GetSystemInfo godoc
 // @Summary      获取系统信息
@@ -332,6 +333,16 @@ func (h *SystemHandler) GetSystemInfo(c *gin.Context) {
 	minioEnabled := h.isMinioConfigured(c)
 
 	dbMigrationErr := database.CachedMigrationError()
+	migrationState := database.CachedMigrationStatus()
+	var migrationStatus *DBMigrationStatusResponse
+	if migrationState.Dialect != "" {
+		migrationStatus = &DBMigrationStatusResponse{
+			Official: migrationState.Official,
+			Topic3:   migrationState.Topic3,
+			Ready:    migrationState.Ready,
+			Phase:    migrationState.Phase,
+		}
+	}
 	var dbVersion string
 	if ver, dirty, ok := database.CachedMigrationVersion(); ok {
 		dbVersion = fmt.Sprintf("%d", ver)
@@ -355,18 +366,20 @@ func (h *SystemHandler) GetSystemInfo(c *gin.Context) {
 		uptimeSec = int64(runtime.ServerUptime().Seconds())
 	}
 
+	build := buildinfo.Get()
 	response := GetSystemInfoResponse{
-		Version:             Version,
-		Edition:             Edition,
-		CommitID:            CommitID,
-		BuildTime:           BuildTime,
-		GoVersion:           GoVersion,
+		Version:             build.Version,
+		Edition:             build.Edition,
+		CommitID:            build.CommitID,
+		BuildTime:           build.BuildTime,
+		GoVersion:           build.GoVersion,
 		KeywordIndexEngine:  keywordIndexEngine,
 		VectorStoreEngine:   vectorStoreEngine,
 		GraphDatabaseEngine: graphDatabaseEngine,
 		MinioEnabled:        minioEnabled,
 		DBVersion:           dbVersion,
 		DBMigrationError:    dbMigrationErr,
+		DBMigrationStatus:   migrationStatus,
 		StartedAt:           startedAt,
 		UptimeSeconds:       uptimeSec,
 	}
@@ -1551,7 +1564,8 @@ func (h *SystemHandler) ResetUserPassword(c *gin.Context) {
 		return
 	}
 	req.Email = strings.TrimSpace(req.Email)
-	if err := service.ValidatePasswordPolicy(req.NewPassword); err != nil {
+
+	if err := service.ValidatePasswordPolicy(req.NewPassword, h.complexPasswordEnabled(ctx)); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -1568,7 +1582,7 @@ func (h *SystemHandler) ResetUserPassword(c *gin.Context) {
 	}
 
 	if err := h.userSvc.AdminResetPassword(ctx, user.ID, req.NewPassword); err != nil {
-		if errors.Is(err, service.ErrPasswordPolicy) {
+		if service.IsPasswordPolicyError(err) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -1595,6 +1609,10 @@ type CreateSystemUserResponse struct {
 	// GeneratedPassword is the plaintext password when the server
 	// auto-generated one. Absent when the caller supplied the password.
 	GeneratedPassword string `json:"generated_password,omitempty"`
+	// Idempotent is true when the identity already existed (HTTP 200).
+	// The SPA axios interceptor discards status codes, so this flag is
+	// the body-level signal that nothing was created or changed.
+	Idempotent bool `json:"idempotent,omitempty"`
 }
 
 // CreateSystemUser godoc
@@ -1653,7 +1671,7 @@ func (h *SystemHandler) CreateSystemUser(c *gin.Context) {
 				"password_generated": false,
 				"idempotent":         true,
 			})
-			c.JSON(http.StatusOK, CreateSystemUserResponse{User: user.ToUserInfo()})
+			c.JSON(http.StatusOK, CreateSystemUserResponse{User: user.ToUserInfo(), Idempotent: true})
 		case errors.Is(err, service.ErrPasswordPolicy):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		case errors.Is(err, service.ErrUserIdentityConflict):

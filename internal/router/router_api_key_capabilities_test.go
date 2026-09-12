@@ -335,8 +335,10 @@ func TestTenantInfrastructureRoutesDeclareSpecificCapabilities(t *testing.T) {
 	v1 := gin.New().Group("/api/v1")
 
 	RegisterTenantRoutes(v1, &handler.TenantHandler{}, nil, nil, nil, g)
-	RegisterModelRoutes(v1, &handler.ModelHandler{}, &handler.ModelCredentialsHandler{}, g)
-	RegisterEvaluationRoutes(v1, &handler.EvaluationHandler{}, g)
+	RegisterModelRoutes(v1, &handler.ModelHandler{}, &handler.ModelCredentialsHandler{},
+		&handler.ModelStatisticsHandler{}, g)
+	RegisterEvaluationRoutes(v1, &handler.EvaluationHandler{}, &handler.EvaluationDatasetHandler{},
+		&handler.EvaluationQuestionHandler{}, g)
 	RegisterSystemRoutes(v1, &handler.SystemHandler{}, g)
 	RegisterMCPServiceRoutes(v1, &handler.MCPServiceHandler{}, &handler.MCPCredentialsHandler{}, &handler.MCPOAuthHandler{}, g)
 	RegisterWebSearchProviderRoutes(v1, &handler.WebSearchProviderHandler{}, &handler.WebSearchProviderCredentialsHandler{}, g)
@@ -360,7 +362,19 @@ func TestTenantInfrastructureRoutesDeclareSpecificCapabilities(t *testing.T) {
 	}{
 		{http.MethodGet, "/api/v1/tenants", types.APIKeyCapabilityManageTenantSettings},
 		{http.MethodGet, "/api/v1/models", types.APIKeyCapabilityManageModels},
+		{http.MethodDelete, "/api/v1/models/:id", types.APIKeyCapabilityManageModels},
 		{http.MethodPost, "/api/v1/evaluation", types.APIKeyCapabilityRunEvaluations},
+		{http.MethodGet, "/api/v1/evaluation/metrics", types.APIKeyCapabilityRunEvaluations},
+		{http.MethodGet, "/api/v1/evaluation/tasks", types.APIKeyCapabilityRunEvaluations},
+		{http.MethodPut, "/api/v1/evaluation/tasks/:task_id/labels", types.APIKeyCapabilityRunEvaluations},
+		{http.MethodPost, "/api/v1/evaluation/comparisons", types.APIKeyCapabilityRunEvaluations},
+		{http.MethodGet, "/api/v1/evaluation/tasks/:task_id/export", types.APIKeyCapabilityRunEvaluations},
+		{http.MethodPost, "/api/v1/evaluation/:task_id/cancel", types.APIKeyCapabilityRunEvaluations},
+		{http.MethodGet, "/api/v1/evaluation/tasks/:task_id/questions", types.APIKeyCapabilityRunEvaluations},
+		{http.MethodGet, "/api/v1/evaluation/datasets", types.APIKeyCapabilityRunEvaluations},
+		{http.MethodPost, "/api/v1/evaluation/datasets/import", types.APIKeyCapabilityRunEvaluations},
+		{http.MethodGet, "/api/v1/evaluation/datasets/catalog", types.APIKeyCapabilityRunEvaluations},
+		{http.MethodGet, "/api/v1/evaluation/datasets/catalog/:id", types.APIKeyCapabilityRunEvaluations},
 		{http.MethodGet, "/api/v1/system/info", types.APIKeyCapabilityManageVectorStores},
 		{http.MethodGet, "/api/v1/mcp-services", types.APIKeyCapabilityManageMCPServices},
 		{http.MethodGet, "/api/v1/web-search-providers", types.APIKeyCapabilityManageWebSearch},
@@ -406,6 +420,10 @@ func TestSandboxConfigRoutesRequireFullAccessOnly(t *testing.T) {
 		{http.MethodGet, "/api/v1/sandbox-configs/:id/skills"},
 		{http.MethodPost, "/api/v1/sandbox-configs/:id/skills"},
 		{http.MethodGet, "/api/v1/sandbox-configs/:id/skills/:skillId"},
+		{http.MethodGet, "/api/v1/sandbox-configs/:id/skills/:skillId/files"},
+		{http.MethodGet, "/api/v1/sandbox-configs/:id/skills/:skillId/files/content"},
+		{http.MethodPost, "/api/v1/sandbox-configs/:id/skills/:skillId/reinstall"},
+		{http.MethodPost, "/api/v1/sandbox-configs/:id/skills/:skillId/stop"},
 		{http.MethodPatch, "/api/v1/sandbox-configs/:id/skills/:skillId"},
 		{http.MethodDelete, "/api/v1/sandbox-configs/:id/skills/:skillId"},
 		{http.MethodGet, "/api/v1/sandbox-configs/:id/skills/:skillId/install-events"},
@@ -422,6 +440,35 @@ func TestSandboxConfigRoutesRequireFullAccessOnly(t *testing.T) {
 			}
 			if len(policy.Capabilities) != 0 {
 				t.Fatalf("sandbox config routes must not be granted by a scoped capability: %#v", policy.Capabilities)
+			}
+		})
+	}
+}
+
+func TestSkillCatalogWriteRoutesRequireFullAccess(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	g := &rbacGuards{}
+	v1 := gin.New().Group("/api/v1")
+	RegisterSkillRoutes(v1, &handler.SkillHandler{}, g)
+
+	cases := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/api/v1/skills/catalog"},
+		{http.MethodPost, "/api/v1/skills/catalog/:id/install"},
+		{http.MethodGet, "/api/v1/skills/catalog/:id/files"},
+		{http.MethodGet, "/api/v1/skills/catalog/:id/files/content"},
+		{http.MethodDelete, "/api/v1/skills/catalog/:id"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			policy := mustLookupAPIKeyPolicy(t, g, tc.method, tc.path)
+			if !policy.RequireFullAccess {
+				t.Fatal("catalog writes bake into sandbox images and must require full access")
+			}
+			if len(policy.Capabilities) != 0 {
+				t.Fatalf("catalog writes must not be granted by a scoped capability: %#v", policy.Capabilities)
 			}
 		})
 	}

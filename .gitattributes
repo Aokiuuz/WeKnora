@@ -15,3 +15,20 @@ cli/acceptance/testdata/**/*.json text eol=lf
 # picking either side (task state lives in task.json, not index.md). See
 # .trellis/spec/cli/backend/directory-structure.md for details.
 .trellis/workspace/*/journal-*.md merge=union
+# Public bundle hashes bind original bytes on every operating system.
+dataset/public/** -text
+# Verbatim licensed source files retain upstream whitespace as part of their hash.
+dataset/public/*/v1/LICENSE -whitespace
+dataset/public/*/v1/source_docs/** -whitespace
+# Acceptance manifests hash report bytes consistently across operating systems.
+docs/reports/final-acceptance/*.json text eol=lf
+docs/reports/final-acceptance/*.md text eol=lf
+docs/reports/expanded-acceptance/*.json text eol=lf
+docs/reports/expanded-acceptance/*.md text eol=lf
+# Parser evidence binds the exact manifest, model configuration and runner bytes.
+dataset/parser-benchmark/** -text whitespace=cr-at-eol
+deploy/parser-benchmark/** -text whitespace=cr-at-eol
+# Preserve the exact vendor configuration used by the model validation receipt.
+deploy/parser-benchmark/paddle/pipeline.yaml -whitespace
+scripts/run-parser-benchmark.py -text
+scripts/run-parser-benchmark-cpu-batch.py -text

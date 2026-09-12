@@ -331,20 +331,30 @@ func (h *KnowledgeHandler) CreateKnowledgeFromFile(c *gin.Context) {
 		return
 	}
 
-	// Get the uploaded file
-	file, err := c.FormFile("file")
-	if err != nil {
-		logger.Error(ctx, "File upload failed", err)
-		c.Error(errors.NewBadRequestError("File upload failed").WithDetails(err.Error()))
-		return
-	}
-
 	// Validate file size — read MAX_FILE_SIZE_MB env (50MB default).
 	// Deliberately not a runtime system_setting; see filesize.go for the
 	// rationale (nginx / docreader / browser bundle all cache this at
 	// container startup, so a UI knob would silently mismatch).
 	maxSizeMB := utils.GetMaxFileSizeMB()
 	maxSize := maxSizeMB * 1024 * 1024
+	// Capped before the multipart parse, not after: FormFile buffers the whole
+	// body first, so the size check below only ever sees an upload we already
+	// accepted. nginx location /api/ still enforces MAX_FILE_SIZE; this is the
+	// same cap for requests that reach the app without that proxy.
+	limitUploadBody(c, maxSize)
+
+	// Get the uploaded file
+	file, err := c.FormFile("file")
+	if err != nil {
+		if isRequestBodyTooLarge(err) {
+			logger.Error(ctx, "File size too large")
+			c.Error(errors.NewBadRequestError(fmt.Sprintf("文件大小不能超过%dMB", maxSizeMB)))
+			return
+		}
+		logger.Error(ctx, "File upload failed", err)
+		c.Error(errors.NewBadRequestError("File upload failed").WithDetails(err.Error()))
+		return
+	}
 	if file.Size > maxSize {
 		logger.Error(ctx, "File size too large")
 		c.Error(errors.NewBadRequestError(fmt.Sprintf("文件大小不能超过%dMB", maxSizeMB)))
@@ -621,14 +631,15 @@ func (h *KnowledgeHandler) GetKnowledge(c *gin.Context) {
 	}
 
 	// Resolve knowledge and validate KB access (at least viewer)
-	knowledge, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.OrgRoleViewer)
+	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.OrgRoleViewer)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
 	// Re-fetch with tenant-scoped service so tags and other joined fields are populated.
-	if knowledge, err = h.kgService.GetKnowledgeByID(effCtx, id); err != nil {
+	knowledge, err := h.kgService.GetKnowledgeByID(effCtx, id)
+	if err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
 		c.Error(errors.NewNotFoundError("Knowledge not found"))
 		return
@@ -1697,7 +1708,11 @@ func (h *KnowledgeHandler) GetKnowledgeBatch(c *gin.Context) {
 		agent, err := h.agentShareService.GetSharedAgentForTenant(ctx, currentTenantID, callerTenantRole, agentID, req.AgentSourceTenantID)
 		if err != nil || agent == nil {
 			logger.Warnf(ctx, "GetKnowledgeBatch: invalid or inaccessible shared agent %s: %v", agentID, err)
-			c.Error(errors.NewForbiddenError("Invalid or inaccessible shared agent").WithDetails(err.Error()))
+			accessError := errors.NewForbiddenError("Invalid or inaccessible shared agent")
+			if err != nil {
+				accessError = accessError.WithDetails(err.Error())
+			}
+			_ = c.Error(accessError)
 			return
 		}
 		_ = userID
@@ -1720,9 +1735,9 @@ func (h *KnowledgeHandler) GetKnowledgeBatch(c *gin.Context) {
 
 	// Optional kb_id: validate KB access and use effective tenant for shared KB
 	if kbID := secutils.SanitizeForLog(req.KBID); kbID != "" {
-		_, _, effID, _, err := h.validateKnowledgeBaseAccessWithKBID(c, kbID)
-		if err != nil {
-			c.Error(err)
+		_, _, effID, _, accessErr := h.validateKnowledgeBaseAccessWithKBID(c, kbID)
+		if accessErr != nil {
+			_ = c.Error(accessErr)
 			return
 		}
 		if agentAllowedKBIDs != nil && !sliceContains(agentAllowedKBIDs, kbID) {

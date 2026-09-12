@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -192,12 +193,18 @@ func resolveTenantFileServiceWithFallback(
 // streamStoredFile writes the shared success response of every file proxy:
 // safe content type, nosniff, disposition for non-inline types, the route's
 // cache policy, then the body (skipped for HEAD). Closes reader.
-func streamStoredFile(c *gin.Context, reader io.ReadCloser, contentType string, inline bool, cacheControl, logTag string) {
+func streamStoredFile(c *gin.Context, reader io.ReadCloser, contentType string, inline bool, cacheControl, logTag string, fileNames ...string) {
 	defer reader.Close()
 	c.Header("Content-Type", contentType)
 	c.Header("X-Content-Type-Options", "nosniff")
+	disposition := "inline"
 	if !inline {
-		c.Header("Content-Disposition", "attachment")
+		disposition = "attachment"
+	}
+	if len(fileNames) > 0 {
+		c.Header("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": filepath.Base(fileNames[0])}))
+	} else if !inline {
+		c.Header("Content-Disposition", disposition)
 	}
 	c.Header("Cache-Control", cacheControl)
 	c.Status(http.StatusOK)
@@ -273,7 +280,7 @@ func newFileServeHandler(
 		}
 
 		contentType, inline := secutils.SafeContentTypeByFilename(filePath)
-		streamStoredFile(c, reader, contentType, inline, "public, max-age=86400", "/files")
+		streamStoredFile(c, reader, contentType, inline, "public, max-age=86400", "/files", filePath)
 	}
 }
 
@@ -366,7 +373,7 @@ func serveResourceGrants(
 			contentType = resource.MimeType
 		}
 		streamStoredFile(c, reader, contentType, inline, "private, max-age=300",
-			"resource grant (resource_id="+resource.ID+")")
+			"resource grant (resource_id="+resource.ID+")", fileName)
 	}
 	r.GET("/r/:token", handler)
 	r.HEAD("/r/:token", handler)
@@ -504,7 +511,7 @@ func newKBScopedFileServeHandlerWithResources(
 		contentType, inline := secutils.SafeContentTypeByFilename(filePath)
 		// Cross-tenant shared content — keep it private so shared proxies /
 		// CDNs do not cache one tenant's view for another.
-		streamStoredFile(c, reader, contentType, inline, "private, max-age=86400", "/knowledge-bases/:id/files")
+		streamStoredFile(c, reader, contentType, inline, "private, max-age=86400", "/knowledge-bases/:id/files", filePath)
 	}
 }
 
@@ -641,7 +648,11 @@ func newMessageScopedFileServeHandler(
 		if resource != nil && resource.MimeType != "" && inline {
 			contentType = resource.MimeType
 		}
-		streamStoredFile(c, reader, contentType, inline, "private, max-age=86400", "message files")
+		fileName := resolvedPath
+		if resource != nil && strings.TrimSpace(resource.OriginalName) != "" {
+			fileName = resource.OriginalName
+		}
+		streamStoredFile(c, reader, contentType, inline, "private, max-age=86400", "message files", fileName)
 	}
 }
 
@@ -743,6 +754,14 @@ func presignedFileHandler(tenantService interfaces.TenantService, absDir string,
 			c.JSON(http.StatusForbidden, gin.H{"error": "invalid or expired signature"})
 			return
 		}
+		if err := secutils.ValidateStoragePathTenant(filePath, tenantID); err != nil {
+			logger.Warnf(
+				ctx,
+				"[Router] /files/presigned tenant/path mismatch: client_ip=%s tenant_id=%d file_path=%q err=%v",
+				clientIP, tenantID, filePath, err)
+			c.JSON(http.StatusForbidden, gin.H{"error": "file path is outside the signed workspace"})
+			return
+		}
 
 		tenant, err := tenantService.GetTenantByID(ctx, tenantID)
 		if err != nil {
@@ -807,6 +826,14 @@ func servePresignedPreview(r *gin.Engine, cfg *config.Config, storageResolver in
 			tenant, _ := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
 			if tenant == nil {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: workspace context missing"})
+				return
+			}
+			if err := secutils.ValidateStoragePathTenant(filePath, tenant.ID); err != nil {
+				logger.Warnf(
+					ctx,
+					"[Router] presigned preview denied path outside workspace: tenant_id=%d file_path=%q err=%v",
+					tenant.ID, filePath, err)
+				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: file path not accessible"})
 				return
 			}
 

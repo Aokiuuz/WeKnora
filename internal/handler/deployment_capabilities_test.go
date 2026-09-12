@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/Tencent/WeKnora/internal/sandbox"
 )
 
 func TestDeploymentCapabilityKeysMatchFrontend(t *testing.T) {
@@ -42,6 +44,31 @@ func TestBuildDeploymentCapabilitiesIncludesAllKeys(t *testing.T) {
 	}
 }
 
+func TestOverlayLiveDockerSandboxCapabilityIgnoresStartupSnapshot(t *testing.T) {
+	sandbox.ClearDockerBackendEnabledOverride()
+	t.Cleanup(sandbox.ClearDockerBackendEnabledOverride)
+	t.Setenv(sandbox.DockerBackendEnabledEnv, "")
+
+	snapshot := BuildDeploymentCapabilities("standard", DeploymentFeatureAvailability{
+		Sandbox:       true,
+		SandboxDocker: true,
+	})
+	live := overlayLiveDockerSandboxCapability(snapshot)
+	docker := live.Capabilities["settings.sandbox.docker"]
+	if docker.Supported {
+		t.Fatal("live env off must hide docker even if the startup snapshot was on")
+	}
+	if docker.Reason != "docker_backend_disabled" {
+		t.Fatalf("reason = %q, want docker_backend_disabled", docker.Reason)
+	}
+
+	t.Setenv(sandbox.DockerBackendEnabledEnv, "true")
+	enabled := overlayLiveDockerSandboxCapability(snapshot)
+	if !enabled.Capabilities["settings.sandbox.docker"].Supported {
+		t.Fatal("live env true must expose docker")
+	}
+}
+
 func readFrontendDeploymentCapabilityKeys() ([]string, error) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
@@ -62,11 +89,12 @@ func readFrontendDeploymentCapabilityKeys() ([]string, error) {
 
 	var keys []string
 	for _, line := range strings.Split(string(match[1]), "\n") {
-		line = strings.TrimSpace(strings.TrimRight(line, ","))
+		line = strings.TrimSpace(line)
+		line = strings.TrimSpace(strings.TrimSuffix(line, ","))
 		if line == "" {
 			continue
 		}
-		line = strings.Trim(line, `'`)
+		line = strings.Trim(line, `'"`)
 		keys = append(keys, line)
 	}
 	return keys, nil

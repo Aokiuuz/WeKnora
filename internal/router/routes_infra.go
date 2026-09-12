@@ -15,6 +15,7 @@ func RegisterModelRoutes(
 	r *gin.RouterGroup,
 	handler *handler.ModelHandler,
 	credHandler *handler.ModelCredentialsHandler,
+	statisticsHandler *handler.ModelStatisticsHandler,
 	g *rbacGuards,
 ) {
 	// 模型路由组。空间级基础设施：仅完全访问（Owner）API key 可访问。
@@ -26,6 +27,12 @@ func RegisterModelRoutes(
 		models.POST("", g.Admin(), handler.CreateModel)
 		// 获取模型列表 — Viewer+
 		models.GET("", g.Viewer(), handler.ListModels)
+		// 聚合模型调用、成本和两级缓存统计 — Viewer+
+		models.GET("/usage", g.Viewer(), statisticsHandler.ListUsage)
+		models.GET("/:id/usage", g.Viewer(), statisticsHandler.GetUsage)
+		models.GET("/:id/pricing", g.Viewer(), statisticsHandler.ListPrices)
+		// 新建不可变的生效区间价格版本 — Admin+
+		models.PUT("/:id/pricing", g.Admin(), statisticsHandler.PutPrice)
 		// 调试已保存模型会发起真实上游调用并产生费用 — Admin+
 		models.POST("/:id/debug", g.Admin(), handler.DebugModel)
 		// 获取单个模型 — Viewer+
@@ -65,6 +72,10 @@ func RegisterSandboxConfigRoutes(
 		configs.GET("/:id/skills", g.Admin(), skills.List)
 		configs.POST("/:id/skills", g.Admin(), skills.Upload)
 		configs.GET("/:id/skills/:skillId", g.Admin(), skills.Get)
+		configs.GET("/:id/skills/:skillId/files", g.Admin(), skills.ListFiles)
+		configs.GET("/:id/skills/:skillId/files/content", g.Admin(), skills.GetFile)
+		configs.POST("/:id/skills/:skillId/reinstall", g.Admin(), skills.Reinstall)
+		configs.POST("/:id/skills/:skillId/stop", g.Admin(), skills.Stop)
 		configs.PATCH("/:id/skills/:skillId", g.Admin(), skills.Patch)
 		configs.DELETE("/:id/skills/:skillId", g.Admin(), skills.Delete)
 		configs.GET("/:id/skills/:skillId/install-events", g.Admin(), skills.InstallEvents)
@@ -76,12 +87,45 @@ func RegisterSandboxConfigRoutes(
 // evaluation drives LLM calls (cost) and reads from KBs across the
 // tenant; gate to Admin+ until product asks for a finer-grained
 // matrix.
-func RegisterEvaluationRoutes(r *gin.RouterGroup, handler *handler.EvaluationHandler, g *rbacGuards) {
+func RegisterEvaluationRoutes(
+	r *gin.RouterGroup,
+	handler *handler.EvaluationHandler,
+	datasetHandler *handler.EvaluationDatasetHandler,
+	questionHandler *handler.EvaluationQuestionHandler,
+	g *rbacGuards,
+) {
 	evaluationRoutes := g.apiKeyGroup(r.Group("/evaluation"), apiKeyRunEvaluations(apiKeyFullAccess()))
 	{
 		evaluationRoutes.POST("", g.Admin(), handler.Evaluation)
 		evaluationRoutes.GET("", g.Viewer(), handler.GetEvaluationResult)
+		evaluationRoutes.GET("/metrics", g.Viewer(), handler.ListEvaluationMetrics)
+		evaluationRoutes.GET("/tasks", g.Viewer(), handler.ListEvaluationTasks)
+		evaluationRoutes.PUT("/tasks/:task_id/labels", g.Admin(), handler.ReplaceEvaluationTaskLabels)
+		evaluationRoutes.POST("/comparisons", g.Viewer(), handler.CompareEvaluationTasks)
+		evaluationRoutes.GET("/tasks/:task_id/export", g.Viewer(), handler.ExportEvaluationTask)
+		evaluationRoutes.POST("/:task_id/cancel", g.Admin(), handler.CancelEvaluation)
+		evaluationRoutes.GET("/tasks/:task_id/questions", g.Viewer(), questionHandler.ListQuestionResults)
+		evaluationRoutes.GET(
+			"/tasks/:task_id/questions/:sample_index/ratings", g.Viewer(), questionHandler.ListHumanRatings,
+		)
+		evaluationRoutes.POST(
+			"/tasks/:task_id/questions/:sample_index/ratings", g.Admin(), questionHandler.AppendHumanRating,
+		)
+
+		datasets := evaluationRoutes.Group("/datasets")
+		{
+			datasets.GET("/catalog", g.Viewer(), datasetHandler.ListCatalog)
+			datasets.GET("/catalog/:id", g.Viewer(), datasetHandler.GetCatalogItem)
+			datasets.POST("/import", g.Admin(), datasetHandler.ImportDataset)
+			datasets.POST("", g.Admin(), datasetHandler.CreateDataset)
+			datasets.GET("", g.Viewer(), datasetHandler.ListDatasets)
+			datasets.POST("/:id/versions", g.Admin(), datasetHandler.CreateVersion)
+			datasets.GET("/:id/versions", g.Viewer(), datasetHandler.ListVersions)
+		}
 	}
+	// Deleting evaluation tasks stays JWT-Admin only: register on the raw
+	// group so scoped API keys fall back to default-deny.
+	r.DELETE("/evaluation/:task_id", g.Admin(), handler.DeleteEvaluation)
 }
 
 func RegisterInitializationRoutes(r *gin.RouterGroup, handler *handler.InitializationHandler, g *rbacGuards) {
