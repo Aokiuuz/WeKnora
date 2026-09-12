@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/modelobs"
 	"github.com/Tencent/WeKnora/internal/models/embedding"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -274,7 +275,16 @@ func (e *cachedEmbedder) cachedBatch(
 			}
 			writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cacheWriteTimeout)
 			defer cancel()
-			_ = e.coordinator.store.PutEmbeddingCache(writeCtx, entries)
+			// Best-effort persistence: vectors are still returned on write
+			// failure, but the degraded cache layer must be observable.
+			// Storage errors can include payloads or connection details. Emit
+			// only counts and a fixed error category, never the error text.
+			if err := e.coordinator.store.PutEmbeddingCache(writeCtx, entries); err != nil {
+				logger.Warnf(ctx,
+					"Embedding cache persist failed (vectors still returned): "+
+						"entries %d, error_kind %s",
+					len(entries), cacheWriteErrorKind(err))
+			}
 			return vectors, nil
 		})
 		var shared singleflight.Result
@@ -317,13 +327,34 @@ func (c *Coordinator) recordLookup(
 	}
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cacheWriteTimeout)
 	defer cancel()
-	_ = store.RecordEmbeddingCacheLookup(writeCtx, &types.EmbeddingCacheLookupRecord{
+	record := &types.EmbeddingCacheLookupRecord{
 		ID: uuid.NewString(), TenantID: prefix.TenantID, ModelID: prefix.ModelID,
 		RequestedItems: requestedItems, UniqueItems: uniqueItems,
 		HitItems: hitItems, MissItems: missItems, BypassItems: bypassItems,
 		Status: cacheLookupStatus(hitItems, missItems, bypassItems), DurationMs: duration.Milliseconds(),
 		OccurredAt: time.Now().UTC(),
-	})
+	}
+	// Lookup statistics are observability data: a persist failure must not fail
+	// the embedding call, but it must be visible in logs. The status and fixed
+	// error category exclude raw storage errors and tenant/model identifiers.
+	if err := store.RecordEmbeddingCacheLookup(writeCtx, record); err != nil {
+		logger.Warnf(ctx,
+			"Embedding cache lookup record persist failed: status %s, error_kind %s",
+			record.Status, cacheWriteErrorKind(err))
+	}
+}
+
+// cacheWriteErrorKind deliberately uses a bounded vocabulary: arbitrary store
+// errors are not safe to print because drivers can embed data or credentials.
+func cacheWriteErrorKind(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	default:
+		return "storage"
+	}
 }
 
 func cacheLookupStatus(hitItems, missItems, bypassItems int64) string {

@@ -36,6 +36,70 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def completion_diagnostics(run):
+    """Summarize retained outcomes without retrying or modifying raw evidence."""
+    result = {'engines': {}}
+    for engine in ENGINES:
+        records = [read_json(path) for path in sorted((run / engine).glob('*.json'))]
+        durations = [row['duration_ms'] / 1000 for row in records if row.get('duration_ms') is not None]
+        categories = Counter()
+        for row in records:
+            error = str(row.get('error') or '')
+            if row.get('status') == 'success':
+                continue
+            if row.get('status') == 'empty':
+                category = '空输出'
+            elif 'received message larger than max' in error:
+                category = '响应消息超过远端接收上限'
+            elif 'zip' in error.lower() and ('Timeout' in error or 'deadline' in error.lower()):
+                category = '已完成任务的结果压缩包下载超时'
+            elif 'DeadlineExceeded' in error:
+                category = '远端解析服务截止时间超限'
+            elif 'Timeout' in error or 'deadline exceeded' in error.lower():
+                category = '客户端等待超时'
+            elif 'EOF' in error:
+                category = '连接提前结束'
+            elif 'PdfConverter threw KeyError' in error:
+                category = 'PDF 转换器键值异常'
+            elif error.startswith('Failed to parse:'):
+                category = '适配器解析失败，未记录更细原因'
+            elif 'java' in error and 'returned non-zero exit status' in error:
+                category = 'Java 命令行程序非零退出'
+            else:
+                category = '其他已记录错误'
+            categories[category] += 1
+        result['engines'][engine] = {
+            'records': len(records), 'non_success_categories': dict(categories),
+            'request_seconds_mean': float(np.mean(durations)) if durations else None,
+            'request_seconds_median': float(np.median(durations)) if durations else None,
+            'request_seconds_p95_linear': float(np.percentile(durations, 95)) if durations else None,
+            'request_seconds_max': max(durations) if durations else None,
+            'request_seconds_sum': sum(durations)}
+    batch = ROOT / 'artifacts/parser-benchmark/cpu-batch-paddle-v1'
+    completion = batch / 'batch-complete.json'
+    if completion.exists() and (ROOT / read_json(batch / 'batch-state.json')['output']).resolve() == run.resolve():
+        state = read_json(batch / 'batch-state.json')
+        marker = read_json(completion)
+        events = [json.loads(line) for line in (batch / 'events.jsonl').read_text(encoding='utf-8-sig').splitlines() if line.strip()]
+        submitted = [e['at'] for e in events if e['event'] == 'page_submitting']
+        finished = [e['at'] for e in events if e['event'] == 'postprocess_finished']
+        receipts = [read_json(path) for path in (batch / 'receipts').glob('*.json')]
+        result['paddle_batch'] = {
+            'status': state['status'], 'completion': marker,
+            'verified_receipts': len(receipts),
+            'recovered_receipts': sum(bool(r.get('recovered_after_interruption')) for r in receipts),
+            'service_recoveries': sum(e['event'] == 'paddle_recovery_healthy' for e in events),
+            'first_submitted_at': min(submitted), 'last_postprocess_finished_at': max(finished),
+            'elapsed_seconds_including_recovery': (datetime.fromisoformat(max(finished)) - datetime.fromisoformat(min(submitted))).total_seconds(),
+            'receipt_binary_sha256': sorted({r['binary_sha256'] for r in receipts}),
+            'completion_sha256': digest(completion)}
+    hardware = ROOT / 'artifacts/parser-benchmark/hardware-inventory.json'
+    if hardware.exists():
+        result['hardware_inventory'] = read_json(hardware)
+        result['hardware_inventory_sha256'] = digest(hardware)
+    return result
+
+
 def evidence_from_records(run, rows):
     """Use only the records included in the scored snapshot, with unchanged identities."""
     records = {}
@@ -133,7 +197,8 @@ def main():
     done = sum(s['executed_pages'] for s in summary['engines'].values())
     expected = sum(s['expected_pages'] for s in summary['engines'].values())
     errors = sum(s['olmocr']['evaluator_errors'] for s in summary['engines'].values())
-    status = f'评分快照包含 {done} / {expected} 个已归档逐页调用，{expected - done} 个调用尚无完整记录'
+    status = (f'八个引擎各完成 100 页调用，{done} / {expected} 份逐页结果已归档并完成自动评分'
+              if done == expected else f'评分快照包含 {done} / {expected} 个已归档逐页调用，{expected - done} 个调用尚无完整记录')
     summary['readout_status'] = status
     summary['readout_generated_at'] = datetime.now(timezone.utc).isoformat()
     summary['omni_standard_metrics'] = load_omni_metrics(run)
@@ -141,6 +206,7 @@ def main():
     summary['readout_evidence']['snapshot_files_sha256'] = {name: digest(evaluation / name) for name in ('summary.json', 'page-results.json', 'human-review.json')}
     summary['baseline_identity_verification'] = baseline_identity()
     summary['deployment_measurements'] = deployment_measurements()
+    summary['completion_diagnostics'] = completion_diagnostics(run)
     reviewed = [item for item in queue['items'] if item['status'] == 'completed' and all(item.get(key) for key in ('reviewer', 'reviewed_at', 'decision'))]
     selected_ids = set(queue['recommended_first_pass'])
     first_pass_pending = [item['sample_id'] for item in queue['items'] if item['sample_id'] in selected_ids and item not in reviewed]
@@ -165,6 +231,8 @@ def main():
     for key, label, color in [('text', 'Success with text', '#087f68'), ('no_text', 'Success without text', '#b9cbbb'),
                                ('failed', 'Error / empty / timeout', '#c16b50'), ('pending', 'No completed record', '#e5e8e5')]:
         values = np.array([v[key] for v in buckets])
+        if key == 'pending' and not values.any():
+            continue
         axes[0].barh(y, values, left=left, color=color, label=label, height=.66)
         left += values
     axes[0].set_yticks(y, LABELS); axes[0].invert_yaxis(); axes[0].set_xlim(0, 100)
@@ -211,8 +279,8 @@ def main():
              '其中 82 页没有文字层，18 页保留原始文字层。八个引擎接收相同字节，参考标注只进入评分程序。', '',
              '测量对象为生产解析适配器返回的 Markdown，位置处于切块与下游光学字符识别（Optical Character Recognition，OCR）之前。'
              '接口执行状态、正文存在性与内容正确性分别记录；仅图片输出可能需要知识库处理流程中的图片识别。', '',
-             '图 1 同时展示固定分母的执行覆盖与官方断言分数。左图保留失败和缺少完整记录的页面；右图在条形末端标出断言通过数及评分分母。'
-             '未完整覆盖 olmOCR 页面时，条形使用斜线并标记 partial，表示部分样本评分。', '',
+             '图 1 同时展示固定分母的执行覆盖与官方断言分数。左图保留失败和缺少完整记录的页面；右图在条形末端标出断言通过数及评分分母。' +
+             ('全部引擎均完成 20 页 olmOCR 文档的 125 条官方断言。' if done == expected else '未完整覆盖 olmOCR 页面时，条形使用斜线并标记 partial，表示部分样本评分。'), '',
              '![图1：逐页执行覆盖与官方断言质量](coverage-and-quality.png)', '',
              '图中的“有文字”只检查去除图片引用后的正文是否存在。olmOCR-bench 分数由冻结的官方测试对象计算，覆盖文字、表格、阅读顺序与公式。'
              '该结果属于固定公开子集实验，不能作为完整官方排行榜成绩。', '',
@@ -223,10 +291,11 @@ def main():
         mean = '未执行' if duration is None else f'{duration / 1000:.2f}'
         lines.append(f'| {label} | {s["executed_pages"]} | {s["status_counts"].get("success", 0)} | {s["extraction_state_counts"].get("usable_text", 0)} | '
                      f'{score["passed_tests"]} / {score["scored_tests"]} | {rate(score["micro_pass_rate"])} | {score["evaluator_errors"]} | {mean} |')
-    lines += ['', '表中接口错误仍属于已执行页面。官方断言工具异常单独记录，不按模型回答正确处理。'
-              '未完成运行的分母可能不同；比较时需要核对已执行页数和断言数量。not_run 表示评分快照缺少完整结果记录，包含正在执行和尚未调用的页面。', '', '## 运行配置与解释范围', '',
+    lines += ['', '表中接口错误仍属于已执行页面。官方断言工具异常单独记录，不按模型回答正确处理。' +
+              ('各引擎的页数和断言分母一致，接口错误与空输出均纳入相应评分。' if done == expected else '未完成运行的分母可能不同；not_run 表示尚无完整记录。'), '', '## 运行配置与解释范围', '',
               '本地执行使用 CPU。MinerU 使用 pipeline 后端；PaddleOCR-VL 使用完整布局分析服务。'
-              '云服务由现有租户配置指定，程序在内存中读取和解密凭据，各引擎只收到本引擎所需配置。', '',
+              '云服务由现有租户配置指定，程序在内存中读取和解密凭据，各引擎只收到本引擎所需配置。'
+              '云端运行记录未包含服务内部模型与运行库的完整版本；冻结输出可重复评分，重新调用云服务时的版本和结果需要另行核对。', '',
               '本地服务在模型下载及内容摘要校验完成后接受正式请求。单页冒烟调用承担模型冷启动验证。'
               '正式运行的本地引擎各为单并发，三个云端引擎各使用三个固定分片。八页冒烟输入包含于正式清单，云端是否采用缓存无法由响应确认。'
               '平均耗时反映该部署和网络条件下的实际请求，不构成算法计算速度排名。', '',
@@ -271,7 +340,56 @@ def main():
                    '各引擎使用同一版本的评分输入清理函数，函数版本与输入输出摘要保存在评分清单中。该口径与完全原样 Markdown 的官方榜单提交存在区别。'
                    '分母审计分别列出适用标注页、实际评分页以及空输出和服务错误页的纳入数量，缺失分数保持为空。', '']
     report = (out / 'README.md').read_text(encoding='utf-8').replace('## 运行配置与解释范围', '\n'.join(omni_lines) + '\n## 运行配置与解释范围')
-    operational = ['### 本机服务验证实测', '',
+    conclusions = []
+    if done == expected and len(summary['omni_standard_metrics']) == len(ENGINES):
+        local_mineru = summary['engines']['mineru']
+        local_paddle = summary['engines']['paddleocr_vl']
+        cloud_paddle = summary['omni_standard_metrics']['paddleocr_vl_cloud']
+        mineru_metrics = summary['omni_standard_metrics']['mineru']
+        cloud_mineru = summary['engines']['mineru_cloud']['olmocr']
+        conclusions = ['## 实测结论', '',
+            f'MinerU CPU 在本机 100 页中有 {local_mineru["extraction_state_counts"].get("usable_text", 0)} 页产生正文，'
+            f'平均请求耗时 {local_mineru["mean_duration_ms"] / 1000:.2f} 秒；'
+            f'PaddleOCR-VL CPU 有 {local_paddle["extraction_state_counts"].get("usable_text", 0)} 页产生正文，'
+            f'平均耗时 {local_paddle["mean_duration_ms"] / 1000:.2f} 秒。'
+            '这组观测反映当前机器、模型实现和客户端等待限制下的运行表现。', '',
+            f'PaddleOCR-VL Cloud 的文字编辑距离为 {cloud_paddle["text_edit_distance"]:.4f}，'
+            f'阅读顺序编辑距离为 {cloud_paddle["reading_order_edit_distance"]:.4f}。'
+            f'MinerU CPU 的表格页均 TEDS 为 {mineru_metrics["table_teds_page_mean"]:.2%}。'
+            f'MinerU Cloud 通过 {cloud_mineru["passed_tests"]} / {cloud_mineru["scored_tests"]} 条 olmOCR 官方断言。'
+            '文字、表格和断言分数刻画不同对象，各指标分别比较。', '',
+            'Builtin、MarkItDown、OpenDataLoader 与 WeKnora Cloud 在本轮 80 页图像文档的适配器输出中没有可用正文。'
+            '后续知识库流程的图片识别与问答效果属于独立测量范围。', '']
+        report = report.replace('## 运行配置与解释范围', '\n'.join(conclusions) + '\n## 运行配置与解释范围')
+    operational = ['### 失败记录与本地批次', '',
+                   '下表按原始错误字符串归类，保留所有非成功页面。连接提前结束只说明观察到的接口现象，记录未确定其底层原因。', '',
+                   '| 引擎 | 原始记录类别 | 页面数 |', '|---|---|---:|']
+    diagnostics = summary['completion_diagnostics']
+    for engine in ENGINES:
+        for category, count in diagnostics['engines'][engine]['non_success_categories'].items():
+            operational.append(f'| {LABELS[ENGINES.index(engine)]} | {category} | {count} |')
+    operational += ['', 'WeKnora Cloud 的响应消息上限错误涉及远端接收的 4 MiB 消息，输入 PDF 大小与响应消息大小分别记录。'
+                    'MinerU Cloud 的下载超时发生在任务已经完成后的压缩包读取阶段。当前应用包含该下载阶段的有限重试；'
+                    '本实验使用冻结基线程序，实验记录不构成这项修复的线上效果对照。', '']
+    batch = diagnostics.get('paddle_batch')
+    if batch:
+        timing = diagnostics['engines']['paddleocr_vl']
+        operational += [f'PaddleOCR-VL CPU 批次有 {batch["verified_receipts"]} 份独立收据，'
+                        f'其中 {batch["recovered_receipts"]} 份通过中断后的完整性核对补收。'
+                        f'批次执行了 {batch["service_recoveries"]} 次服务恢复，已记录的失败页面保持原结果。'
+                        f'首个请求提交至五步后处理结束共 {batch["elapsed_seconds_including_recovery"] / 3600:.2f} 小时，包含中断、服务恢复和评分。', '',
+                        f'该批次请求耗时中位数为 {timing["request_seconds_median"]:.2f} 秒，'
+                        f'采用线性插值的第 95 百分位数为 {timing["request_seconds_p95_linear"]:.2f} 秒。'
+                        '耗时统计纳入全部 100 个已记录请求，包括达到客户端等待上限的请求。'
+                        '独立收据将逐页输入、输出、执行器与基线二进制摘要绑定；原始记录保持完整。', '']
+    hardware = diagnostics.get('hardware_inventory')
+    if hardware:
+        operational += [f'当前主机处理器为 {hardware["cpu_name"]}，系统报告物理内存 '
+                        f'{hardware["host_memory_bytes"] / 1024 ** 3:.2f} GiB，Docker 可用内存 '
+                        f'{hardware["docker_memory_bytes"] / 1024 ** 3:.2f} GiB。'
+                        '两个本地解析容器均限制为 6 个 CPU 核；MinerU 内存上限为 8 GiB，PaddleOCR-VL 为 9 GiB。'
+                        '该资源清单为批次完成后的只读快照，模型配置与逐页运行身份分别保存。', '']
+    operational += ['### 本机服务验证实测', '',
                    '下表读取各服务保存的单页验证记录。请求耗时包含服务推理和接口处理，内存峰值采用 Linux 控制组的累计峰值。'
                    'GiB 表示 2 的 30 次方字节。', '',
                    '| 服务 | 验证样本 | 请求秒数 | 峰值内存 GiB | 返回字符数 | 资源限额 |',
@@ -314,6 +432,14 @@ def main():
     operational += ['', '本地 API 金额 0 仅指没有外部接口调用费，不包含购置硬件、电费及运维时间。云服务的免费额度、折扣和实际扣款需账号账单核对。'
                     'OpenRouter 的模型令牌价表不覆盖本实验中的外部文档解析服务费用。', '']
     report = report.replace('## 人工核验清单', '\n'.join(operational) + '\n## 人工核验清单')
+    audit_path = out / 'evidence-audit.json'
+    if audit_path.exists():
+        audit = read_json(audit_path)
+        if audit.get('status') != 'passed':
+            raise ValueError('Independent evidence audit is not passed')
+        report = report.replace('## 来源与复现', '## 完整性复核\n\n'
+                                '独立审计核对固定输入、800 份逐页记录及输出、100 份本地长批次收据、八套官方评分回执及其实际分母。'
+                                '核对记录见 [独立证据审计](evidence-audit.json)。程序摘要核对与实际人工内容核验分别记录。\n\n## 来源与复现')
     (out / 'README.md').write_text(report, encoding='utf-8')
     print(json.dumps({'status': status, 'readout': str(out / 'README.md'), 'evaluator_errors': errors}, ensure_ascii=False))
 

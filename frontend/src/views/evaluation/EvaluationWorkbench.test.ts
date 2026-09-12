@@ -37,10 +37,13 @@ interface HumanRatingPanelStub {
 
 interface WorkbenchBindings {
   activeTaskId: { value: string }
+  applyFilters: () => void
   baselineTaskId: { value: string }
   comparisonLoading: { value: boolean }
   comparisonResult: { value: { runs: Array<{ task_id: string }> } | null }
   detail: { value: { task: EvaluationTaskStub } | null }
+  detailLoading: { value: boolean }
+  questionLoading: { value: boolean }
   filters: { datasetId: string }
   ratingPanel: (sampleIndex: number) => HumanRatingPanelStub
   labelDraft: { value: string }
@@ -450,4 +453,60 @@ test('a tenant switch invalidates a previous task-list response and clears selec
   assert.deepEqual(workbench.tasks.value.map(task => task.id), ['new-space-task'])
   assert.deepEqual(workbench.selectedTaskIds.value, [])
   assert.equal(workbench.detail.value, null)
+})
+
+test('applying a filter clears the opened task detail and a late detail response cannot restore it', async () => {
+  const detailA = deferred<{ task: EvaluationTaskStub }>()
+  installWorkbenchApi({
+    getDetail: () => detailA.promise,
+    listTasks: async () => ({ items: [{ id: 'task-a', labels: [] }], next_cursor: '' }),
+  })
+  const workbench = (await loadWorkbenchComponent()).setup({}, { expose() {} })
+
+  const opening = workbench.openTask({ id: 'task-a', labels: [] })
+  detailA.resolve({ task: { id: 'task-a', labels: [] } })
+  await opening
+  assert.equal(workbench.activeTaskId.value, 'task-a')
+  assert.equal(workbench.detail.value?.task.id, 'task-a')
+
+  workbench.filters.datasetId = 'dataset-without-runs'
+  workbench.applyFilters()
+  assert.equal(workbench.activeTaskId.value, '')
+  assert.equal(workbench.detail.value, null)
+  assert.deepEqual(workbench.questions.value, [])
+
+  // A detail response that was already in flight when the filter applied
+  // must not restore the stale detail afterwards.
+  const staleDetail = deferred<{ task: EvaluationTaskStub }>()
+  installWorkbenchApi({
+    getDetail: () => staleDetail.promise,
+    listTasks: async () => ({ items: [], next_cursor: '' }),
+  })
+  const workbench2 = (await loadWorkbenchComponent()).setup({}, { expose() {} })
+  const opening2 = workbench2.openTask({ id: 'task-x', labels: [] })
+  assert.equal(workbench2.detailLoading.value, true)
+  workbench2.applyFilters()
+  assert.equal(workbench2.detailLoading.value, false)
+  staleDetail.resolve({ task: { id: 'task-x', labels: [] } })
+  await opening2
+  assert.equal(workbench2.activeTaskId.value, '')
+  assert.equal(workbench2.detail.value, null)
+  assert.equal(workbench2.detailLoading.value, false)
+})
+
+test('applying filters releases question loading and rejects a late question page', async () => {
+  const pending = deferred<{ items: Array<{ qid: string }>; next_cursor: string }>()
+  installWorkbenchApi({ listQuestions: () => pending.promise })
+  const workbench = (await loadWorkbenchComponent()).setup({}, { expose() {} })
+  await workbench.openTask({ id: 'task-a', labels: [] })
+  assert.equal(workbench.questionLoading.value, true)
+
+  workbench.applyFilters()
+  assert.equal(workbench.questionLoading.value, false)
+  pending.resolve({ items: [{ qid: 'stale-question' }], next_cursor: 'stale-cursor' })
+  await flushMicrotasks()
+
+  assert.equal(workbench.activeTaskId.value, '')
+  assert.deepEqual(workbench.questions.value, [])
+  assert.equal(workbench.questionLoading.value, false)
 })

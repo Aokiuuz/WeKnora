@@ -316,7 +316,7 @@ const cachePriceFields = [
 
 const modelFor = (id: string) => props.models.find(model => model.id === id)
 const modelLabel = (model: ModelConfig) => model.display_name || model.name
-const modelName = (id: string) => modelFor(id) ? modelLabel(modelFor(id)!) : id
+const modelName = (id: string) => modelFor(id) ? modelLabel(modelFor(id)!) : `${id} · ${t('modelSettings.observability.nameUnavailable')}`
 const modelType = (id: string) => modelFor(id)?.type || ''
 const integer = (value: number) => new Intl.NumberFormat().format(value || 0)
 const decimal = (value: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value || 0)

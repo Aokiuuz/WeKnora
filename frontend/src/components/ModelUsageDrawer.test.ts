@@ -198,5 +198,6 @@ test('historical usage remains readable after its model is absent from the activ
   const {vm} = await setup({listModelUsage: async () => ({items: [{model_id: 'deleted-model', call_count: 2}]})})
   await vm.loadUsage()
   assert.equal(vm.rows.value[0].model_id, 'deleted-model')
-  assert.equal(vm.modelName('deleted-model'), 'deleted-model')
+  // The raw identifier stays readable and is marked as lacking a known name.
+  assert.equal(vm.modelName('deleted-model'), 'deleted-model · modelSettings.observability.nameUnavailable')
 })

@@ -1,0 +1,1008 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-09-11T22:53:41.569279+00:00",
+  "audit_scope": "Read-only local evidence reconciliation; no inference, scoring, or original-record changes",
+  "status": "passed",
+  "checks": {
+    "manifest_unique_100": 1,
+    "parent_manifest_byte_identity": 1,
+    "input_pdf_sha256": 100,
+    "reference_sha256": 100,
+    "source_image_sha256": 80,
+    "singleton_count": 1,
+    "singleton_exact_parent_sample": 100,
+    "baseline_binary": 1,
+    "baseline_archived_source": 1,
+    "batch_run_identity": 1,
+    "batch_code_identity": 1,
+    "batch_launcher_identity": 1,
+    "batch_build_identity": 1,
+    "batch_deployment_identity": 5,
+    "batch_complete_marker": 2,
+    "postprocess_complete": 1,
+    "postprocess_plan_identity": 1,
+    "raw_record_set": 8,
+    "markdown_file_set": 8,
+    "raw_record_identity": 800,
+    "raw_markdown_hash": 800,
+    "raw_markdown_characters": 800,
+    "raw_manifest_membership": 800,
+    "raw_status_duration": 800,
+    "empty_status_has_no_text": 4,
+    "paddle_receipt_set": 1,
+    "paddle_receipt_identity": 100,
+    "paddle_state_receipt": 100,
+    "paddle_effective_config": 100,
+    "paddle_one_submission_per_pdf": 1,
+    "paddle_final_counts": 1,
+    "official_evaluator_source_file_hash": 61,
+    "scored_page_set": 1,
+    "summary_full_coverage": 1,
+    "scoring_record_link": 800,
+    "olm_assertion_id_type_set": 160,
+    "olm_125_assertions": 8,
+    "olm_summary_counts": 8,
+    "raw_summary_consistency": 8,
+    "official_gt_exact_reference_objects": 1,
+    "actual_gt_denominators": 1,
+    "official_receipt_set": 1,
+    "official_prediction_manifest_set": 8,
+    "official_prediction_gt_identity": 8,
+    "official_prediction_link": 640,
+    "official_execution_receipt": 8,
+    "official_stage_no_errors": 8,
+    "official_edit_page_mean": 24,
+    "official_metric_denominator": 32,
+    "official_teds_instance_mean": 8,
+    "official_teds_page_mean": 8,
+    "no_unsupported_formula_overall_claim": 8,
+    "official_failed_prediction_empty": 141,
+    "official_runtime_packages_equal": 1,
+    "current_paddle_runtime_identity": 1
+  },
+  "failures": [],
+  "sources": {
+    "full_manifest": "dataset\\parser-benchmark\\manifest-full.json",
+    "manifest_sha256": "a15b83b63de6ed2bb8ce11f7c8299cec7b8f35e22054349897246b12c4cecc6e",
+    "raw_runs": "artifacts\\parser-benchmark\\runs\\baseline-v1",
+    "paddle_batch": "artifacts\\parser-benchmark\\cpu-batch-paddle-v1",
+    "official_receipts": "artifacts\\parser-benchmark\\runs\\baseline-v1\\evaluation\\official-omnidocbench\\execution-receipts.json",
+    "evaluator_lock_sha256": "de958323e8de1d404cd4cbec68ed0b56fe8c357c7c0d8f96c60eab34fb4af7ca",
+    "summary_sha256": "8598570a522e3b3c1469a48b1966f012b37bb7da1983daafb9ae4ed1d41affcf",
+    "page_results_sha256": "4ff99c41fb3498b0ab7559a3b42ebf6332f2cb313b7a2a86938b4ca327392362",
+    "records_and_markdown_inventory_sha256": "ddee5d30482d149901391bc48deb683057dca786d2280b3486604c21619043d4"
+  },
+  "data": {
+    "pdfs": 100,
+    "omnidocbench_pages": 80,
+    "olmocr_pages": 20,
+    "engine_pdf_pairs": 800,
+    "official_gt_denominators": {
+      "text_block": 78,
+      "display_formula": 9,
+      "table": 17,
+      "reading_order": 79
+    }
+  },
+  "engines": {
+    "builtin": {
+      "records": 100,
+      "markdown_files": 100,
+      "status_counts": {
+        "success": 100
+      },
+      "manifest_variants": {
+        "100": 100
+      },
+      "duration": {
+        "count": 100,
+        "total_seconds": 10.735,
+        "mean_seconds": 0.10735,
+        "median_seconds": 0.08,
+        "p90_seconds": 0.1823000000000001,
+        "p95_seconds": 0.2908499999999999,
+        "min_seconds": 0.01,
+        "max_seconds": 0.61
+      },
+      "failures": {},
+      "source_commits": [
+        "86436db4+parser-benchmark"
+      ],
+      "raw_records_with_embedded_binary_sha256": 0
+    },
+    "markitdown": {
+      "records": 100,
+      "markdown_files": 100,
+      "status_counts": {
+        "success": 17,
+        "error": 83
+      },
+      "manifest_variants": {
+        "100": 100
+      },
+      "duration": {
+        "count": 100,
+        "total_seconds": 56.994,
+        "mean_seconds": 0.56994,
+        "median_seconds": 0.5525,
+        "p90_seconds": 0.7932000000000005,
+        "p95_seconds": 1.12665,
+        "min_seconds": 0.16,
+        "max_seconds": 1.47
+      },
+      "failures": {
+        "adapter_parse_failed_no_finer_cause_in_raw_record": {
+          "count": 82,
+          "sample_ids": [
+            "olm-927b06801c66168b",
+            "olm-9c742aacf5c7d0fb",
+            "omni-011097ea20d89218",
+            "omni-05d1ba5fb9214d56",
+            "omni-0630ab945156be7b",
+            "omni-064a9d00d7606530",
+            "omni-0d19c70b3af01e9e",
+            "omni-0dbd39632cc79f2a",
+            "omni-126af60a27abe8bd",
+            "omni-14c6a4472f5f5620",
+            "omni-15026d697fcd7bc8",
+            "omni-17795b8b93082fbf",
+            "omni-1e5fdcdbacc47a49",
+            "omni-2129232d4482599e",
+            "omni-2a9a8c3699832af3",
+            "omni-2c0a083b9bb9d973",
+            "omni-2d7742050ece5a87",
+            "omni-2f51bf8c416bc64a",
+            "omni-32e5bafb46304cc6",
+            "omni-3f305d6f3536a837",
+            "omni-498cf759a0cb98c7",
+            "omni-4f9c6144ae529a15",
+            "omni-51a9d3be705b0fa1",
+            "omni-53210aec0d383720",
+            "omni-57281ce0b0de97ee",
+            "omni-5ac81d8e009837d3",
+            "omni-5b0636ee741c7509",
+            "omni-5f439f25e08573b9",
+            "omni-60fbfd020b387a92",
+            "omni-6e2050037846098b",
+            "omni-71f0cd5d5bc5b065",
+            "omni-75b6f056287b4ab3",
+            "omni-75d5823dfd5708a7",
+            "omni-7bdd5a919112374d",
+            "omni-7ed0c00a521c23bd",
+            "omni-7ffa0010b03c68c0",
+            "omni-82b2d379d9e53d27",
+            "omni-8633ce595ec5c7dc",
+            "omni-8739ae8d4f502788",
+            "omni-8c4aacf9c12841c4",
+            "omni-8f108f4e14796d06",
+            "omni-92b83947159fe7ce",
+            "omni-92c39625e94d4bf4",
+            "omni-973f1686e4dce325",
+            "omni-98b456dd74229752",
+            "omni-99afbb09df47e6a8",
+            "omni-9af59323757fcdae",
+            "omni-9cf90be50f121d43",
+            "omni-9e17916c1016dde9",
+            "omni-a507709787440fac",
+            "omni-a5fb6f95ce5a4a22",
+            "omni-a785642ddf42a2b3",
+            "omni-a8d4366b6d7f7975",
+            "omni-a95694f0a86a7b05",
+            "omni-b01fe5dd87246f38",
+            "omni-b2dbf2b054e6a637",
+            "omni-b3ca4aa12d015981",
+            "omni-b82392d306c0c55a",
+            "omni-b9d00e8fb4ef2a4a",
+            "omni-c07dbd39b4c65f3f",
+            "omni-c7622c8f30592261",
+            "omni-c8cc1b5fe6334a93",
+            "omni-ce11a17c4f9447d9",
+            "omni-cf26a536e0ac7219",
+            "omni-cf56196060a6e0b8",
+            "omni-d1f0a03cb4dd9077",
+            "omni-dd9f040b3b7484fb",
+            "omni-e10ec0d3a1f48464",
+            "omni-e18bd3f8e3304ce3",
+            "omni-e5129f588213280c",
+            "omni-e9708d6076c6ce02",
+            "omni-ec3e22c2e19897ea",
+            "omni-ee79ecf19345f0d0",
+            "omni-f33a00ae580e6f9f",
+            "omni-f570356c3fad954f",
+            "omni-fac77b92b0b0275c",
+            "omni-fb1b12b405fe81ee",
+            "omni-fc6125f03e20e314",
+            "omni-fcbd87d51da24bd3",
+            "omni-fd9a7ca31218c008",
+            "omni-fdf076396d71add1",
+            "omni-ff26b32f70f21687"
+          ]
+        },
+        "pdf_converter_keyerror_N": {
+          "count": 1,
+          "sample_ids": [
+            "olm-c3aa46d345d69969"
+          ]
+        }
+      },
+      "source_commits": [
+        "86436db4+parser-benchmark"
+      ],
+      "raw_records_with_embedded_binary_sha256": 0
+    },
+    "opendataloader": {
+      "records": 100,
+      "markdown_files": 100,
+      "status_counts": {
+        "success": 98,
+        "error": 2
+      },
+      "manifest_variants": {
+        "100": 100
+      },
+      "duration": {
+        "count": 100,
+        "total_seconds": 115.711,
+        "mean_seconds": 1.1571099999999999,
+        "median_seconds": 0.9285,
+        "p90_seconds": 1.8264000000000002,
+        "p95_seconds": 2.8590999999999998,
+        "min_seconds": 0.509,
+        "max_seconds": 4.004
+      },
+      "failures": {
+        "java_cli_nonzero_exit": {
+          "count": 2,
+          "sample_ids": [
+            "omni-e5129f588213280c",
+            "omni-ee79ecf19345f0d0"
+          ]
+        }
+      },
+      "source_commits": [
+        "86436db4+parser-benchmark"
+      ],
+      "raw_records_with_embedded_binary_sha256": 0
+    },
+    "weknoracloud": {
+      "records": 100,
+      "markdown_files": 100,
+      "status_counts": {
+        "error": 56,
+        "success": 44
+      },
+      "manifest_variants": {
+        "33": 66,
+        "34": 34
+      },
+      "duration": {
+        "count": 100,
+        "total_seconds": 7014.57,
+        "mean_seconds": 70.14569999999999,
+        "median_seconds": 110.7915,
+        "p90_seconds": 130.971,
+        "p95_seconds": 131.8137,
+        "min_seconds": 1.396,
+        "max_seconds": 257.203
+      },
+      "failures": {
+        "remote_grpc_deadline_exceeded": {
+          "count": 48,
+          "sample_ids": [
+            "olm-0c26566ffdc6d328",
+            "olm-181e6d4f9276a3bb",
+            "olm-2e73e2911dc7c43a",
+            "olm-5eccf8f44171af5f",
+            "olm-6e189b2301018b8c",
+            "olm-9c742aacf5c7d0fb",
+            "olm-ae59d4855df2a9eb",
+            "olm-b37396b7ab41ca9a",
+            "olm-c3aa46d345d69969",
+            "olm-db5bdbb8bbdb7e2c",
+            "olm-ea799bf8a149ef10",
+            "omni-011097ea20d89218",
+            "omni-064a9d00d7606530",
+            "omni-14c6a4472f5f5620",
+            "omni-1e5fdcdbacc47a49",
+            "omni-2129232d4482599e",
+            "omni-2d7742050ece5a87",
+            "omni-2f51bf8c416bc64a",
+            "omni-3f305d6f3536a837",
+            "omni-53210aec0d383720",
+            "omni-57281ce0b0de97ee",
+            "omni-5b0636ee741c7509",
+            "omni-71f0cd5d5bc5b065",
+            "omni-7bdd5a919112374d",
+            "omni-7ffa0010b03c68c0",
+            "omni-82b2d379d9e53d27",
+            "omni-8739ae8d4f502788",
+            "omni-92b83947159fe7ce",
+            "omni-92c39625e94d4bf4",
+            "omni-9af59323757fcdae",
+            "omni-9e17916c1016dde9",
+            "omni-a8d4366b6d7f7975",
+            "omni-a95694f0a86a7b05",
+            "omni-b01fe5dd87246f38",
+            "omni-b3ca4aa12d015981",
+            "omni-b82392d306c0c55a",
+            "omni-c07dbd39b4c65f3f",
+            "omni-c7622c8f30592261",
+            "omni-cf26a536e0ac7219",
+            "omni-cf56196060a6e0b8",
+            "omni-e18bd3f8e3304ce3",
+            "omni-ee79ecf19345f0d0",
+            "omni-f33a00ae580e6f9f",
+            "omni-fac77b92b0b0275c",
+            "omni-fb1b12b405fe81ee",
+            "omni-fc6125f03e20e314",
+            "omni-fd9a7ca31218c008",
+            "omni-ff26b32f70f21687"
+          ]
+        },
+        "remote_grpc_4mib_response_limit": {
+          "count": 5,
+          "sample_ids": [
+            "olm-927b06801c66168b",
+            "omni-0d19c70b3af01e9e",
+            "omni-4f9c6144ae529a15",
+            "omni-7ed0c00a521c23bd",
+            "omni-e5129f588213280c"
+          ]
+        },
+        "poll_transport_eof": {
+          "count": 3,
+          "sample_ids": [
+            "omni-32e5bafb46304cc6",
+            "omni-8f108f4e14796d06",
+            "omni-99afbb09df47e6a8"
+          ]
+        }
+      },
+      "source_commits": [
+        "86436db4+parser-benchmark"
+      ],
+      "raw_records_with_embedded_binary_sha256": 0
+    },
+    "mineru": {
+      "records": 100,
+      "markdown_files": 100,
+      "status_counts": {
+        "success": 99,
+        "empty": 1
+      },
+      "manifest_variants": {
+        "100": 100
+      },
+      "duration": {
+        "count": 100,
+        "total_seconds": 2221.185,
+        "mean_seconds": 22.21185,
+        "median_seconds": 15.3025,
+        "p90_seconds": 42.14220000000002,
+        "p95_seconds": 62.203599999999966,
+        "min_seconds": 3.687,
+        "max_seconds": 188.503
+      },
+      "failures": {
+        "empty_output": {
+          "count": 1,
+          "sample_ids": [
+            "omni-ce11a17c4f9447d9"
+          ]
+        }
+      },
+      "source_commits": [
+        "86436db4+parser-benchmark"
+      ],
+      "raw_records_with_embedded_binary_sha256": 0
+    },
+    "mineru_cloud": {
+      "records": 100,
+      "markdown_files": 100,
+      "status_counts": {
+        "success": 95,
+        "error": 4,
+        "empty": 1
+      },
+      "manifest_variants": {
+        "33": 66,
+        "34": 34
+      },
+      "duration": {
+        "count": 100,
+        "total_seconds": 3257.438,
+        "mean_seconds": 32.57438,
+        "median_seconds": 21.326,
+        "p90_seconds": 61.874500000000054,
+        "p95_seconds": 123.44330000000001,
+        "min_seconds": 5.568,
+        "max_seconds": 142.596
+      },
+      "failures": {
+        "archive_download_client_timeout": {
+          "count": 4,
+          "sample_ids": [
+            "omni-4f9c6144ae529a15",
+            "omni-60fbfd020b387a92",
+            "omni-7ed0c00a521c23bd",
+            "omni-d1f0a03cb4dd9077"
+          ]
+        },
+        "empty_output": {
+          "count": 1,
+          "sample_ids": [
+            "omni-ce11a17c4f9447d9"
+          ]
+        }
+      },
+      "source_commits": [
+        "86436db4+parser-benchmark"
+      ],
+      "raw_records_with_embedded_binary_sha256": 0
+    },
+    "paddleocr_vl": {
+      "records": 100,
+      "markdown_files": 100,
+      "status_counts": {
+        "success": 84,
+        "error": 15,
+        "empty": 1
+      },
+      "manifest_variants": {
+        "1": 100
+      },
+      "duration": {
+        "count": 100,
+        "total_seconds": 43698.614,
+        "mean_seconds": 436.98614000000003,
+        "median_seconds": 392.0785,
+        "p90_seconds": 784.2151000000001,
+        "p95_seconds": 1000.00425,
+        "min_seconds": 23.602,
+        "max_seconds": 1000.042
+      },
+      "failures": {
+        "http_transport_eof": {
+          "count": 8,
+          "sample_ids": [
+            "olm-927b06801c66168b",
+            "olm-9c742aacf5c7d0fb",
+            "omni-0d19c70b3af01e9e",
+            "omni-7ed0c00a521c23bd",
+            "omni-82b2d379d9e53d27",
+            "omni-b2dbf2b054e6a637",
+            "omni-b82392d306c0c55a",
+            "omni-ee79ecf19345f0d0"
+          ]
+        },
+        "http_client_timeout_1000_seconds": {
+          "count": 7,
+          "sample_ids": [
+            "olm-9322dad385fe332c",
+            "olm-ea799bf8a149ef10",
+            "omni-1e5fdcdbacc47a49",
+            "omni-4f9c6144ae529a15",
+            "omni-53210aec0d383720",
+            "omni-71f0cd5d5bc5b065",
+            "omni-e5129f588213280c"
+          ]
+        },
+        "empty_output": {
+          "count": 1,
+          "sample_ids": [
+            "omni-ce11a17c4f9447d9"
+          ]
+        }
+      },
+      "source_commits": [
+        "86436db4+parser-benchmark"
+      ],
+      "raw_records_with_embedded_binary_sha256": 0
+    },
+    "paddleocr_vl_cloud": {
+      "records": 100,
+      "markdown_files": 100,
+      "status_counts": {
+        "success": 99,
+        "empty": 1
+      },
+      "manifest_variants": {
+        "33": 66,
+        "34": 34
+      },
+      "duration": {
+        "count": 100,
+        "total_seconds": 6074.556,
+        "mean_seconds": 60.74556,
+        "median_seconds": 46.304,
+        "p90_seconds": 143.3492,
+        "p95_seconds": 158.73794999999996,
+        "min_seconds": 1.066,
+        "max_seconds": 292.474
+      },
+      "failures": {
+        "empty_output": {
+          "count": 1,
+          "sample_ids": [
+            "omni-ce11a17c4f9447d9"
+          ]
+        }
+      },
+      "source_commits": [
+        "86436db4+parser-benchmark"
+      ],
+      "raw_records_with_embedded_binary_sha256": 0
+    }
+  },
+  "paddle_batch": {
+    "run_sha256": "e4c0d836b7af564cc0624ef9e9667a74221eaebd1c2537e3e77813504486fdcd",
+    "receipts": 100,
+    "recovered_after_interruption": [
+      "omni-8739ae8d4f502788"
+    ],
+    "submission_events": 100,
+    "recovery_events": {
+      "paddle_recovery_begin": 15,
+      "paddle_recovery_healthy": 15
+    },
+    "first_request_at": "2026-09-11T09:37:20+00:00",
+    "last_request_end_approx": "2026-09-11T22:28:15.253000+00:00",
+    "raw_request_wall_span_seconds": 46255.253,
+    "execution_complete_at": "2026-09-11T22:28:19.599817+00:00",
+    "postprocess_complete_at": "2026-09-11T22:30:58.704688+00:00",
+    "execution_wall_seconds_from_first_request": 46259.599817,
+    "request_duration_sum_seconds": 43698.614,
+    "duration_by_status": {
+      "success": {
+        "count": 84,
+        "total_seconds": 35228.574,
+        "mean_seconds": 419.3877857142857,
+        "median_seconds": 397.544,
+        "p90_seconds": 679.12,
+        "p95_seconds": 724.7192499999999,
+        "min_seconds": 30.237,
+        "max_seconds": 923.621
+      },
+      "error": {
+        "count": 15,
+        "total_seconds": 8442.34,
+        "mean_seconds": 562.8226666666666,
+        "median_seconds": 337.705,
+        "p90_seconds": 1000.0172000000001,
+        "p95_seconds": 1000.0251999999999,
+        "min_seconds": 23.602,
+        "max_seconds": 1000.042
+      },
+      "empty": {
+        "count": 1,
+        "total_seconds": 27.7,
+        "mean_seconds": 27.7,
+        "median_seconds": 27.7,
+        "p90_seconds": 27.7,
+        "p95_seconds": 27.7,
+        "min_seconds": 27.7,
+        "max_seconds": 27.7
+      }
+    },
+    "duration_by_failure_class": {
+      "http_transport_eof": {
+        "count": 8,
+        "total_seconds": 1442.233,
+        "mean_seconds": 180.279125,
+        "median_seconds": 179.495,
+        "p90_seconds": 336.56190000000004,
+        "p95_seconds": 337.13345000000004,
+        "min_seconds": 23.602,
+        "max_seconds": 337.705
+      },
+      "http_client_timeout_1000_seconds": {
+        "count": 7,
+        "total_seconds": 7000.107,
+        "mean_seconds": 1000.0152857142857,
+        "median_seconds": 1000.015,
+        "p90_seconds": 1000.0276000000001,
+        "p95_seconds": 1000.0348,
+        "min_seconds": 1000.003,
+        "max_seconds": 1000.042
+      },
+      "empty_output": {
+        "count": 1,
+        "total_seconds": 27.7,
+        "mean_seconds": 27.7,
+        "median_seconds": 27.7,
+        "p90_seconds": 27.7,
+        "p95_seconds": 27.7,
+        "min_seconds": 27.7,
+        "max_seconds": 27.7
+      }
+    }
+  },
+  "olmocr": {
+    "builtin": {
+      "assertions": 125,
+      "scored": 125,
+      "passed": 32,
+      "evaluator_errors": 0,
+      "by_type": {
+        "present": 30,
+        "order": 17,
+        "math": 47,
+        "table": 24,
+        "absent": 7
+      },
+      "pass_rate": 0.256
+    },
+    "markitdown": {
+      "assertions": 125,
+      "scored": 125,
+      "passed": 18,
+      "evaluator_errors": 0,
+      "by_type": {
+        "present": 30,
+        "order": 17,
+        "math": 47,
+        "table": 24,
+        "absent": 7
+      },
+      "pass_rate": 0.144
+    },
+    "opendataloader": {
+      "assertions": 125,
+      "scored": 125,
+      "passed": 36,
+      "evaluator_errors": 0,
+      "by_type": {
+        "present": 30,
+        "order": 17,
+        "math": 47,
+        "table": 24,
+        "absent": 7
+      },
+      "pass_rate": 0.288
+    },
+    "weknoracloud": {
+      "assertions": 125,
+      "scored": 125,
+      "passed": 16,
+      "evaluator_errors": 0,
+      "by_type": {
+        "present": 30,
+        "order": 17,
+        "math": 47,
+        "table": 24,
+        "absent": 7
+      },
+      "pass_rate": 0.128
+    },
+    "mineru": {
+      "assertions": 125,
+      "scored": 125,
+      "passed": 102,
+      "evaluator_errors": 0,
+      "by_type": {
+        "present": 30,
+        "order": 17,
+        "math": 47,
+        "table": 24,
+        "absent": 7
+      },
+      "pass_rate": 0.816
+    },
+    "mineru_cloud": {
+      "assertions": 125,
+      "scored": 125,
+      "passed": 104,
+      "evaluator_errors": 0,
+      "by_type": {
+        "present": 30,
+        "order": 17,
+        "math": 47,
+        "table": 24,
+        "absent": 7
+      },
+      "pass_rate": 0.832
+    },
+    "paddleocr_vl": {
+      "assertions": 125,
+      "scored": 125,
+      "passed": 82,
+      "evaluator_errors": 0,
+      "by_type": {
+        "present": 30,
+        "order": 17,
+        "math": 47,
+        "table": 24,
+        "absent": 7
+      },
+      "pass_rate": 0.656
+    },
+    "paddleocr_vl_cloud": {
+      "assertions": 125,
+      "scored": 125,
+      "passed": 102,
+      "evaluator_errors": 0,
+      "by_type": {
+        "present": 30,
+        "order": 17,
+        "math": 47,
+        "table": 24,
+        "absent": 7
+      },
+      "pass_rate": 0.816
+    }
+  },
+  "official_omnidocbench": {
+    "builtin": {
+      "status": "completed",
+      "input_pages": 80,
+      "execution_seconds": 25.172,
+      "stage_errors": {
+        "quick_match_timeout": 0,
+        "page_timeout": 0,
+        "timeout_case_count": 0,
+        "error_case_count": 0,
+        "exception_case_count": 0
+      },
+      "metrics": {
+        "text_block": {
+          "page_denominator": 78,
+          "page_mean": 1.0
+        },
+        "display_formula": {
+          "page_denominator": 9,
+          "page_mean": 1.0
+        },
+        "table": {
+          "page_denominator": 17,
+          "table_instances": 24,
+          "page_mean": 0.0,
+          "instance_mean": 0.0
+        },
+        "reading_order": {
+          "page_denominator": 79,
+          "page_mean": 1.0
+        }
+      },
+      "formula_CDM_executed": false
+    },
+    "markitdown": {
+      "status": "completed",
+      "input_pages": 80,
+      "execution_seconds": 22.125,
+      "stage_errors": {
+        "quick_match_timeout": 0,
+        "page_timeout": 0,
+        "timeout_case_count": 0,
+        "error_case_count": 0,
+        "exception_case_count": 0
+      },
+      "metrics": {
+        "text_block": {
+          "page_denominator": 78,
+          "page_mean": 1.0
+        },
+        "display_formula": {
+          "page_denominator": 9,
+          "page_mean": 1.0
+        },
+        "table": {
+          "page_denominator": 17,
+          "table_instances": 24,
+          "page_mean": 0.0,
+          "instance_mean": 0.0
+        },
+        "reading_order": {
+          "page_denominator": 79,
+          "page_mean": 1.0
+        }
+      },
+      "formula_CDM_executed": false
+    },
+    "opendataloader": {
+      "status": "completed",
+      "input_pages": 80,
+      "execution_seconds": 22.328,
+      "stage_errors": {
+        "quick_match_timeout": 0,
+        "page_timeout": 0,
+        "timeout_case_count": 0,
+        "error_case_count": 0,
+        "exception_case_count": 0
+      },
+      "metrics": {
+        "text_block": {
+          "page_denominator": 78,
+          "page_mean": 1.0
+        },
+        "display_formula": {
+          "page_denominator": 9,
+          "page_mean": 1.0
+        },
+        "table": {
+          "page_denominator": 17,
+          "table_instances": 24,
+          "page_mean": 0.0,
+          "instance_mean": 0.0
+        },
+        "reading_order": {
+          "page_denominator": 79,
+          "page_mean": 1.0
+        }
+      },
+      "formula_CDM_executed": false
+    },
+    "weknoracloud": {
+      "status": "completed",
+      "input_pages": 80,
+      "execution_seconds": 21.329,
+      "stage_errors": {
+        "quick_match_timeout": 0,
+        "page_timeout": 0,
+        "timeout_case_count": 0,
+        "error_case_count": 0,
+        "exception_case_count": 0
+      },
+      "metrics": {
+        "text_block": {
+          "page_denominator": 78,
+          "page_mean": 1.0
+        },
+        "display_formula": {
+          "page_denominator": 9,
+          "page_mean": 1.0
+        },
+        "table": {
+          "page_denominator": 17,
+          "table_instances": 24,
+          "page_mean": 0.0,
+          "instance_mean": 0.0
+        },
+        "reading_order": {
+          "page_denominator": 79,
+          "page_mean": 1.0
+        }
+      },
+      "formula_CDM_executed": false
+    },
+    "mineru": {
+      "status": "completed",
+      "input_pages": 80,
+      "execution_seconds": 49.782,
+      "stage_errors": {
+        "quick_match_timeout": 0,
+        "page_timeout": 0,
+        "timeout_case_count": 0,
+        "error_case_count": 0,
+        "exception_case_count": 0
+      },
+      "metrics": {
+        "text_block": {
+          "page_denominator": 78,
+          "page_mean": 0.08179132350378462
+        },
+        "display_formula": {
+          "page_denominator": 9,
+          "page_mean": 0.2547262897747586
+        },
+        "table": {
+          "page_denominator": 17,
+          "table_instances": 24,
+          "page_mean": 0.8571079685356815,
+          "instance_mean": 0.8968061940846073
+        },
+        "reading_order": {
+          "page_denominator": 79,
+          "page_mean": 0.11955145285968766
+        }
+      },
+      "formula_CDM_executed": false
+    },
+    "mineru_cloud": {
+      "status": "completed",
+      "input_pages": 80,
+      "execution_seconds": 59.875,
+      "stage_errors": {
+        "quick_match_timeout": 0,
+        "page_timeout": 0,
+        "timeout_case_count": 0,
+        "error_case_count": 0,
+        "exception_case_count": 0
+      },
+      "metrics": {
+        "text_block": {
+          "page_denominator": 78,
+          "page_mean": 0.11769527145236053
+        },
+        "display_formula": {
+          "page_denominator": 9,
+          "page_mean": 0.2547262897747586
+        },
+        "table": {
+          "page_denominator": 17,
+          "table_instances": 24,
+          "page_mean": 0.8571079685356815,
+          "instance_mean": 0.8968061940846073
+        },
+        "reading_order": {
+          "page_denominator": 79,
+          "page_mean": 0.1560025668982924
+        }
+      },
+      "formula_CDM_executed": false
+    },
+    "paddleocr_vl": {
+      "status": "completed",
+      "input_pages": 80,
+      "execution_seconds": 64.5,
+      "stage_errors": {
+        "quick_match_timeout": 0,
+        "page_timeout": 0,
+        "timeout_case_count": 0,
+        "error_case_count": 0,
+        "exception_case_count": 0
+      },
+      "metrics": {
+        "text_block": {
+          "page_denominator": 78,
+          "page_mean": 0.15269094870937097
+        },
+        "display_formula": {
+          "page_denominator": 9,
+          "page_mean": 0.20207490582019647
+        },
+        "table": {
+          "page_denominator": 17,
+          "table_instances": 24,
+          "page_mean": 0.6512377035812388,
+          "instance_mean": 0.6758286715488191
+        },
+        "reading_order": {
+          "page_denominator": 79,
+          "page_mean": 0.20190566956620015
+        }
+      },
+      "formula_CDM_executed": false
+    },
+    "paddleocr_vl_cloud": {
+      "status": "completed",
+      "input_pages": 80,
+      "execution_seconds": 68.609,
+      "stage_errors": {
+        "quick_match_timeout": 0,
+        "page_timeout": 0,
+        "timeout_case_count": 0,
+        "error_case_count": 0,
+        "exception_case_count": 0
+      },
+      "metrics": {
+        "text_block": {
+          "page_denominator": 78,
+          "page_mean": 0.0365525625194184
+        },
+        "display_formula": {
+          "page_denominator": 9,
+          "page_mean": 0.18737309237546845
+        },
+        "table": {
+          "page_denominator": 17,
+          "table_instances": 24,
+          "page_mean": 0.7902180914294309,
+          "instance_mean": 0.7742731129412885
+        },
+        "reading_order": {
+          "page_denominator": 79,
+          "page_mean": 0.08500308724916295
+        }
+      },
+      "formula_CDM_executed": false
+    }
+  },
+  "reporting_constraints": [
+    "Raw schema v1 records identify source_commit but do not embed binary hash. Paddle has per-execution batch receipts; other engines rely on the separate baseline build record, so per-record executable-hash attestation is not claimed.",
+    "All 800 submissions completed with stored evidence; this is not 800 successful parses. Separate execution completeness, protocol success, usable text, service failures, and reference-based quality.",
+    "Table TEDS with 17-page denominator uses mean of per-page means (official notebook summary); all.TEDS.all is a 24-table instance mean.",
+    "Formula CDM and combined official leaderboard score were not executed. This frozen 80+20 sample is not a complete official leaderboard run.",
+    "Elapsed duration is the production adapter request duration including waits/errors; wall time additionally includes restart, scheduler, and interrupted-parent gaps. Percentiles use linear interpolation at (n-1)*q.",
+    "Cloud archival transport, remote gRPC timeout/message limits, and local HTTP timeout/EOF failures measure the configured service chain; they do not alone establish intrinsic model recognition accuracy."
+  ]
+}

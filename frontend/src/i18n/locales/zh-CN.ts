@@ -2137,6 +2137,7 @@ export default {
       providerCache: '供应商提示词缓存',
       applicationCache: '应用嵌入缓存',
       providerDenominator: '已观测 {value} 个令牌',
+      nameUnavailable: '名称不可用',
       applicationDenominator: '已观测 {value} 个键 · 旁路 {bypass} 个',
       noPricedCost: '暂无已定价成本',
       pricingTitle: '不可变价格版本',

@@ -1,0 +1,128 @@
+{
+  "candidate_manifest_version": 1,
+  "created_at_utc": "2026-09-12T08:05:28.688713+00:00",
+  "baseline_sha": "25cf5a95d88607b6ff6a0d92182301f90d45051d",
+  "branch": "fix/topic3-final-cross-review-20260912",
+  "pr_target_branch": "feat/public-dataset-workbench",
+  "environment": {
+    "os": "WSL Ubuntu 22.04 linux/amd64",
+    "go": "go1.26.0",
+    "gcc": "11.4.0",
+    "node": "v24.19.0",
+    "npm": "11.17.0",
+    "python": "3.10.12",
+    "git": "2.34.1",
+    "golangci-lint": "2.12.2 (pinned by repo workflow)"
+  },
+  "verification": {
+    "golden_gate": {
+      "exit": 0,
+      "metrics": 13,
+      "all_match_baseline": true
+    },
+    "metric_override_negative": {
+      "exit": 1,
+      "regression_line": "retrieval.recall baseline=0.75 current=0.5 absolute_delta=0.25 threshold=0"
+    },
+    "production_path_degradation": {
+      "patch_file": "internal/application/service/knowledgebase_search_fusion.go",
+      "patch_bytes": 1137,
+      "smoke_exit": 1,
+      "assertion": "Round 1 retrieval regression: recall=0 below frozen minimum 0.741666666666667",
+      "restored_smoke_exit": 0
+    },
+    "rag_http_smoke": {
+      "exit": 0,
+      "cold_embedding": 25,
+      "warm_embedding": 0,
+      "chat_per_round": 20,
+      "paid_provider_requests": 0
+    },
+    "fault_smoke": {
+      "exit": 0,
+      "cancellation": true,
+      "repeated_cancellation": true,
+      "kill_lease_recovery": true
+    },
+    "public_dataset_checks": {
+      "exit": 0,
+      "integrity_tests": 12
+    },
+    "product_version": {
+      "exit": 0,
+      "version": "0.8.0",
+      "surfaces": 14
+    },
+    "go_core_tests": {
+      "exit": 0,
+      "packages_ok": 10
+    },
+    "budget_tests": {
+      "exit": 0
+    },
+    "reader_tests": {
+      "exit": 0
+    },
+    "frontend": {
+      "targeted_tests": "20/20",
+      "full_suite": "676/676",
+      "typecheck_exit": 0,
+      "build_exit": 0,
+      "install": "npm ci from lockfile on target OS (380 packages); postinstall scripts for 3 packages blocked by npm allow-scripts policy; esbuild worked via platform package"
+    },
+    "incremental_lint": {
+      "since_candidate_base_25cf": {"exit": 0, "issues": 0},
+      "since_integration_base_0062f2f1": {"exit": 1, "issues": 26},
+      "note": "26 = 历史集成增量遗留（解析命令长行/errcheck/gofumpt/unused-parameter），按方案不做批量重构；候选改动自身 0 问题（golangci-lint v2.12.2，仓库固定版本）"
+    },
+    "scale_probe_E06": {
+      "rows": [
+        10000,
+        100000,
+        1000000
+      ],
+      "query_ms": [
+        32,
+        233,
+        2402
+      ],
+      "decision": "reproduced linear growth; no code change (window capped at 366 days; cross-DB percentile parity risk)"
+    }
+  },
+  "not_executed": [
+    "PostgreSQL 契约测试（环境无 Docker CLI）",
+    "CI 大体积历史产物逐字节核验",
+    "浏览器 12 项交互复跑",
+    "真实付费实验（无授权，预算零新增）",
+    "schedule 事件（工作流未装到 main，且下一调度时刻在截止后）"
+  ],
+  "changed_files": [
+    "docs/acceptance-demo.md",
+    "internal/modelcache/cache.go",
+    "internal/modelcache/cache_test.go",
+    "frontend/src/views/evaluation/EvaluationWorkbench.vue",
+    "frontend/src/views/evaluation/EvaluationWorkbench.test.ts",
+    "frontend/src/components/ModelUsageDrawer.vue",
+    "frontend/src/components/ModelUsageDrawer.test.ts",
+    "frontend/src/i18n/locales/zh-CN.ts",
+    "frontend/src/i18n/locales/en-US.ts",
+    "frontend/src/i18n/locales/ko-KR.ts",
+    "frontend/src/i18n/locales/ru-RU.ts",
+    "internal/application/service/evaluation.go"
+  ],
+  "new_files": [
+    "docs/reports/external-validation-20260912/README.md"
+  ],
+  "local_evidence": {
+    "retrieval-degradation.patch": "2382903b1a9424cbee92da26a10e487cf477362d48f471eef08fa2fdf583592f",
+    "e01-summary.txt": "6888387f6253adc59ca82a47d9cc09eeb2764e606a4f981257021f6a90ea3b2c",
+    "e01-degrade-summary.txt": "efbce24b2db5adbc2c24e2cc9343db218d06abf4a90b29709db578f259992567",
+    "e06-scale.log": "2a691bc9d6df7d7d2831c18a3c0ec34c2927bb033afb5fb1ae7149c51187aafa",
+    "lint-since-25cf.txt": "e92606b0bf483111dff0a120c315ea165821348f31365020e2468a0059095c47"
+  },
+  "budget": {
+    "new_paid_calls": 0,
+    "shared_ledger_untouched": true
+  },
+  "human_scoring": "paused"
+}
